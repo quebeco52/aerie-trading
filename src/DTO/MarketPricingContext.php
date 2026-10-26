@@ -100,6 +100,11 @@ class MarketPricingContext
         public float $excessCashPerShare = 0.0,
         /** Log of the plant the firm's expected market calls for over the plant it runs, as last filed. */
         public float $capacityGap = 0.0,
+        /**
+         * For a company that keeps plant by segment, its segments' plant to spare, filed apart from the shortfalls in
+         * the gap (CapitalBudgetEngine::STATE_CAPACITY_SPARE); zero for any other.
+         */
+        public float $capacitySpare = 0.0,
     ) {}
 
     /**
@@ -163,7 +168,7 @@ class MarketPricingContext
             // its book rather than finance it, so they are no claim ahead of the equity. Net of the cash the business
             // runs on only; the excess is valued on its own.
             netDebtPerShare: max(0.0, $strategy->getNetDebtCapital((float) $stock->getTotalDebt(), (float) $stock->getWholesaleDebt(), $treasury - $excessCash)) / $shares,
-            secularGrowth: $strategy->getFadedSecularGrowthRate($stock, $macroState->totalTime),
+            secularGrowth: \App\Service\Corporate\Segment\SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime),
             // The anchor the firm's own model measures it by: a lender or underwriter carries a placeholder in
             // baselineRoic, and its through-the-cycle return is its ROE.
             baselineRoic: $strategy->getBaselineReturn($stock),
@@ -182,6 +187,7 @@ class MarketPricingContext
             longRunReturn: $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null,
             excessCashPerShare: $excessCash / $shares,
             capacityGap: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0),
+            capacitySpare: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_SPARE] ?? 0.0),
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

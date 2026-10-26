@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Earnings;
 
+use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
 use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\Valuation;
 
 /**
@@ -30,6 +33,13 @@ final class CapitalBudgetEngine
      * as none while new plant would not earn its cost, since the firm will not build it.
      */
     public const STATE_CAPACITY_GAP = EarningsEngine::CARRIED_STATE_PREFIX . 'capacity_gap';
+    /**
+     * Carried stream-state key: for a company that keeps plant by segment, its segments' plant to spare, filed apart
+     * from the shortfalls in STATE_CAPACITY_GAP because spare plant is only grown into, at trend: netted, a segment
+     * that waits would cancel one that builds. Each part is valued on its own (Valuation::capacityCatchUpGrowth() is
+     * linear on each side of zero).
+     */
+    public const STATE_CAPACITY_SPARE = EarningsEngine::CARRIED_STATE_PREFIX . 'capacity_spare';
     /** Least the capex cycle scales every capex line to: half of plan in the deepest trough. */
     public const MIN_CAPEX_CYCLE_MODIFIER = 0.50;
     /** Most the capex cycle scales every capex line to: one and a half times plan at the peak. */
@@ -177,6 +187,9 @@ final class CapitalBudgetEngine
         $stock = $ctx->stock;
         $manager = $stock->getManagementProfile();
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
+        if ($ctx->segments !== []) {
+            return $this->calculateSegmentGrowthCapEx($ctx, $cycleCapExModifier, $maintenanceCapEx, $fundingCapacity, $manager->growthHurdle($hurdleRate, false));
+        }
 
         $expansionBudget = $this->resolveExpansionBudget($ctx, $cycleCapExModifier, $maintenanceCapEx);
         $ctx->expansionBudget = $expansionBudget;
@@ -210,14 +223,128 @@ final class CapitalBudgetEngine
     }
 
     /**
+     * Growth capex for a company that keeps plant by segment (SegmentBooks): each segment runs the accelerator toward
+     * its own market (its industry's growth and its own record's gap) and the gate at the price its own industry pays,
+     * so a segment in a glut waits while one short of plant builds. A by-product segment builds with the main segment's
+     * plant. The segments' plans share the internal funds pro rata, and what each still allows is left for the
+     * treasury. The catch-up the market prices is the segments' shortfalls and their plant to spare, each weighed by
+     * the segment's share of the revenue and filed apart.
+     */
+    private function calculateSegmentGrowthCapEx(EarningsSimulationContext $ctx, float $cycleCapExModifier, float $maintenanceCapEx, float $fundingCapacity, float $growthHurdle): float
+    {
+        $stock = $ctx->stock;
+        $industries = SegmentBooks::industries($stock);
+        $joint = SegmentBooks::jointSegments($stock);
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $inflation = max(0.0, $ctx->macroState->inflationEma);
+        $ctx->segmentPlantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
+
+        $budgets = [];
+        $gaps = [];
+        foreach ($ctx->segments as $segment => $books) {
+            if (in_array($segment, $joint, true)) {
+                continue;
+            }
+            $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
+            $capitalGap = $this->industryShareLedger?->resolveSegmentCapacityGap($stock, $segment, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($strategy, $stock)) ?? 0.0;
+            $gaps[$segment] = $capitalGap - log(max(OperatingCapacityEngine::MIN_CAPACITY_UTILIZATION, $books['load']));
+            $plant = $ctx->segmentPlantBase * $books['plant'];
+
+            if (self::returnOnPlantAt($ctx, $books['price']) < $growthHurdle) {
+                // As for the company on one plant: no shortfall is closed by building, and none is priced.
+                $gaps[$segment] = min(0.0, $gaps[$segment]);
+                $budgets[$segment] = 0.0;
+            } else {
+                $trendNominalGrowth = max(0.0, $strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + $inflation);
+                $growth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, self::CAPITAL_ERROR_CORRECTION_SPEED);
+                $budgets[$segment] = max(0.0, ($plant * $growth * $ctx->dt * $cycleCapExModifier * $books['load']) - ($plant * (1.0 - $books['load'])));
+            }
+        }
+        $main = $ctx->segments[Segments::MAIN] ?? null;
+        foreach ($joint as $segment) {
+            $mainPlant = $main['plant'] ?? 0.0;
+            $budgets[$segment] = $mainPlant > 0.0 ? ($budgets[Segments::MAIN] ?? 0.0) * ($ctx->segments[$segment]['plant'] ?? 0.0) / $mainPlant : 0.0;
+            $gaps[$segment] = $gaps[Segments::MAIN] ?? 0.0;
+        }
+
+        $shortfall = 0.0;
+        $spare = 0.0;
+        foreach ($gaps as $segment => $gap) {
+            $weight = (float) ($momentum[SegmentBooks::STATE_TARGET . $segment] ?? $ctx->segments[$segment]['plant'] ?? 0.0);
+            $shortfall += $weight * max(0.0, $gap);
+            $spare += $weight * min(0.0, $gap);
+        }
+        $stock->setEarningsMomentumZ([self::STATE_CAPACITY_GAP => $shortfall, self::STATE_CAPACITY_SPARE => $spare] + $momentum);
+
+        $planned = array_sum($budgets);
+        $budget = max(0.0, $planned - max(0.0, $maintenanceCapEx - $ctx->quarterlyDepreciation));
+        $growthCapEx = min($budget, $fundingCapacity);
+        $ctx->expansionBudget = max(0.0, $budget - $growthCapEx);
+        foreach ($ctx->segments as $segment => $books) {
+            $share = $planned > 0.0 ? ($budgets[$segment] ?? 0.0) / $planned : 0.0;
+            $books['growth'] = $growthCapEx * $share;
+            $books['leftover'] = $ctx->expansionBudget * $share;
+            $ctx->segments[$segment] = $books;
+        }
+
+        return $growthCapEx;
+    }
+
+    /**
+     * The plant shares of a company that keeps plant by segment, rolled after the quarter: each segment adds the growth
+     * capex it was allotted and its part of what the treasury built on top, in proportion to what its plan still
+     * allowed; the outlays the main model schedules go to the main segment and the by-products that ride its plant; and
+     * each loses the wear on its idle plant (SegmentBooks::rollPlant()), a by-product segment on the main segment's.
+     */
+    public function rollSegmentPlant(EarningsSimulationContext $ctx, float $treasuryGrowthCapEx): void
+    {
+        if ($ctx->segments === []) {
+            return;
+        }
+
+        $joint = SegmentBooks::jointSegments($ctx->stock);
+        $mainPlant = [];
+        foreach ([Segments::MAIN, ...$joint] as $segment) {
+            $mainPlant[$segment] = $ctx->segments[$segment]['plant'] ?? 0.0;
+        }
+        $leftover = array_sum(array_column($ctx->segments, 'leftover'));
+        $growth = [];
+        $loads = [];
+        foreach ($ctx->segments as $segment => $books) {
+            $growth[$segment] = $books['growth'] + ($leftover > 0.0 ? $treasuryGrowthCapEx * $books['leftover'] / $leftover : 0.0)
+                + (isset($mainPlant[$segment]) && array_sum($mainPlant) > 0.0 ? $ctx->scheduledCapex * $mainPlant[$segment] / array_sum($mainPlant) : 0.0);
+            $loads[$segment] = in_array($segment, $joint, true) ? ($ctx->segments[Segments::MAIN]['load'] ?? 1.0) : $books['load'];
+        }
+        $plant = SegmentBooks::rollPlant(
+            array_map(static fn(array $books): float => $books['plant'], $ctx->segments),
+            $ctx->segmentPlantBase,
+            $growth,
+            $loads,
+            $ctx->strategy->depreciatesByUnitsOfProduction() ? 0.0 : $ctx->quarterlyDepreciation,
+        );
+
+        $filed = [];
+        foreach ($plant as $segment => $share) {
+            $filed[SegmentBooks::STATE_PLANT . $segment] = $share;
+        }
+        $ctx->stock->setEarningsMomentumZ($filed + ($ctx->stock->getEarningsMomentumZ() ?? []));
+    }
+
+    /**
      * What new plant earns at the price its industry pays today: the firm's return plus the after-tax margin that price
      * adds over the balanced one on each dollar of capital it turns over (a shortage's premium; a glut's cut takes it
      * off). Plant that keeps the firm's share of a growing market does not move that price.
      */
     public static function returnOnNewPlant(EarningsSimulationContext $ctx): float
     {
+        return self::returnOnPlantAt($ctx, $ctx->industryPriceLevel);
+    }
+
+    /** returnOnNewPlant() at a given industry price: one segment's, for a company that keeps plant by segment. */
+    private static function returnOnPlantAt(EarningsSimulationContext $ctx, float $industryPriceLevel): float
+    {
         return $ctx->baselineRoic
-            + ((1.0 - $ctx->corporateTaxRate) * $ctx->assetTurnover * EarningsEngine::TTM_QUARTERS * ($ctx->industryPriceLevel - 1.0));
+            + ((1.0 - $ctx->corporateTaxRate) * $ctx->assetTurnover * EarningsEngine::TTM_QUARTERS * ($industryPriceLevel - 1.0));
     }
 
     /**

@@ -435,6 +435,22 @@ class ValuationTest extends TestCase
     }
 
     /**
+     * The catch-up is linear on each side of zero, so a company with plant by segment is valued exactly by pricing its
+     * segments' shortfalls and their plant to spare apart: netted, a segment that waits would cancel one that builds.
+     */
+    public function testTheCatchUpOfSegmentsIsTheirShortfallsAndSpareValuedApart(): void
+    {
+        $segments = [[0.6, 0.10], [0.3, -0.20], [0.1, 0.05]];
+        $exact = 0.0;
+        foreach ($segments as [$weight, $gap]) {
+            $exact += $weight * Valuation::capacityCatchUpGrowth($gap, 0.062, 0.06);
+        }
+
+        $this->assertEqualsWithDelta($exact, Valuation::capacityCatchUpGrowth(0.065, 0.062, 0.06) + Valuation::capacityCatchUpGrowth(-0.06, 0.062, 0.06), 1e-15);
+        $this->assertNotEqualsWithDelta($exact, Valuation::capacityCatchUpGrowth(0.005, 0.062, 0.06), 1e-4, 'netting them misprices it');
+    }
+
+    /**
      * The catch-up is priced outside the payout cap: plant is built from operating cash before anything is paid out,
      * so a firm whose payout leaves its outlook unfunded still grows by what closing its gap adds. Management prices it
      * as the market does.

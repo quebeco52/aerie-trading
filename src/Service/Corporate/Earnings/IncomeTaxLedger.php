@@ -6,6 +6,7 @@ namespace App\Service\Corporate\Earnings;
 
 use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\Decimal;
 use App\Service\Math\FirmEconomics;
 
@@ -134,7 +135,7 @@ final class IncomeTaxLedger
         $stock = $ctx->stock;
         $netPpe = max(0.0, $stock->getNetPpe());
         $bookRate = $this->plant->resolveDepreciationRate($ctx);
-        $growth = max(0.0, $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
+        $growth = max(0.0, SegmentBooks::fadedSecularGrowth($ctx->strategy, $stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
         $denominator = $growth + ($bookRate * self::TAX_DEPRECIATION_ACCELERATION);
         $basis = $denominator > 0.0 ? $netPpe * ($growth + $bookRate) / $denominator : $netPpe;
 

@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Industry;
 
+use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
@@ -73,10 +75,27 @@ class IndustryShareLedger
             return 0.0;
         }
 
+        return $this->drainAt($industry, $ticker, max(1.0, (float) $stock->getTotalRevenue()), $tick, $ticksPerYear);
+    }
+
+    /**
+     * The drain on one segment of a company that keeps its plant by segment (SegmentBooks), from rivals in that
+     * segment's industry, as a fraction of the segment's revenue.
+     */
+    public function resolveSegmentRivalDrain(Stock $stock, string $segment, float $segmentRevenue, int $tick, int $ticksPerYear): float
+    {
+        $address = self::segmentAddress($stock, $segment);
+
+        // A segment new to its industry starts reading its rivals now: the gains they booked before it sold there took
+        // nothing from it.
+        return $address === null ? 0.0 : $this->drainAt($address[0], $address[1], max(1.0, $segmentRevenue), $tick, $ticksPerYear, $tick);
+    }
+
+    private function drainAt(string $industry, string $ticker, float $ownRevenue, int $tick, int $ticksPerYear, int $firstReadTick = -1): float
+    {
         $records = $this->store->readIndustry($industry);
         $own = $records[$ticker] ?? null;
-        $ownRevenue = max(1.0, (float) $stock->getTotalRevenue());
-        $lastReadTick = (int) ($own['consumed_tick'] ?? -1);
+        $lastReadTick = (int) ($own['consumed_tick'] ?? $firstReadTick);
 
         $totalRevenue = $ownRevenue;
         foreach ($records as $peerTicker => $record) {
@@ -126,6 +145,23 @@ class IndustryShareLedger
             return;
         }
 
+        $this->gainAt($industry, $ticker, $annualRevenue, $gainFraction, $addressableShare, $tick);
+    }
+
+    /**
+     * Books one segment's revenue and gain in its industry for a company that keeps its plant by segment: the segment's
+     * revenue only, so the company's sales are counted once across its industries.
+     */
+    public function recordSegmentGain(Stock $stock, string $segment, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick): void
+    {
+        $address = self::segmentAddress($stock, $segment);
+        if ($address !== null) {
+            $this->gainAt($address[0], $address[1], $annualRevenue, $gainFraction, $addressableShare, $tick);
+        }
+    }
+
+    private function gainAt(string $industry, string $ticker, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick): void
+    {
         $existing = $this->store->readIndustry($industry)[$ticker] ?? null;
         $this->store->writeRecord($industry, $ticker, [
             'revenue'           => max(0.0, $annualRevenue),
@@ -268,8 +304,66 @@ class IndustryShareLedger
     ): ?array {
         $industry = $stock->getIndustry();
         $ticker = $stock->getTicker();
-        if ($industry === null || $industry === '' || $ticker === ''
-            || $annualCapacity <= 0.0 || $addressableShare <= 0.0 || $trendNominalGdp <= 0.0) {
+        if ($industry === null || $industry === '' || $ticker === '') {
+            return null;
+        }
+        // A company in several markets on one plant grows by its blend of their outlooks, not by its own industry's
+        // alone; one that keeps plant by segment grows each segment by its own.
+        $segmentGap = Segments::forTicker($ticker) !== null && SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) === null
+            ? $this->resolveOutlookBelief($stock) - $this->outlook($industry)['belief']
+            : null;
+
+        return $this->recordAndBalanceAt($industry, $ticker, max(1.0, (float) $stock->getTotalRevenue()), $segmentGap, $annualCapacity, $addressableShare, $trendNominalGdp, $totalTime, $secularExcessGrowth, $tick, $ticksPerYear);
+    }
+
+    /**
+     * resolveIndustrySupply() for one segment of a company that keeps its plant by segment: its plant, struck against
+     * its own industry's demand, among that industry's firms.
+     *
+     * @return array{roster: float, fringe: float}|null
+     */
+    public function resolveSegmentSupply(
+        Stock $stock,
+        string $segment,
+        float $segmentRevenue,
+        float $annualCapacity,
+        float $addressableShare,
+        float $trendNominalGdp,
+        float $totalTime,
+        float $secularExcessGrowth,
+        int $tick,
+        int $ticksPerYear,
+    ): ?array {
+        $address = self::segmentAddress($stock, $segment);
+        $balance = $address === null
+            ? null
+            : $this->recordAndBalanceAt($address[0], $address[1], max(1.0, $segmentRevenue), null, $annualCapacity, $addressableShare, $trendNominalGdp, $totalTime, $secularExcessGrowth, $tick, $ticksPerYear);
+
+        return $balance === null ? null : [
+            'roster' => max($balance['roster_supply'], self::MIN_INDUSTRY_CAPACITY_RATIO - $balance['fringe_supply']),
+            'fringe' => $balance['fringe_supply'],
+        ];
+    }
+
+    /**
+     * @param float|null $segmentGap How far a company in several markets on one plant reads its blend above its
+     *                               industry's outlook; null for any other record.
+     * @return array{supply_over_demand: float, roster_supply: float, fringe_supply: float, installed_capacity: float, trend_capacity: float, roster_trend_share: float}|null
+     */
+    private function recordAndBalanceAt(
+        string $industry,
+        string $ticker,
+        float $revenue,
+        ?float $segmentGap,
+        float $annualCapacity,
+        float $addressableShare,
+        float $trendNominalGdp,
+        float $totalTime,
+        float $secularExcessGrowth,
+        int $tick,
+        int $ticksPerYear,
+    ): ?array {
+        if ($annualCapacity <= 0.0 || $addressableShare <= 0.0 || $trendNominalGdp <= 0.0) {
             return null;
         }
 
@@ -277,14 +371,13 @@ class IndustryShareLedger
         $own = $records[$ticker] ?? null;
         $hasAnchor = $own !== null && (float) ($own['anchor_capacity_share'] ?? 0.0) > 0.0;
         $outlook = $this->outlook($industry);
-        // A company in several markets grows by its blend of their outlooks, not by its own industry's alone.
-        $segmentGap = Segments::forTicker($ticker) !== null ? ['segment_outlook_gap' => $this->resolveOutlookBelief($stock) - $outlook['belief']] : [];
+        $segmentGap = $segmentGap === null ? [] : ['segment_outlook_gap' => $segmentGap];
 
         // The anchor is struck once, the first time the ledger prices the firm: its plant then is trend
         // plant, and its plant over its share is the market it sells into as the public then saw it. Entry is
         // neutral by construction.
         $record = [
-            'revenue'               => (float) ($own['revenue'] ?? max(1.0, (float) $stock->getTotalRevenue())),
+            'revenue'               => (float) ($own['revenue'] ?? $revenue),
             'gain'                  => (float) ($own['gain'] ?? 0.0),
             'capacity'              => $annualCapacity,
             'anchor_capacity_share' => $hasAnchor ? (float) $own['anchor_capacity_share'] : $annualCapacity / $trendNominalGdp,
@@ -309,16 +402,49 @@ class IndustryShareLedger
      */
     public function resolveTrendCapacityGap(Stock $stock, MacroStateDTO $macroState, float $secularExcessGrowth): ?float
     {
-        $own = $this->readOwnRecord($stock);
+        return $this->trendCapacityGapAt((string) $stock->getIndustry(), $this->readOwnRecord($stock), $macroState, $secularExcessGrowth);
+    }
+
+    /** resolveTrendCapacityGap() for one segment of a company that keeps its plant by segment, in its own industry. */
+    public function resolveSegmentCapacityGap(Stock $stock, string $segment, MacroStateDTO $macroState, float $secularExcessGrowth): ?float
+    {
+        $address = self::segmentAddress($stock, $segment);
+
+        return $address === null ? null : $this->trendCapacityGapAt($address[0], $this->store->readIndustry($address[0])[$address[1]] ?? null, $macroState, $secularExcessGrowth);
+    }
+
+    /** @param ShareRecord|null $own */
+    private function trendCapacityGapAt(string $industry, ?array $own, MacroStateDTO $macroState, float $secularExcessGrowth): ?float
+    {
         $anchorShare = (float) ($own['anchor_capacity_share'] ?? 0.0);
         $capacity = (float) ($own['capacity'] ?? 0.0);
         if ($own === null || $anchorShare <= 0.0 || $capacity <= 0.0) {
             return null;
         }
 
-        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, (string) $stock->getIndustry()));
+        $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, $industry));
 
         return log($anchorShare * $growth / $capacity);
+    }
+
+    /**
+     * The market an industry's listed firms sell into, in annual revenue now: the largest any of them anchored, grown
+     * as the ledger grows it. Records of the given company are left out, so a segment entering is sized against the
+     * market already there. Null while no other firm in the industry is anchored.
+     */
+    public function resolveIndustryMarketRevenue(string $industry, string $excludedTicker, MacroStateDTO $macroState, float $secularExcessGrowth, int $tick, int $ticksPerYear): ?float
+    {
+        $market = null;
+        foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
+            if (SegmentBooks::ownerOf((string) $peerTicker) === $excludedTicker || $tick - $record['tick'] > $ticksPerYear
+                || (float) ($record['anchor_demand_share'] ?? 0.0) <= 0.0) {
+                continue;
+            }
+            $growth = self::trendFactor($record, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($record, $industry));
+            $market = max($market ?? 0.0, (float) $record['anchor_demand_share'] * $growth);
+        }
+
+        return $market;
     }
 
     /**
@@ -703,10 +829,12 @@ class IndustryShareLedger
             }
         }
 
-        // Members are the firms still selling into the industry: a retired record keeps its anchor at no revenue.
+        // Members are the firms still selling into the industry: a retired record keeps its anchor at no revenue. A
+        // segment of a company from another industry sells here but runs its own industry's regimes, not this one's.
         $members = 1;
         foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
-            if ($peerTicker !== $ticker && $record['revenue'] > 0.0 && $tick - $record['tick'] <= $ticksPerYear) {
+            if ($peerTicker !== $ticker && SegmentBooks::ownerOf((string) $peerTicker) === (string) $peerTicker
+                && $record['revenue'] > 0.0 && $tick - $record['tick'] <= $ticksPerYear) {
                 $members++;
             }
         }
@@ -752,6 +880,17 @@ class IndustryShareLedger
             return;
         }
 
+        // Every segment's plant leaves its industry with the company.
+        foreach (array_keys(SegmentBooks::industries($stock)) as $segment) {
+            $address = self::segmentAddress($stock, $segment);
+            if ($address !== null) {
+                $this->retireRecord($address[0], $address[1]);
+            }
+        }
+    }
+
+    private function retireRecord(string $industry, string $ticker): void
+    {
         $own = $this->store->readIndustry($industry)[$ticker] ?? null;
         if ($own === null) {
             return;
@@ -778,7 +917,10 @@ class IndustryShareLedger
      */
     public function recordAcquiredCapacity(Stock $stock, float $annualCapacity, MacroStateDTO $macroState, float $secularExcessGrowth): void
     {
-        $this->transferCapacity($stock, max(0.0, $annualCapacity), $macroState, $secularExcessGrowth);
+        $industry = $stock->getIndustry();
+        if ($industry !== null && $industry !== '' && $stock->getTicker() !== '') {
+            $this->transferCapacity($industry, $stock->getTicker(), max(0.0, $annualCapacity), $macroState, $secularExcessGrowth);
+        }
     }
 
     /**
@@ -787,19 +929,46 @@ class IndustryShareLedger
      */
     public function recordDivestedFraction(Stock $stock, float $fraction, MacroStateDTO $macroState, float $secularExcessGrowth): void
     {
+        $fraction = max(0.0, min(1.0, $fraction));
+        // A division sold off pro rata takes the same slice of every segment's plant.
+        foreach (SegmentBooks::industries($stock) as $segment => $industry) {
+            $address = self::segmentAddress($stock, $segment);
+            $own = $address === null ? null : ($this->store->readIndustry($address[0])[$address[1]] ?? null);
+            if ($address === null || $own === null) {
+                continue;
+            }
+            $excess = $segment === Segments::MAIN ? $secularExcessGrowth : self::secularExcessGrowth(Sectors::strategyFor($industry), $stock);
+
+            if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
+                $this->transferRevenue($address[0], $address[1], $own, -$fraction * (float) ($own['revenue'] ?? 0.0));
+            } else {
+                $this->transferCapacity($address[0], $address[1], -$fraction * max(0.0, (float) $own['capacity']), $macroState, $excess);
+            }
+        }
+    }
+
+    /**
+     * A company that starts keeping its plant by segment (SegmentBooks) moves its other segments' plant and market out
+     * of its main record, which until now carried the whole company: the main record keeps its plant share of both,
+     * so its share of its own market, and its excess over trend per unit of that market, stay where they were. The
+     * other segments anchor afresh in their own industries at their first pricing. The blend's gap leaves with them,
+     * folded into the anchor's outlook so the main record's trend path does not move.
+     */
+    public function openSegmentBooks(Stock $stock, float $mainPlantShare): void
+    {
         $own = $this->readOwnRecord($stock);
         if ($own === null) {
             return;
         }
 
-        $fraction = max(0.0, min(1.0, $fraction));
-        if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
-            $this->transferRevenue($stock, $own, -$fraction * (float) ($own['revenue'] ?? 0.0));
-
-            return;
+        $share = max(0.0, min(1.0, $mainPlantShare));
+        foreach (['anchor_capacity_share', 'anchor_demand_share', 'capacity', 'revenue'] as $field) {
+            $own[$field] = (float) ($own[$field] ?? 0.0) * $share;
         }
+        $own['anchor_outlook'] = (float) ($own['anchor_outlook'] ?? 0.0) - (float) ($own['segment_outlook_gap'] ?? 0.0);
+        unset($own['segment_outlook_gap']);
 
-        $this->transferCapacity($stock, -$fraction * max(0.0, (float) $own['capacity']), $macroState, $secularExcessGrowth);
+        $this->store->writeRecord((string) $stock->getIndustry(), $stock->getTicker(), $own);
     }
 
     /**
@@ -808,34 +977,33 @@ class IndustryShareLedger
      * anchors whatever it then owns. A sale larger than the trend plant left clears the anchor, and the next
      * report strikes a fresh one.
      */
-    private function transferCapacity(Stock $stock, float $capacityDelta, MacroStateDTO $macroState, float $secularExcessGrowth): void
+    private function transferCapacity(string $industry, string $ticker, float $capacityDelta, MacroStateDTO $macroState, float $secularExcessGrowth): void
     {
-        $own = $this->readOwnRecord($stock);
+        $own = $this->store->readIndustry($industry)[$ticker] ?? null;
         $trendNominalGdp = self::trendNominalGdp($macroState);
         if ($own === null || $capacityDelta === 0.0) {
             return;
         }
         if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
-            $this->transferRevenue($stock, $own, $capacityDelta);
+            $this->transferRevenue($industry, $ticker, $own, $capacityDelta);
 
             return;
         }
 
-        $growth = self::trendFactor($own, $trendNominalGdp, $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, (string) $stock->getIndustry()));
+        $growth = self::trendFactor($own, $trendNominalGdp, $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, $industry));
         $own['anchor_capacity_share'] = max(0.0, (float) $own['anchor_capacity_share'] + ($capacityDelta / $growth));
         $own['capacity'] = max(0.0, (float) $own['capacity'] + $capacityDelta);
 
-        $this->store->writeRecord((string) $stock->getIndustry(), $stock->getTicker(), $own);
+        $this->store->writeRecord($industry, $ticker, $own);
     }
 
-    /** @return array<string, mixed>|null */
     /**
      * A market measured in revenue moves with the revenue a deal buys or a sale gives up, at the market's
      * size, so a second deal before the next report is reviewed at the share the first one left.
      *
      * @param ShareRecord $own
      */
-    private function transferRevenue(Stock $stock, array $own, float $revenueDelta): void
+    private function transferRevenue(string $industry, string $ticker, array $own, float $revenueDelta): void
     {
         $share = (float) ($own['addressable_share'] ?? 0.0);
         $revenue = (float) ($own['revenue'] ?? 0.0);
@@ -847,7 +1015,28 @@ class IndustryShareLedger
         $own['revenue'] = $newRevenue;
         $own['addressable_share'] = min(1.0, $newRevenue / ($revenue / $share));
 
-        $this->store->writeRecord((string) $stock->getIndustry(), $stock->getTicker(), $own);
+        $this->store->writeRecord($industry, $ticker, $own);
+    }
+
+    /**
+     * Where a segment's record sits: the main segment's under the ticker in the company's industry, another's under
+     * its own key in its industry, and only once the company keeps plant by segment. Null for a company with no
+     * industry or ticker.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    private static function segmentAddress(Stock $stock, string $segment): ?array
+    {
+        $industry = SegmentBooks::industries($stock)[$segment] ?? '';
+        $ticker = $stock->getTicker();
+        if ($industry === '' || $ticker === '') {
+            return null;
+        }
+        if ($segment !== Segments::MAIN && SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) === null) {
+            return null;
+        }
+
+        return [$industry, SegmentBooks::recordKey($ticker, $segment)];
     }
 
     /** @return ShareRecord|null */

@@ -8,6 +8,7 @@ use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\Distributions;
@@ -174,6 +175,12 @@ class AirlineBusinessModel extends StandardCorporateBusinessModel
     /** Interest coverage below which the firm stops repurchasing stock (3x). */
     public const BUYBACK_MIN_ICR = 3.0;
 
+    /** Belly cargo flies in the hold of the passenger aircraft. */
+    public function jointProductLines(): array
+    {
+        return ['air_cargo'];
+    }
+
     /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
@@ -328,14 +335,22 @@ class AirlineBusinessModel extends StandardCorporateBusinessModel
             ModelParam::LoyaltyMilesWeight->value      => self::LOYALTY_MILES_WEIGHT,
         ]);
 
-        // Cargo is a market of its own (Segments): it leans in the plan by its industry's outlook against the blend.
+        // Cargo is a market of its own (Segments): with plant kept by segment its lines take the share of the quarter
+        // its plant sells; on one plant it leans by its industry's outlook against the blend.
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $weights = [
+            'leisure_passengers'  => (float) $params[ModelParam::LeisurePassengerWeight],
+            'business_passengers' => (float) $params[ModelParam::BusinessPassengerWeight],
+            'air_cargo'           => (float) $params[ModelParam::AirCargoWeight],
+            'loyalty_miles'       => (float) $params[ModelParam::LoyaltyMilesWeight],
+        ];
+        $split = SegmentBooks::splitToTargets($stock->getTicker(), $momentum, $weights);
 
         return [
-            'leisure_passengers'  => (float) $params[ModelParam::LeisurePassengerWeight] * SegmentOutlook::tilt($momentum, 'leisure_passengers'),
-            'business_passengers' => (float) $params[ModelParam::BusinessPassengerWeight] * SegmentOutlook::tilt($momentum, 'business_passengers'),
-            'air_cargo'           => (float) $params[ModelParam::AirCargoWeight] * SegmentOutlook::tilt($momentum, 'air_cargo'),
-            'loyalty_miles'       => (float) $params[ModelParam::LoyaltyMilesWeight] * SegmentOutlook::tilt($momentum, 'loyalty_miles'),
+            'leisure_passengers'  => $split['leisure_passengers'] ?? $weights['leisure_passengers'] * SegmentOutlook::tilt($momentum, 'leisure_passengers'),
+            'business_passengers' => $split['business_passengers'] ?? $weights['business_passengers'] * SegmentOutlook::tilt($momentum, 'business_passengers'),
+            'air_cargo'           => $split['air_cargo'] ?? $weights['air_cargo'] * SegmentOutlook::tilt($momentum, 'air_cargo'),
+            'loyalty_miles'       => $split['loyalty_miles'] ?? $weights['loyalty_miles'] * SegmentOutlook::tilt($momentum, 'loyalty_miles'),
         ];
     }
 

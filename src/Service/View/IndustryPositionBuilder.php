@@ -11,6 +11,7 @@ use App\Repository\CorporateReportRepository;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\FinancialConstants;
 use App\Service\Model\BusinessModelInterface;
 
@@ -104,10 +105,12 @@ class IndustryPositionBuilder
         $kpis = $this->reports->findLatestFor($stock)?->getReportedKpis() ?? [];
         $capacityRatio = $description['capacity_ratio'] ?? null;
 
-        // Largest seller first, as the share list is read.
+        // Largest seller first, as the share list is read. A segment of a company in several markets sells here under
+        // its company's name.
         $peerShares = [];
-        foreach ($description['peers'] ?? [] as $ticker => $peer) {
-            $peerShares[$ticker] = $peer['revenue_share'];
+        foreach ($description['peers'] ?? [] as $recordKey => $peer) {
+            $ticker = SegmentBooks::ownerOf((string) $recordKey);
+            $peerShares[$ticker] = ($peerShares[$ticker] ?? 0.0) + $peer['revenue_share'];
         }
         arsort($peerShares);
         $rosterSize = count($peerShares);

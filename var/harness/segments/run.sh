@@ -13,7 +13,7 @@ PATH_GZ=$PROJ/var/harness/idle/macro/path-$2-oc.gz
 SEGV="SEG_OUT=$H/runs/$1-$2.seg.json"
 case "$1" in
   head) BASEV=${BASE:?set BASE=<tree>} ;;
-  seg)  BASEV="" ;;
+  seg|seg2)  BASEV="" ;;  # seg2: working tree after the RAVN entry-sizing fix
   segplain) BASEV=""; SEGV="SEG_OFF=1" ;;
   gapfix) BASEV=""; export OVR=$H/ovr_gap ;;  # working tree + Redis store that reads segment_outlook_gap back
   *) echo "usage: run.sh head|seg|segplain|gapfix <seed>" >&2; exit 2 ;;

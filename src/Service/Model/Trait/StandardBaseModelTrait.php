@@ -47,7 +47,7 @@ trait StandardBaseModelTrait
             $sectorDemandLevel = isset($macroState->sectorDemandZ[$sector]) ? (float) $macroState->sectorDemandZ[$sector] : null;
         }
 
-        return new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorDemandLevel, $this->getSectorFactorLoading());
+        return new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorDemandLevel, $this->getSectorFactorLoading(), $stock?->getTicker());
     }
 
     /**

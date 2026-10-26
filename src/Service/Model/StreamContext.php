@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model;
 
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -71,6 +72,8 @@ class StreamContext
          * peers).
          */
         private readonly float $sectorFactorLoading = 0.0,
+        /** The firm's ticker, which says which of its lines sell into which of its markets (Segments). */
+        private readonly ?string $ticker = null,
     ) {}
 
     /**
@@ -343,10 +346,13 @@ class StreamContext
         float $minFloor = FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR,
         float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING,
     ): array {
-        // A company in several markets leans each line's target by its segment's outlook against the blend.
-        foreach ($targetWeights as $key => $weight) {
+        // A company that keeps plant by segment gives each segment's lines that segment's share of the quarter; one in
+        // several markets on one plant leans each line's target by its segment's outlook against the blend.
+        $split = SegmentBooks::splitToTargets($this->ticker, $this->previousMomentum, $targetWeights);
+        foreach ($split === null ? $targetWeights : [] as $key => $weight) {
             $targetWeights[$key] = $weight * SegmentOutlook::tilt($this->previousMomentum, (string) $key);
         }
+        $targetWeights = $split ?? $targetWeights;
         $normalizedTargets = ResponseCurves::normalizeWeightsSimplex($targetWeights);
         if (empty($normalizedTargets)) {
             $total = array_sum($targetWeights);

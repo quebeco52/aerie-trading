@@ -49,3 +49,78 @@ belief sits about -0.29 below its blend in years 10-20 (mean |log tilt| 0.32).
 
 Caveat: arms diverge from the second report (segmented revenue) and unsegmented prices within days, so pairing buys
 little; the TERN result rests on 16 near-unpaired seeds and two tilt arms that agree (-6.7%, -5.9%).
+
+## 2026-10-26: segment rework phase 3 (plant per segment) against HEAD 858bc0f1
+
+Question: with plant kept by segment for TERN, ERNE, WEAV, JDAW, BIRD, RAVN, OWLS, TRIV, does the board still behave, do
+the identities hold, do segments act on their own markets, and what happens to the segment industries' peers?
+
+Harness: `SegmentsHarnessTest.php` with the phase-3 probe (kappa, targets, segment outlooks, every segment ledger
+record, gap/spare, KPIs, saturation penalty, firm addressable share, end-of-run `TICKER/seg` scan); `analyse3.py`.
+Arms `head` (git archive 858bc0f1), `seg` (working tree). 20 years, 360 ticks/year, macro replayed from
+`../idle/macro/path-<seed>-oc.gz`. Stages 8 and 16 left eight-firm items at |t| 2-4 (WEAV, OWLS, RAVN P/E), so the
+last stage ran seeds 17-32 (all recorded paths); n = 32.
+
+    BASE=<scratchpad>/basetree-858bc0f1 bin/harness-batch var/harness/segments/run.sh 1-8 head seg   # then 9-16, 17-32
+    python3 var/harness/segments/analyse3.py 1-32 head seg > var/harness/segments/phase3_n32.out
+
+Board (seg - head, n 32): cap y20 50.26 -> 49.79 tn (-0.47, se 0.34); median P/E 17.34 -> 17.29 (se 0.05); vol
+0.2192 -> 0.2187 (se 0.0010); defaults+deaths 1.03 -> 0.91 (se 0.20); B-or-worse 1.03% -> 1.11% (se 0.07 pt);
+ND/EBITDA 1.330 -> 1.324; real revenue growth 2.282% -> 2.231%/yr (-0.05 pt, se 0.02, t -2.8: TRIV, OWLS, KTWK, RAVN
+revenue below).
+
+Identities (20,224 open-book reports): sum kappa - 1 <= 2e-16; sum segment-record revenue = 4 x report revenue
+(5e-15); no kappa <= 0; no `carry:segment_tilt:*` after opening; 320 `TICKER/seg` records, all owned by the eight
+(HEAD 0); 225,030 unsegmented reports carry no `carry:segment_*`. Record capacity split = previous report's kappa in
+98.2% of reports; 367 reports (WEAV 261, TERN 43, ERNE 35, JDAW 28) differ by up to 0.019, main share higher, which
+matches `AcquisitionEngine` line 609 moving kappa between reports (the only other writer; the run log does not record
+deals, so unconfirmed). BIRD, OWLS, RAVN, TRIV main records hold capacity 0 (main industry clears no market), so the
+sum of record capacity is not the firm's structural capacity for those four.
+
+Opening: a_s TERN cargo 0.024, ERNE devices 0.042, WEAV ads 0.093, JDAW ads 0.033, BIRD merchant 0.38, OWLS 0.051 /
+0.052, TRIV 0.099 / 0.064; RAVN terminals 0.9999 in all 32 seeds (capped: terminals revenue 45.5 bn against KTWK, the
+only anchored port, at 10.9 bn). RAVN size penalty 0 -> 0.040; all others 0 before and after. Firm addressable share
+(CorporateMetrics::calculateAddressableShare) falls at opening, e.g. TERN 0.369 -> 0.153, JDAW 0.323 -> 0.124, TRIV
+0.282 -> 0.090 (now share of the sum of segment markets); it feeds StockTracker market_share on pages, DivestitureEngine
+scaleRatio, OperatingCapacityEngine ctx->addressableShare.
+
+Own markets: kappa moves slowly (WEAV ads 0.249 -> 0.180 by y20, ERNE devices 0.100 -> 0.085, RAVN terminals 0.295 ->
+0.252, TERN cargo 0.100 -> 0.096). corr(d4 log kappa_s, d4 own belief) +0.06..+0.26, vs main belief -0.03..-0.12.
+Glut: d log(kappa_s/kappa_main) per report is lower when the segment industry's peer price < 1 for all ten segments
+(e.g. ERNE devices -5.2e-3 vs -0.3e-3, WEAV ads -9.1e-3 vs -1.9e-3).
+
+Peers: KTWK price level median 1.002 -> 0.972 (t -31), p5 0.992 -> 0.942, revenue y20 -24% (t -10.6), no distress.
+Specialty Industrial Machinery and Household peers p5 price -0.1 to -0.4 pt (t -4 to -7), medians unchanged.
+
+The eight (n 32): TRIV revenue y20 -40% (t -15.7), OWLS -14% (t -6.2), RAVN -10% (t -3.6), margin -0.62 pt (t -8.7),
+P/E -0.7 (t -3.5); WEAV -9% (t -2.0), JDAW -5% (t -2.2), BIRD margin +0.32 pt (t 2.6); TERN distress seeds 7 -> 5.
+At n 8, TRIV industrial grew 5.6%/yr in HEAD against its industry peers' 3.5%; in seg 3.4% (consumer 6.4% -> 4.4%
+against LARK 4.7%): the four whose main industry clears no market had no price or gate before.
+
+Caveat: arms diverge from the second report; pairing buys little on the firm rows. Phase-2 context: 11 of 88 untouched
+firms had |t| > 2 at n 16, so |t| 2-2.6 here (WEAV, JDAW, BIRD) is within chance.
+
+## 2026-10-26: phase 3 with the entry-sizing fix (seg2: a_s = min(company share, rev_s / M_peers))
+
+Arm `seg2` = working tree with SegmentBooks::entryMarketShare(); `head` and first-round `seg` runs reused. Seeds 1-16,
+then 17-32 (RAVN rows at |t| 2.0-2.6 at n 16). 20 years, 360 ticks/year.
+
+    bin/harness-batch var/harness/segments/run.sh 1-32 seg2
+    python3 var/harness/segments/analyse3.py 1-32 head seg2 > seg2_vs_head_n32.out
+    python3 var/harness/segments/analyse3.py 1-32 seg seg2 > seg2_vs_seg_n32.out
+
+Board seg2 - head (n 32): cap -0.29 tn (se 0.32), P/E -0.06 (0.04), vol +0.0002 (0.0010), defaults+deaths -0.06 (0.14),
+B-or-worse -0.03 pt (0.06), ND/EBITDA -0.023 (0.019), real revenue growth -0.04 pt/yr (0.02, t -1.8). seg2 - seg: all
+|t| < 1 except B-or-worse -0.11 pt (t -2.2).
+
+Opening a_s: RAVN terminals 0.148 (= RAVN's share; was 0.9999), size penalty 0 -> 0. BIRD merchant 0.28 (was 0.38,
+now capped at BIRD's share). Others unchanged (TERN cargo 0.024, ERNE 0.042, WEAV 0.093, JDAW 0.033, OWLS 0.051/0.052,
+TRIV 0.099/0.064).
+
+KTWK seg2 vs head: median price 1.0018 -> 1.0017, p5 0.9924 -> 0.9913 (t -5.7, 0.1 pt), revenue y20 +1.0% (se 1.6%),
+no distress. vs seg: median +3.0 pt, p5 +4.9 pt, revenue +25%.
+RAVN seg2 vs head: revenue -1.9% (se 3.2%), margin +0.11 pt (se 0.08), P/E 0.0, ND/EBITDA -0.14 (t -1.9). vs seg:
+revenue +8.6% (t 3.8), margin +0.73 pt (t 10.6), P/E +0.70 (t 3.7).
+TRIV/OWLS seg2 vs seg: revenue +0.3% / +0.2% (se 0.7-0.8%); vs head still -40% / -14%.
+Identities as before: sum kappa 2e-16, revenue 5e-15, no kappa <= 0, no tilt left, 320 TICKER/seg records all owned by
+the eight; capacity split off by up to 0.015 in the same acquisition-shaped cases.

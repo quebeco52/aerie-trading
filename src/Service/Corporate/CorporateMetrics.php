@@ -6,6 +6,7 @@ namespace App\Service\Corporate;
 
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\TimeSeries;
@@ -81,6 +82,12 @@ class CorporateMetrics
      */
     public static function secularMarketGrowth(Stock $stock, float $totalTime): float
     {
+        // A company that keeps its plant by segment sells into the sum of its segments' markets.
+        $segmented = SegmentBooks::firmMarketGrowth($stock, $totalTime);
+        if ($segmented !== null) {
+            return $segmented;
+        }
+
         $excess = IndustryShareLedger::secularExcessGrowth(\App\Data\Company\Sectors::strategyFor($stock->getIndustry()), $stock);
         $outlook = (float) (($stock->getEarningsMomentumZ() ?? [])[Industry\IndustryOutlook::STATE_BELIEF] ?? 0.0);
 
@@ -139,8 +146,22 @@ class CorporateMetrics
      */
     public function calculateMarketSaturationPenalty(Stock $stock, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
-        $marketShare = $this->calculateAddressableShare($stock, $investedCapital, $macroState);
+        // A company that keeps its plant by segment pays each segment's penalty on its own market, on its plant.
+        $segmentShares = $this->segmentAddressableShares($stock, $investedCapital, $macroState);
+        if ($segmentShares !== null) {
+            $penalty = 0.0;
+            foreach ($segmentShares as $segment => $share) {
+                $penalty += $share['plant'] * $this->saturationPenaltyAt($stock, $share['market']);
+            }
 
+            return $penalty;
+        }
+
+        return $this->saturationPenaltyAt($stock, $this->calculateAddressableShare($stock, $investedCapital, $macroState));
+    }
+
+    private function saturationPenaltyAt(Stock $stock, float $marketShare): float
+    {
         $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
             ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
 
@@ -161,9 +182,46 @@ class CorporateMetrics
      */
     public function calculateMarginalReturn(Stock $stock, float $trueReturn, float $investedCapital, \App\DTO\MacroStateDTO $macroState): float
     {
+        // A company that keeps its plant by segment spreads the next unit over its segments as its plant is spread,
+        // each paying its own market's drag and its own industry's price response.
+        $segmentShares = $this->segmentAddressableShares($stock, $investedCapital, $macroState);
+        if ($segmentShares !== null) {
+            $industries = SegmentBooks::industries($stock);
+            $cost = 0.0;
+            foreach ($segmentShares as $segment => $share) {
+                $substitutability = \App\Data\Company\Sectors::strategyFor($industries[$segment] ?? $stock->getIndustry())->getIndustrySubstitutability();
+                $cost += $share['plant'] * ($this->calculateMarginalSaturationDrag($stock, $share['market'])
+                    + $this->cournotHaircutAt($stock, $share['market'], $investedCapital, $macroState, $substitutability));
+            }
+
+            return max(0.0, $trueReturn - $cost);
+        }
+
         $marketShare = $this->calculateAddressableShare($stock, $investedCapital, $macroState);
 
         return max(0.0, $trueReturn - $this->calculateMarginalSaturationDrag($stock, $marketShare) - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
+    }
+
+    /**
+     * Each segment's plant share and its share of its own market, for a company that keeps its plant by segment; null
+     * for any other.
+     *
+     * @return array<string, array{plant: float, market: float}>|null
+     */
+    private function segmentAddressableShares(Stock $stock, float $capital, \App\DTO\MacroStateDTO $macroState): ?array
+    {
+        $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []);
+        if ($plant === null) {
+            return null;
+        }
+
+        $seededScale = $this->calculateScaleRatio($capital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio());
+        $shares = [];
+        foreach (SegmentBooks::addressableShares($stock, $seededScale, $macroState->totalTime) as $segment => $market) {
+            $shares[$segment] = ['plant' => $plant[$segment] ?? 0.0, 'market' => $market];
+        }
+
+        return $shares;
     }
 
     /**
@@ -203,8 +261,18 @@ class CorporateMetrics
         }
 
         $strategy = \App\Data\Company\Sectors::strategyFor($stock->getIndustry());
-        $substitutability = $strategy->getIndustrySubstitutability();
-        if ($strategy->isFinancial() || $substitutability <= 0.0) {
+        if ($strategy->isFinancial()) {
+            return 0.0;
+        }
+
+        return $this->cournotHaircutAt($stock, $marketShare, $investedCapital, $macroState, $strategy->getIndustrySubstitutability());
+    }
+
+    /** calculateCournotPriceHaircut() at a given substitutability: a segment's industry's, for one that has its own. */
+    private function cournotHaircutAt(Stock $stock, float $marketShare, float $investedCapital, \App\DTO\MacroStateDTO $macroState, float $substitutability): float
+    {
+        $revenue = (float) $stock->getTotalRevenue();
+        if ($revenue <= 0.0 || $investedCapital <= 0.0 || $marketShare <= 0.0 || $substitutability <= 0.0) {
             return 0.0;
         }
 

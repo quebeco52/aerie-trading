@@ -177,7 +177,48 @@ final class SegmentsHarnessTest extends BoardRun
             $segRev[$key] = ($segRev[$key] ?? 0.0) + (float) ($d['revenue'] ?? 0.0);
         }
         $rec = $store->readIndustry((string) $stock->getIndustry())[$ticker] ?? null;
+        // Phase 3 (segment books): kappa, targets, segment outlooks, gap/spare, each segment record, KPIs, penalty.
+        $kappa = [];
+        $targets = [];
+        $segOutlook = [];
+        foreach ($z as $k => $v) {
+            foreach (['carry:segment_plant:' => 'kappa', 'carry:segment_target:' => 'targets', 'carry:segment_outlook:' => 'segOutlook'] as $p => $var) {
+                if (str_starts_with((string) $k, $p)) {
+                    ${$var}[substr((string) $k, strlen($p))] = (float) $v;
+                }
+            }
+        }
+        $industries = ['main' => (string) $stock->getIndustry()];
+        foreach ($plan['segments'] as $key => $segment) {
+            $industries[$key] = $segment['industry'];
+        }
+        $recs = [];
+        $truths = [];
+        foreach ($industries as $seg => $ind) {
+            $r = $store->readIndustry($ind)[$seg === 'main' ? $ticker : $ticker . '/' . $seg] ?? null;
+            if (is_array($r)) {
+                $recs[$seg] = ['cap' => $r['capacity'], 'rev' => $r['revenue'], 'acs' => $r['anchor_capacity_share'], 'as' => $r['addressable_share'], 'tick' => $r['tick']];
+            }
+            $o = $store->readOutlook($ind);
+            $truths[$seg] = is_array($o) ? (float) ($o['x'] ?? 0.0) : null;
+        }
+        $kpis = $report->getReportedKpis() ?? [];
+        $pen = null;
+        $addr = null;
+        $cmId = 'App\\Service\\Corporate\\CorporateMetrics';
+        if ($this->currentMacro !== null && static::getContainer()->has($cmId)) {
+            $cm = static::getContainer()->get($cmId);
+            $cap = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
+            $pen = $cm->calculateMarketSaturationPenalty($stock, $cap, $this->currentMacro);
+            $addr = $cm->calculateAddressableShare($stock, $cap, $this->currentMacro);
+        }
         $this->segRows[] = [
+            'kappa' => $kappa, 'targets' => $targets, 'sego' => $segOutlook, 'recs' => $recs, 'truths' => $truths,
+            'gap' => isset($z['carry:capacity_gap']) ? (float) $z['carry:capacity_gap'] : null,
+            'spare' => isset($z['carry:capacity_spare']) ? (float) $z['carry:capacity_spare'] : null,
+            'ipl' => isset($kpis['industry_price_level']) ? (float) $kpis['industry_price_level'] : null,
+            'idle' => isset($kpis['idle_plant_share']) ? (float) $kpis['idle_plant_share'] : null,
+            'pen' => $pen, 'addr' => $addr, 'tick' => $this->tick,
             't' => round($this->currentTime, 3), 'tk' => $ticker, 'rev' => (float) $report->getRevenue(),
             'om' => (float) $report->getOperatingMargin(), 'shares' => $shares, 'tilts' => $tilts,
             'blend' => isset($z['carry:industry_outlook']) ? (float) $z['carry:industry_outlook'] : null,
@@ -245,7 +286,24 @@ final class SegmentsHarnessTest extends BoardRun
             file_put_contents((string) getenv('OUTLOOK_OUT'), json_encode(['quarters' => $this->outlookRows]));
         }
         if (getenv('SEG_OUT')) {
-            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks]));
+            // Every TICKER/seg record in any industry the board or a segment plan names (identity: only the eight).
+            $store = static::getContainer()->get('App\\Service\\Corporate\\Industry\\IndustryShareStoreInterface');
+            $inds = [];
+            foreach ($this->stocks as $tk => $s) {
+                $inds[(string) $s->getIndustry()] = true;
+                foreach (\App\Data\Company\Segments::forTicker((string) $tk)['segments'] ?? [] as $seg) {
+                    $inds[$seg['industry']] = true;
+                }
+            }
+            $slashKeys = [];
+            foreach (array_keys($inds) as $ind) {
+                foreach (array_keys($store->readIndustry((string) $ind)) as $key) {
+                    if (str_contains((string) $key, '/')) {
+                        $slashKeys[] = $ind . '|' . $key;
+                    }
+                }
+            }
+            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys]));
         }
         $out = getenv('IDLE_OUT');
         if ($out) {

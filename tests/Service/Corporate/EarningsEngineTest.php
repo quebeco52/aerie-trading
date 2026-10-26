@@ -25,6 +25,7 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
@@ -278,25 +279,59 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
-     * A company in several markets files each segment's share of the quarter's revenue, which add to one, and the lean
-     * of each of its lines: one each while every outlook is still where trading opened.
+     * A company in several markets files each segment's share of the quarter's revenue, which add to one, and each
+     * segment's outlook. Its next report opens its plant books at those shares, books each segment's sales in its own
+     * industry so the company's revenue is counted once across them, and files each segment's share of the quarter for
+     * its lines to split.
      */
-    public function testACompanyInSeveralMarketsFilesItsSegmentSharesAndLeans(): void
+    public function testACompanyInSeveralMarketsOpensItsPlantBooksBySegment(): void
     {
-        $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger(new InMemoryIndustryShareStore()));
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $store = new InMemoryIndustryShareStore();
+        $engine = $this->buildEngine($dispatcher, new IndustryShareLedger($store));
         mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
         $stock = $this->buildMatureIndustrial('TRIV');
         $stock->setIndustry('Conglomerates');
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+        $tick = EarningsEngine::resolveReportingTick('TRIV', 252);
 
-        $engine->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02), EarningsEngine::resolveReportingTick('TRIV', 252), 252);
+        $engine->calculate($stock, $macro, $tick, 252);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $shares = SegmentOutlook::filedShares($momentum);
         $this->assertEqualsCanonicalizing([Segments::MAIN, 'industrial', 'consumer'], array_keys($shares), json_encode($shares) ?: '');
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-9);
         $this->assertGreaterThan(0.0, $shares['industrial']);
-        $this->assertSame(1.0, $momentum[SegmentOutlook::STATE_TILT . 'industrial_manufacturing'] ?? null);
-        $this->assertSame(1.0, $momentum[SegmentOutlook::STATE_TILT . Segments::MAIN] ?? null);
+        $this->assertSame(0.0, $momentum[SegmentBooks::STATE_OUTLOOK . 'industrial'] ?? null, 'an outlook not yet stepped files as the opening');
+        $this->assertArrayNotHasKey(SegmentOutlook::STATE_TILT . 'industrial_manufacturing', $momentum, 'plant kept by segment carries no lean');
+        $this->assertNull(SegmentBooks::plant($momentum), 'the books open at the next report');
+
+        $engine->calculate($stock, $macro, $tick + 63, 252);
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $plant = SegmentBooks::plant($momentum) ?? [];
+        $this->assertEqualsCanonicalizing(array_keys($shares), array_keys($plant));
+        $this->assertEqualsWithDelta(1.0, array_sum($plant), 1e-9);
+        $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+        $this->assertEqualsCanonicalizing(array_keys($plant), array_keys($captured->segments));
+        $targets = 0.0;
+        foreach (array_keys($plant) as $segment) {
+            $targets += (float) $momentum[SegmentBooks::STATE_TARGET . $segment];
+        }
+        $this->assertEqualsWithDelta(1.0, $targets, 1e-9);
+
+        $industrial = $store->readIndustry('Specialty Industrial Machinery')['TRIV/industrial'] ?? null;
+        $consumer = $store->readIndustry('Household & Personal Products')['TRIV/consumer'] ?? null;
+        $main = $store->readIndustry('Conglomerates')['TRIV'] ?? null;
+        $this->assertNotNull($industrial);
+        $this->assertNotNull($consumer);
+        $this->assertNotNull($main);
+        $this->assertGreaterThan(0.0, $industrial['anchor_capacity_share'], 'a segment anchors in its own industry');
+        $this->assertEqualsWithDelta($captured->actualRevenue * 4.0, $industrial['revenue'] + $consumer['revenue'] + $main['revenue'], 1e-6 * $captured->actualRevenue);
     }
 
     /**

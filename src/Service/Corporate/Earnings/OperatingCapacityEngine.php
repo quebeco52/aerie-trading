@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Earnings;
 
+use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
 use App\DTO\EarningsSimulationContext;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -138,30 +141,52 @@ final class OperatingCapacityEngine
         $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);
 
         // The industry outlook as the public reads it this quarter, filed with the report: the market the firm sizes
-        // itself against below grows with it. A company in several markets reads the blend of its segments' outlooks,
-        // and files how far each segment's lines lean in its plan (SegmentOutlook).
+        // itself against below grows with it. A company in several markets reads the blend of its segments' outlooks:
+        // on one plant it files how far each segment's lines lean in its plan (SegmentOutlook), and with plant by
+        // segment each segment's own outlook, which its own market grows with (SegmentBooks).
         if ($this->industryShareLedger !== null) {
             $belief = $this->industryShareLedger->resolveOutlookBelief($stock);
             $ctx->industryOutlook = exp($belief);
             $filed = [IndustryOutlook::STATE_BELIEF => log($ctx->industryOutlook)];
-            foreach (SegmentOutlook::tilts($stock->getTicker(), $this->industryShareLedger->resolveSegmentBeliefs($stock) ?? [], $belief) as $stream => $tilt) {
-                $filed[SegmentOutlook::STATE_TILT . $stream] = $tilt;
+            $segmentBeliefs = $this->industryShareLedger->resolveSegmentBeliefs($stock) ?? [];
+            if (SegmentBooks::keepsBooks($stock)) {
+                foreach ($segmentBeliefs as $segment => $segmentBelief) {
+                    $filed[SegmentBooks::STATE_OUTLOOK . $segment] = $segmentBelief;
+                }
+            } else {
+                foreach (SegmentOutlook::tilts($stock->getTicker(), $segmentBeliefs, $belief) as $stream => $tilt) {
+                    $filed[SegmentOutlook::STATE_TILT . $stream] = $tilt;
+                }
             }
             $stock->setEarningsMomentumZ($filed + ($stock->getEarningsMomentumZ() ?? []));
         }
+        $this->openSegmentBooks($ctx);
 
         // The firm's reach into the market it sells into, on the base the saturation physics uses. The
         // industry ledger weighs both what this firm builds and what it takes from rivals by it.
         $evaluationCapital = $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
         $ctx->addressableShare = $this->corporateMetrics->calculateAddressableShare($stock, $evaluationCapital, $macroState);
+        $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []);
+        if ($plant !== null) {
+            $markets = SegmentBooks::addressableShares(
+                $stock,
+                $this->corporateMetrics->calculateScaleRatio($evaluationCapital, $macroState->nominalGdpIndex, (float) $stock->getSamRatio()),
+                $macroState->totalTime,
+            );
+            // A segment with no plant (a line the company does not run) sells nothing into its industry.
+            foreach (array_filter($plant, static fn(float $share): bool => $share > 0.0) as $segment => $plantShare) {
+                $ctx->segments[$segment] = ['plant' => $plantShare, 'market' => $markets[$segment] ?? 0.0, 'price' => 1.0, 'load' => 1.0, 'drain' => 0.0, 'growth' => 0.0, 'leftover' => 0.0];
+            }
+        }
 
         // Zero-sum share: rivals' idiosyncratic gains booked since this firm's last report are taken from
         // its demand in proportion to its size, scaled by how substitutable the industry's output is. The
         // drain lands in EXPECTED revenue because analysts have already read the rivals' reports.
         $rivalShareDrain = 0.0;
         if ($this->industryShareLedger !== null) {
-            $rivalShareDrain = $strategy->getIndustrySubstitutability()
-                * $this->industryShareLedger->resolveRivalShareDrain($stock, $ctx->tickCount, $ctx->ticksPerYear);
+            $rivalShareDrain = $ctx->segments === []
+                ? $strategy->getIndustrySubstitutability() * $this->industryShareLedger->resolveRivalShareDrain($stock, $ctx->tickCount, $ctx->ticksPerYear)
+                : $this->resolveSegmentRivalDrain($ctx, $this->industryShareLedger);
             $macroDemandShift += $rivalShareDrain;
         }
         $ctx->rivalShareDrain = $rivalShareDrain;
@@ -292,7 +317,7 @@ final class OperatingCapacityEngine
         $deflator = max(0.01, $ctx->macroState->gdpDeflator);
         $lastDeflator = (float) ($state[self::STATE_LAST_DEFLATOR] ?? $deflator);
         $expectedInflation = max(0.0, $ctx->macroState->inflationEma);
-        $restatement = (max(0.0, $ctx->strategy->getFadedSecularGrowthRate($ctx->stock, $ctx->macroState->totalTime)) + $expectedInflation + $this->plant->resolveDepreciationRate($ctx)) * $ctx->dt;
+        $restatement = (max(0.0, SegmentBooks::fadedSecularGrowth($ctx->strategy, $ctx->stock, $ctx->macroState->totalTime)) + $expectedInflation + $this->plant->resolveDepreciationRate($ctx)) * $ctx->dt;
 
         $quarterSurprise = isset($state[self::STATE_LAST_DEFLATOR])
             ? log($deflator / max(0.01, $lastDeflator)) - ($expectedInflation * $ctx->dt)
@@ -410,6 +435,10 @@ final class OperatingCapacityEngine
      */
     private function resolveIndustryBalance(EarningsSimulationContext $ctx, float $avoidableCostRatio): array
     {
+        if ($ctx->segments !== []) {
+            return $this->resolveSegmentBalances($ctx, $avoidableCostRatio);
+        }
+
         $substitutability = $ctx->strategy->getIndustrySubstitutability();
         if ($this->industryShareLedger === null || $ctx->strategy->isFinancial() || $substitutability <= 0.0) {
             return [1.0, 1.0];
@@ -428,12 +457,143 @@ final class OperatingCapacityEngine
             $ctx->tickCount,
             $ctx->ticksPerYear,
         );
-        if ($supply === null) {
-            return [1.0, 1.0];
+
+        return $supply === null ? [1.0, 1.0] : self::clearAt($supply, $ctx->addressableShare, $substitutability, $avoidableCostRatio);
+    }
+
+    /**
+     * resolveIndustryBalance() for a company that keeps plant by segment (SegmentBooks): each segment's plant is struck
+     * against its own industry, at its own share of that market and its industry's substitutability, and sells at what
+     * that industry pays; the company's price and load are its segments' over the plant that runs. Each segment's share
+     * of the quarter's revenue is filed for the plan to split its lines by.
+     *
+     * @return array{0: float, 1: float} Price level, plant load.
+     */
+    private function resolveSegmentBalances(EarningsSimulationContext $ctx, float $avoidableCostRatio): array
+    {
+        $industries = SegmentBooks::industries($ctx->stock);
+        $prices = [];
+        $loads = [];
+        foreach ($ctx->segments as $segment => $books) {
+            $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
+            $substitutability = $strategy->getIndustrySubstitutability();
+            $supply = $this->industryShareLedger === null || $strategy->isFinancial() || $substitutability <= 0.0 ? null : $this->industryShareLedger->resolveSegmentSupply(
+                $ctx->stock,
+                $segment,
+                $books['plant'] * (float) $ctx->stock->getTotalRevenue(),
+                $books['plant'] * $ctx->structuralRevenue * EarningsEngine::TTM_QUARTERS,
+                $books['market'],
+                IndustryShareLedger::trendNominalGdp($ctx->macroState),
+                $ctx->macroState->totalTime,
+                IndustryShareLedger::secularExcessGrowth($strategy, $ctx->stock),
+                $ctx->tickCount,
+                $ctx->ticksPerYear,
+            );
+            [$prices[$segment], $loads[$segment]] = $supply === null ? [1.0, 1.0] : self::clearAt($supply, $books['market'], $substitutability, $avoidableCostRatio);
+            $ctx->segments[$segment]['price'] = $prices[$segment];
+            $ctx->segments[$segment]['load'] = $loads[$segment];
         }
 
+        // A by-product's plant runs with the main segment's whether or not its own industry buys all its output.
+        $running = [];
+        foreach (SegmentBooks::jointSegments($ctx->stock) as $segment) {
+            $running[$segment] = $loads[Segments::MAIN] ?? 1.0;
+        }
+        $company = SegmentBooks::aggregate(
+            array_map(static fn(array $books): float => $books['plant'], $ctx->segments),
+            $prices,
+            $loads,
+            array_map(static fn(array $books): float => $books['drain'], $ctx->segments),
+            $running,
+        );
+        $filed = [];
+        foreach ($company['targets'] as $segment => $target) {
+            $filed[SegmentBooks::STATE_TARGET . $segment] = $target;
+        }
+        $ctx->stock->setEarningsMomentumZ($filed + ($ctx->stock->getEarningsMomentumZ() ?? []));
+
+        return [$company['price'], $company['load']];
+    }
+
+    /**
+     * The drain on a company that keeps plant by segment: each segment loses to its own industry's rivals what their
+     * gains take from it, by that industry's substitutability, weighed by its plant. Each segment's own drain is kept
+     * so its lines alone carry it (resolveSegmentBalances()).
+     */
+    private function resolveSegmentRivalDrain(EarningsSimulationContext $ctx, IndustryShareLedger $ledger): float
+    {
+        $industries = SegmentBooks::industries($ctx->stock);
+        $drain = 0.0;
+        foreach ($ctx->segments as $segment => $books) {
+            $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
+            $books['drain'] = $strategy->getIndustrySubstitutability()
+                * $ledger->resolveSegmentRivalDrain($ctx->stock, $segment, $books['plant'] * (float) $ctx->stock->getTotalRevenue(), $ctx->tickCount, $ctx->ticksPerYear);
+            $ctx->segments[$segment] = $books;
+            $drain += $books['plant'] * $books['drain'];
+        }
+
+        return $drain;
+    }
+
+    /**
+     * Opens the plant books of a company in several markets at the first report that finds its segments' revenue shares
+     * filed: each segment takes its share of the plant and a market of its own, and the industry ledger moves the other
+     * segments out of the main record. The lean the plan carried on one plant goes.
+     */
+    private function openSegmentBooks(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $macroState = $ctx->macroState;
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        if (SegmentOutlook::filedShares($momentum) === [] || SegmentBooks::plant($momentum) !== null || !SegmentBooks::keepsBooks($stock)) {
+            return;
+        }
+
+        // Each other segment enters at its share of the market its industry's firms sell into (SegmentBooks::
+        // entryMarketShare()); the main segment keeps the company's share of its own.
+        $plant = SegmentBooks::openingPlantShares($stock->getTicker(), $momentum);
+        $firmShare = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()), $macroState);
+        $marketShares = [];
+        foreach (SegmentBooks::industries($stock) as $segment => $industry) {
+            $market = $segment === Segments::MAIN ? null : $this->industryShareLedger?->resolveIndustryMarketRevenue(
+                $industry,
+                $stock->getTicker(),
+                $macroState,
+                IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor($industry), $stock),
+                $ctx->tickCount,
+                $ctx->ticksPerYear,
+            );
+            if ($market !== null) {
+                $marketShares[$segment] = SegmentBooks::entryMarketShare(($plant[$segment] ?? 0.0) * (float) $stock->getTotalRevenue(), $market, $firmShare);
+            }
+        }
+
+        $opened = SegmentBooks::open(
+            $plant,
+            CorporateMetrics::secularMarketGrowth($stock, $macroState->totalTime),
+            SegmentBooks::marketGrowths($stock, $macroState->totalTime),
+            $firmShare,
+            $marketShares,
+        );
+        foreach (array_keys($momentum) as $key) {
+            if (str_starts_with((string) $key, SegmentOutlook::STATE_TILT)) {
+                unset($momentum[$key]);
+            }
+        }
+        $stock->setEarningsMomentumZ($opened + $momentum);
+        $this->industryShareLedger?->openSegmentBooks($stock, $plant[Segments::MAIN] ?? 0.0);
+    }
+
+    /**
+     * The price a firm realizes and the share of its plant that runs in a market of this supply, at its share of it.
+     *
+     * @param array{roster: float, fringe: float} $supply
+     * @return array{0: float, 1: float} Price level, plant load.
+     */
+    private static function clearAt(array $supply, float $addressableShare, float $substitutability, float $avoidableCostRatio): array
+    {
         $marginalRevenue = FirmEconomics::calculateCournotMarginalRevenueFactor(
-            $ctx->addressableShare,
+            $addressableShare,
             FirmEconomics::fringeAdjustedDemandElasticity(
                 FinancialConstants::COURNOT_DEMAND_ELASTICITY,
                 self::FRINGE_SUPPLY_ELASTICITY,

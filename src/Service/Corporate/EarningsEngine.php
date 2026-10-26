@@ -283,6 +283,7 @@ class EarningsEngine
         $this->calculateEPSAndSurprise($ctx);
         $this->capitalBudget->calculateFreeCashFlow($ctx);
         $this->allocateCapital($ctx);
+        $this->capitalBudget->rollSegmentPlant($ctx, (float) ($ctx->allocation['organic_capex'] ?? 0.0));
         $this->reportFreeCashFlow($ctx);
         $this->executeAnnouncementReturn($ctx);
 
@@ -677,7 +678,16 @@ class EarningsEngine
         // the sector drawn nothing, re-run on the quarter's own draws.
         if ($this->industryShareLedger !== null && $ctx->expectedRevenue > 0.0) {
             $firmSurprise = (($revenueWithoutSector ?? $ctx->actualRevenue) - $ctx->expectedRevenue) / $ctx->expectedRevenue;
-            $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount);
+            if ($ctx->segments === []) {
+                $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount);
+            } else {
+                // Plant kept by segment: each segment's industry books that segment's sales alone, so the company's
+                // revenue is counted once across its industries.
+                $segmentShares = SegmentOutlook::shares($ctx->stock->getTicker(), $actuals->streamRevenue);
+                foreach ($ctx->segments as $segment => $books) {
+                    $this->industryShareLedger->recordSegmentGain($ctx->stock, $segment, $ctx->actualRevenue * 4.0 * ($segmentShares[$segment] ?? 0.0), $firmSurprise, $books['market'], $ctx->tickCount);
+                }
+            }
         }
 
         $coverage = $ctx->strategy->getCoverageProfile($ctx->stock);

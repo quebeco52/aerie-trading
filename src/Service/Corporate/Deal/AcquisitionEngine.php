@@ -11,6 +11,7 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\ManagementValuation;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\News\MarketEventPublisher;
@@ -601,6 +602,15 @@ class AcquisitionEngine
         // Credit agreements measure a buyer pro forma, as if it had owned the target all year.
         ProForma::restateOperatingHistory($stock, 1.0, $acquiredRevenue, $acquiredOperatingIncome);
         $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
+        // A buyer that keeps plant by segment adds what it bought to its main segment, the one the ledger booked it in.
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $plant = SegmentBooks::plant($momentum);
+        if ($plant !== null) {
+            foreach (SegmentBooks::acquireIntoMain($plant, $currentRevenue, $acquiredRevenue) as $segment => $share) {
+                $momentum[SegmentBooks::STATE_PLANT . $segment] = $share;
+            }
+            $stock->setEarningsMomentumZ($momentum);
+        }
 
         // Operating income adds across the two businesses, so the combined margin is revenue-weighted.
         $blendedMargin = (($oldStructuralRevenue * $oldOperatingMargin) + $acquiredOperatingIncome)

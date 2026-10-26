@@ -203,6 +203,16 @@ class EarningsSimulationContext
     public float $plantLoad = 1.0;
     /** The level the public expects the firm's industry demand to reach against its expected path (1 = the opening). */
     public float $industryOutlook = 1.0;
+    /**
+     * For a company that keeps plant by segment (SegmentBooks), each segment's quarter: its plant share, its share of
+     * its own market, the price its industry pays it, the share of its plant that runs, the growth capex it was
+     * allotted and what its plan still allows after it. Empty for any other.
+     *
+     * @var array<string, array{plant: float, market: float, price: float, load: float, drain: float, growth: float, leftover: float}>
+     */
+    public array $segments = [];
+    /** The plant base a company that keeps plant by segment planned its segments' growth on (net PP&E). */
+    public float $segmentPlantBase = 0.0;
     /** The quarter's idiosyncratic demand shock to utilisation. */
     public float $idiosyncraticDemandShock = 0.0;
     /** The quarter's fundamental jump in utilisation. */

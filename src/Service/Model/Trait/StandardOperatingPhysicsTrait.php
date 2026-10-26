@@ -1006,6 +1006,18 @@ trait StandardOperatingPhysicsTrait
         return false;
     }
 
+    /** A company in several markets keeps plant by segment, each building toward its own market. */
+    public function plansOwnSegmentMix(): bool
+    {
+        return false;
+    }
+
+    /** Every line is made on plant of its own. */
+    public function jointProductLines(): array
+    {
+        return [];
+    }
+
     /** An operating company reports net income as the books strike it. */
     public function reportsFundsFromOperations(): bool
     {

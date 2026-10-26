@@ -1,0 +1,263 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Service\Corporate\Segment;
+
+use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
+use App\DTO\MacroStateDTO;
+use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\Segment\SegmentBooks;
+use App\Service\Corporate\Segment\SegmentOutlook;
+use App\Service\Math\MathUtility;
+use App\Service\Model\StreamContext;
+use PHPUnit\Framework\Attributes\Group;
+use PHPUnit\Framework\TestCase;
+
+#[Group('unit')]
+class SegmentBooksTest extends TestCase
+{
+    /**
+     * The books open with each segment holding its revenue share of the plant and the company's share of its own
+     * market, so the company's market is the sum of its segments' and nothing about its reach moves the day they open.
+     */
+    public function testTheBooksOpenAtTheCompanysShareOfEachMarket(): void
+    {
+        $stock = $this->tern();
+        $momentum = [SegmentBooks::STATE_OUTLOOK . Segments::MAIN => 0.05, SegmentBooks::STATE_OUTLOOK . 'air_cargo' => -0.20];
+        $stock->setEarningsMomentumZ($momentum);
+        $years = 12.0;
+        $firmGrowth = CorporateMetrics::secularMarketGrowth($stock, $years);
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], $firmGrowth, SegmentBooks::marketGrowths($stock, $years)) + $momentum);
+
+        $this->assertSame([Segments::MAIN => 0.9, 'air_cargo' => 0.1], SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []));
+        $this->assertEqualsWithDelta($firmGrowth, SegmentBooks::firmMarketGrowth($stock, $years), 1e-12);
+        $this->assertEqualsWithDelta($firmGrowth, CorporateMetrics::secularMarketGrowth($stock, $years), 1e-12, 'the market the engine sizes on');
+        $shares = SegmentBooks::addressableShares($stock, 0.3, $years);
+        $this->assertEqualsWithDelta(0.3 / $firmGrowth, $shares[Segments::MAIN], 1e-12);
+        $this->assertEqualsWithDelta(0.3 / $firmGrowth, $shares['air_cargo'], 1e-12);
+    }
+
+    /** Each segment's market then grows with its own industry's outlook: cargo's falls and the company's with it. */
+    public function testEachSegmentsMarketGrowsWithItsOwnOutlook(): void
+    {
+        $stock = $this->tern();
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, [Segments::MAIN => 1.0, 'air_cargo' => 1.0]);
+        $stock->setEarningsMomentumZ($momentum);
+        $before = SegmentBooks::firmMarketGrowth($stock, 0.0);
+        $cargoBefore = SegmentBooks::addressableShares($stock, 0.3, 0.0)['air_cargo'];
+
+        $stock->setEarningsMomentumZ([SegmentBooks::STATE_OUTLOOK . 'air_cargo' => log(0.5)] + $momentum);
+
+        $this->assertEqualsWithDelta($before - 0.05, SegmentBooks::firmMarketGrowth($stock, 0.0), 1e-12, 'cargo was a tenth of the market and halved');
+        $this->assertEqualsWithDelta($before - 0.05, CorporateMetrics::secularMarketGrowth($stock, 0.0), 1e-12, 'the market the engine sizes on');
+        $this->assertEqualsWithDelta(2.0 * $cargoBefore, SegmentBooks::addressableShares($stock, 0.3, 0.0)['air_cargo'], 1e-12);
+    }
+
+    /**
+     * The company's load is its segments' over the plant, its price is theirs over the output that runs, and each
+     * segment's share of the revenue is its running plant at its price.
+     */
+    public function testTheCompanysQuarterIsItsSegmentsOverThePlant(): void
+    {
+        $company = SegmentBooks::aggregate([Segments::MAIN => 0.8, 'air_cargo' => 0.2], [Segments::MAIN => 1.05, 'air_cargo' => 0.9], [Segments::MAIN => 1.0, 'air_cargo' => 0.5]);
+
+        $this->assertEqualsWithDelta(0.9, $company['load'], 1e-12);
+        $this->assertEqualsWithDelta(((0.8 * 1.05) + (0.1 * 0.9)) / 0.9, $company['price'], 1e-12);
+        $this->assertEqualsWithDelta(0.09 / 0.93, $company['targets']['air_cargo'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($company['targets']), 1e-12);
+    }
+
+    /**
+     * What a segment's own industry's rivals took from it reaches its lines alone: its share of the quarter falls,
+     * while the company's price and load, struck on the plant, do not move. A by-product's plant runs with the plant it
+     * rides whether or not its own industry buys all it makes.
+     */
+    public function testARivalsGainReachesOnlyTheSegmentItCameFrom(): void
+    {
+        $plant = [Segments::MAIN => 0.8, 'air_cargo' => 0.2];
+        $prices = [Segments::MAIN => 1.0, 'air_cargo' => 1.0];
+        $loads = [Segments::MAIN => 1.0, 'air_cargo' => 0.5];
+        $plain = SegmentBooks::aggregate($plant, $prices, $loads);
+        $drained = SegmentBooks::aggregate($plant, $prices, $loads, ['air_cargo' => -0.10]);
+
+        $this->assertEqualsWithDelta(0.09 / (0.8 + 0.09), $drained['targets']['air_cargo'], 1e-12);
+        $this->assertSame($plain['price'], $drained['price']);
+        $this->assertSame($plain['load'], $drained['load']);
+
+        $flying = SegmentBooks::aggregate($plant, $prices, $loads, [], ['air_cargo' => 1.0]);
+        $this->assertEqualsWithDelta(1.0, $flying['load'], 1e-12, 'the hold flies full or empty');
+        $this->assertEqualsWithDelta(0.9, $flying['price'], 1e-12, 'and the space left unsold earns nothing');
+        $this->assertSame($plain['targets'], $flying['targets']);
+    }
+
+    /**
+     * A segment entering an industry whose firms already sell into a known market holds its share of that market; the
+     * main segment keeps the company's share of its own.
+     */
+    public function testASegmentOpensAtItsShareOfItsIndustrysMarket(): void
+    {
+        $stock = $this->tern();
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, [], 0.37, ['air_cargo' => 0.03]));
+
+        $shares = SegmentBooks::addressableShares($stock, 0.37, 0.0);
+        $this->assertEqualsWithDelta(0.37, $shares[Segments::MAIN], 1e-12);
+        $this->assertEqualsWithDelta(0.03, $shares['air_cargo'], 1e-12);
+        $this->assertEqualsWithDelta(0.37 / (0.9 + (0.1 * 0.37 / 0.03)), 0.37 / (SegmentBooks::firmMarketGrowth($stock, 0.0) ?? 1.0), 1e-12, 'the company now sells into both');
+    }
+
+    /**
+     * A small arm of a large company enters a large industry as the small seller it is; an arm that outsells every
+     * listed firm in its industry sells into more than their market, and holds no more of its own than its company
+     * does of its.
+     */
+    public function testASegmentEntersAtItsShareOfTheLargerMarket(): void
+    {
+        $this->assertEqualsWithDelta(5.0 / 200.0, SegmentBooks::entryMarketShare(5.0, 200.0, 0.37), 1e-12, 'cargo in freight');
+        $this->assertEqualsWithDelta(0.148, SegmentBooks::entryMarketShare(45.5, 30.0, 0.148), 1e-12, 'terminals larger than the ports market');
+        $this->assertEqualsWithDelta(0.3, SegmentBooks::entryMarketShare(0.0, 0.0, 0.3), 1e-12, 'nothing to measure');
+    }
+
+    /**
+     * The plant opens at the mix the plan was steering its lines to, summed by segment, not at one quarter's draw; a
+     * plan that keeps no mix opens at the last report's revenue.
+     */
+    public function testThePlantOpensAtThePlansMix(): void
+    {
+        $momentum = ['weight:carrier_networks' => 0.75, 'weight:consumer_terminals' => 0.25, SegmentOutlook::STATE_SHARE . Segments::MAIN => 0.7, SegmentOutlook::STATE_SHARE . 'consumer_devices' => 0.3];
+
+        $this->assertEqualsWithDelta([Segments::MAIN => 0.75, 'consumer_devices' => 0.25], SegmentBooks::openingPlantShares('ERNE', $momentum), 1e-12);
+        $this->assertEqualsWithDelta([Segments::MAIN => 0.7, 'consumer_devices' => 0.3], SegmentBooks::openingPlantShares('ERNE', array_slice($momentum, 2, null, true)), 1e-12);
+    }
+
+    /**
+     * Each segment pays the size penalty on its own market, on its share of the plant: a cargo arm that is most of its
+     * market costs the company what that costs it there, not what the company's share of all its markets would.
+     */
+    public function testEachSegmentPaysTheSizePenaltyOnItsOwnMarket(): void
+    {
+        $metrics = new CorporateMetrics();
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0, totalTime: 0.0);
+        $penaltyAt = static fn(float $share): float => $metrics->calculateMarketSaturationPenalty(
+            (new Stock())->setTicker('NONE')->setIndustry('Airlines')->setSamRatio('1.00'),
+            $share * CorporateMetrics::BASELINE_SECTOR_TAM,
+            $macro,
+        );
+        $stock = $this->tern()->setSamRatio('1.00');
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, [], 0.6, ['air_cargo' => 0.9]));
+
+        $this->assertGreaterThan(0.0, $penaltyAt(0.9));
+        $this->assertEqualsWithDelta(
+            (0.9 * $penaltyAt(0.6)) + (0.1 * $penaltyAt(0.9)),
+            $metrics->calculateMarketSaturationPenalty($stock, 0.6 * CorporateMetrics::BASELINE_SECTOR_TAM, $macro),
+            1e-12,
+        );
+    }
+
+    /** An airline's cargo rides its passenger aircraft; an online retailer's cloud is plant of its own. */
+    public function testWhichSegmentsRideTheMainPlant(): void
+    {
+        $this->assertSame(['air_cargo'], SegmentBooks::jointSegments($this->tern()));
+        $this->assertSame([], SegmentBooks::jointSegments((new Stock())->setTicker('WEAV')->setIndustry('Internet Retail')));
+    }
+
+    /**
+     * A segment's share of the plant grows with the growth capex it was allotted and shrinks with the wear on its idle
+     * plant; plant that runs has its wear replaced and keeps its share.
+     */
+    public function testPlantFollowsTheBuildAndTheIdleWear(): void
+    {
+        $plant = [Segments::MAIN => 0.9, 'air_cargo' => 0.1];
+
+        $built = SegmentBooks::rollPlant($plant, 1000.0, ['air_cargo' => 10.0], [], 25.0);
+        $this->assertEqualsWithDelta(110.0 / 1010.0, $built['air_cargo'], 1e-12);
+
+        $idle = SegmentBooks::rollPlant($plant, 1000.0, [], [Segments::MAIN => 0.5], 25.0);
+        $this->assertEqualsWithDelta(100.0 / (900.0 - 11.25 + 100.0), $idle['air_cargo'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($idle), 1e-12);
+
+        $this->assertSame($plant, SegmentBooks::rollPlant($plant, 1000.0, [], [], 25.0), 'all plant running and nothing built');
+    }
+
+    /**
+     * A segment's lines take its share of the quarter and split it as the model splits them; with no shares filed the
+     * company keeps its weights.
+     */
+    public function testEachSegmentsLinesSplitItsShareOfTheQuarter(): void
+    {
+        $momentum = [SegmentBooks::STATE_TARGET . Segments::MAIN => 0.8, SegmentBooks::STATE_TARGET . 'air_cargo' => 0.2];
+        $weights = ['leisure_passengers' => 0.45, 'business_passengers' => 0.32, 'air_cargo' => 0.10, 'loyalty_miles' => 0.13];
+
+        $split = SegmentBooks::splitToTargets('TERN', $momentum, $weights) ?? [];
+
+        $this->assertEqualsWithDelta(0.2, $split['air_cargo'], 1e-12);
+        $this->assertEqualsWithDelta(0.8 * 0.45 / 0.90, $split['leisure_passengers'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($split), 1e-12);
+        $this->assertNull(SegmentBooks::splitToTargets('TERN', [], $weights));
+        $this->assertNull(SegmentBooks::splitToTargets(null, $momentum, $weights));
+
+        $streams = (new StreamContext($momentum, new MathUtility(), ticker: 'TERN'))->resolveActiveStreamWeights($weights);
+        $this->assertEqualsWithDelta(0.2, $streams['air_cargo'], 1e-12, 'the models\' stream mix reads the same split');
+    }
+
+    /** A takeover in the main industry adds its plant to the main segment; the others keep theirs, a smaller share. */
+    public function testATakeoverAddsToTheMainSegment(): void
+    {
+        $plant = SegmentBooks::acquireIntoMain([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1000.0, 250.0);
+
+        $this->assertEqualsWithDelta(100.0 / 1250.0, $plant['air_cargo'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($plant), 1e-12);
+    }
+
+    /** The company grows at its segments' industries' rates on its plant; before the books open, at its model's. */
+    public function testTheCompanyGrowsAtItsSegmentsRatesOnItsPlant(): void
+    {
+        $stock = $this->tern();
+        $airline = Sectors::strategyFor('Airlines');
+        $freight = Sectors::strategyFor('Integrated Freight & Logistics');
+
+        $this->assertSame($airline->getFadedSecularGrowthRate($stock, 5.0), SegmentBooks::fadedSecularGrowth($airline, $stock, 5.0));
+
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.75, 'air_cargo' => 0.25], 1.0, []));
+        $this->assertEqualsWithDelta(
+            (0.75 * $airline->getFadedSecularGrowthRate($stock, 5.0)) + (0.25 * $freight->getFadedSecularGrowthRate($stock, 5.0)),
+            SegmentBooks::fadedSecularGrowth($airline, $stock, 5.0),
+            1e-12,
+        );
+    }
+
+    /**
+     * A segment's market grows at its industry's rate whichever company it belongs to: the rate must not read the
+     * company's own model parameters, whose keys mean other things in other models.
+     */
+    public function testASegmentsIndustryRateIsTheIndustrysNotTheCompanys(): void
+    {
+        foreach (Segments::tickers() as $ticker) {
+            foreach (Segments::forTicker($ticker)['segments'] ?? [] as $key => $segment) {
+                $strategy = Sectors::strategyFor($segment['industry']);
+                $this->assertSame(
+                    $strategy->getSecularGrowthRate((new Stock())->setTicker('NONE')->setIndustry($segment['industry'])),
+                    $strategy->getSecularGrowthRate((new Stock())->setTicker($ticker)->setIndustry($segment['industry'])),
+                    "{$ticker} {$key}",
+                );
+            }
+        }
+    }
+
+    /** Only a company in several markets whose model does not plan its own mix keeps plant by segment. */
+    public function testWhoKeepsBooks(): void
+    {
+        $this->assertTrue(SegmentBooks::keepsBooks($this->tern()));
+        $this->assertFalse(SegmentBooks::keepsBooks((new Stock())->setTicker('SKYL')->setIndustry('Space Systems')), 'its adoption curve plans its mix');
+        $this->assertFalse(SegmentBooks::keepsBooks((new Stock())->setTicker('LOON')->setIndustry('Telecom Services')));
+        $this->assertSame('TERN', SegmentBooks::ownerOf(SegmentBooks::recordKey('TERN', 'air_cargo')));
+        $this->assertSame('TERN', SegmentBooks::recordKey('TERN', Segments::MAIN));
+    }
+
+    private function tern(): Stock
+    {
+        return (new Stock())->setTicker('TERN')->setIndustry('Airlines');
+    }
+}

@@ -214,6 +214,15 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
+     * Satellite internet opens from nothing on the firm's own adoption curve, a path the industry ledger cannot yet
+     * carry for one record, so the curve plans the mix on one plant.
+     */
+    public function plansOwnSegmentMix(): bool
+    {
+        return true;
+    }
+
+    /**
      * The growth the plant, the capital budget and the market's multiple read: the lines' expected growth now. The
      * S-curve is its own fade, so no second fade is laid over it.
      */

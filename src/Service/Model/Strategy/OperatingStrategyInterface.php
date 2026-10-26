@@ -259,6 +259,20 @@ interface OperatingStrategyInterface
     public function depreciatesByUnitsOfProduction(): bool;
 
     /**
+     * Whether the model plans its own lines' paths into a segment's market (a line it opens from nothing on its own
+     * adoption curve), so the company keeps one plant split by that plan rather than plant by segment (SegmentBooks).
+     */
+    public function plansOwnSegmentMix(): bool;
+
+    /**
+     * Lines whose output is a by-product of the main business's plant (an airline's belly cargo flies on its passenger
+     * aircraft): sold into their own market at its price, but built and worn with the plant they ride.
+     *
+     * @return list<string>
+     */
+    public function jointProductLines(): array;
+
+    /**
      * Whether the firm reports funds from operations: net income with real-estate depreciation added back, the measure
      * a property trust is valued and forecast on, since its buildings hold their value while the books wear them down.
      */

@@ -80,6 +80,7 @@ final class FairValue
             $ctx->longRunReturn,
             $ctx->excessCashPerShare,
             $ctx->capacityGap,
+            $ctx->capacitySpare,
         );
     }
 
@@ -118,6 +119,7 @@ final class FairValue
      *                                   as it fades.
      * @param float $excessCashPerShare  Cash beyond what the business needs to run, valued at face beside it.
      * @param float $capacityGap         Log of the plant the expected market calls for over the plant in use.
+     * @param float $capacitySpare       A company with plant by segment: its segments' plant to spare, valued apart.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
      */
     private static function evaluateFundamentalState(
@@ -148,6 +150,7 @@ final class FairValue
         ?float $longRunReturn,
         float $excessCashPerShare,
         float $capacityGap = 0.0,
+        float $capacitySpare = 0.0,
     ): array {
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
@@ -215,14 +218,16 @@ final class FairValue
             $dividendPerShare,
             $targetPayoutRatio,
             $dividendAdjustmentSpeed,
-            $capacityGap
+            $capacityGap,
+            $capacitySpare
         ): array {
             // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
             // The growth transmission and the Sloan accruals discount live in Valuation because the corporate
             // engines strike the same multiple when management decides on a buyback, an offering or a deal.
             // Perpetual growth carries the inflation the hurdle does: the ten-year breakeven inside the CAPM's 10Y,
             // not this quarter's print, so an oil spike does not read as faster growth forever.
-            $catchUpGrowth = Valuation::capacityCatchUpGrowth($capacityGap, CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED, $hurdleRate - $macro->tipsBreakeven);
+            $catchUpGrowth = Valuation::capacityCatchUpGrowth($capacityGap, CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED, $hurdleRate - $macro->tipsBreakeven)
+                + Valuation::capacityCatchUpGrowth($capacitySpare, CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED, $hurdleRate - $macro->tipsBreakeven);
             $expectedGrowth = Valuation::calculateFundableGrowth(
                 Valuation::calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $macro->tipsBreakeven, $hurdleRate),
                 $equityReturn,

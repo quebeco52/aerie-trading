@@ -11,6 +11,7 @@ use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
@@ -171,5 +172,20 @@ class MarketPricingContextTest extends TestCase
         $bank->setCorporateTreasury('40000000000');
 
         $this->assertSame(0.0, MarketPricingContext::forStock($bank, $macroState, $this->health($bank, $macroState), new AnchorStakeLedger())->excessCashPerShare);
+    }
+
+    /**
+     * The pricing inputs carry a segmented company's spare plant apart from its shortfalls, as its report filed them.
+     */
+    public function testSparePlantIsReadApartFromTheShortfall(): void
+    {
+        $macroState = new MacroStateDTO();
+        $firm = $this->firm('SPAR', 'Internet Retail');
+        $firm->setEarningsMomentumZ([CapitalBudgetEngine::STATE_CAPACITY_GAP => 0.04, CapitalBudgetEngine::STATE_CAPACITY_SPARE => -0.03]);
+
+        $context = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger());
+
+        $this->assertSame(0.04, $context->capacityGap);
+        $this->assertSame(-0.03, $context->capacitySpare);
     }
 }
