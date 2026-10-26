@@ -42,12 +42,14 @@ final class SegmentEntry
     public const ATTAINMENT_DISTANCE_PENALTY = 0.2;
     /**
      * What each step away from what it knows really costs a company of its rivals' margin, whether it builds or buys:
-     * twice what a builder counts on, so a venture next door turns out ~4% below its plan on average and one on a
-     * stretch ~18% below, and a business bought on a stretch earns ~70% of what it did. Managers overrate how far their
-     * skills carry (Roll 1986), the more so the further from home: diversifying bidders lose value (Morck, Shleifer &
-     * Vishny 1990) and firms leave the businesses least like their own (Chang 1996).
+     * three times what a builder counts on, so a venture next door turns out ~8% below its plan on average and one on a
+     * stretch ~35% below, and a business bought in a related market earns ~70% of what it did and one on a stretch
+     * ~55%, so about twice as many of those are sold again within a decade (Kaplan & Weisbach 1992: ~44% of large
+     * acquisitions were sold within a decade, diversifying ones several times as often as related ones). Managers
+     * overrate how far their skills carry (Roll 1986), the more so the further from home: diversifying bidders lose
+     * value (Morck, Shleifer & Vishny 1990) and firms leave the businesses least like their own (Chang 1996).
      */
-    public const REALISED_DISTANCE_PENALTY = 0.4;
+    public const REALISED_DISTANCE_PENALTY = 0.6;
     /**
      * Rate per year at which a company with the cash and a market worth entering goes ahead, before its manager's
      * appetite for deals: 0.015, about once in sixty-five years, as entry by listed firms is rare (Chang 1996; Miller &
@@ -60,16 +62,11 @@ final class SegmentEntry
     // --- How It Turns Out ---
     /**
      * How widely what a business entered in play turns out to earn spreads around what its company expects, as a log
-     * standard deviation of its margin once learned or integrated: 0.3, plus this much for each step away from what it
-     * knows.
+     * standard deviation of its margin once learned or integrated: 0.3, about the spread of margins among one
+     * industry's firms, at any distance. Distance lowers what it turns out to earn (REALISED_DISTANCE_PENALTY), not how
+     * widely, so no entrant keeps a margin far above every incumbent's.
      */
-    public const OUTCOME_SPREAD_BASE = 0.3;
-    /**
-     * What each step away from what it knows adds to that spread: 0.46 next door, 0.7 in a related market, 0.9 on a
-     * stretch, so with the shortfall distant entries fail about twice as often as related ones (Kaplan & Weisbach 1992:
-     * ~44% of large acquisitions were sold within a decade, diversifying ones ~4 times as often as related ones).
-     */
-    public const OUTCOME_SPREAD_DISTANCE = 0.8;
+    public const OUTCOME_SPREAD = 0.3;
 
     // --- Buying In ---
     /**
@@ -81,23 +78,17 @@ final class SegmentEntry
 
     // --- Growing into the Market ---
     /**
-     * Years over which a venture that pays grows toward the share of its new market its company holds of its own,
-     * e-folding: 5, so it has gone ~85% of the way within a decade (Biggadike 1979: the ventures that built share fast
-     * fared best).
+     * Years over which a venture grows toward the share of its new market it means to reach, e-folding: 5, so it has
+     * gone ~85% of the way within a decade (Biggadike 1979: the ventures that built share fast fared best).
      */
     public const VENTURE_GROWTH_YEARS = 5.0;
     /**
      * Fastest a venture grows toward its target share, in log a year: 0.2, about 22% a year, as far as a company can
-     * hire, train and sell for a new business (Penrose 1959: the managers a firm has bound how fast it can grow). A
-     * venture far from its target takes longer to get there, not a leap.
+     * hire, train and sell for a new business (Penrose 1959: the managers a firm has bound how fast it can grow). Over
+     * the growth years it bounds the target too: a venture means to reach no more than e, ~2.7 times, the share it
+     * entered at.
      */
     public const MAX_VENTURE_GROWTH = 0.2;
-    /**
-     * Share of its trend plant a venture its company has given up on keeps a claim to: 1%, so the wear on its plant is
-     * no longer replaced and it withers by depreciation (CapitalBudgetEngine's harvest of plant a market does not
-     * need).
-     */
-    public const ABANDONED_TREND_SHARE = 0.01;
 
     // --- Learning the Trade ---
     /**
@@ -167,12 +158,6 @@ final class SegmentEntry
         return 1.0 - exp(-self::ENTRY_RATE * max(0.0, $appetite) * max(0.0, $dt));
     }
 
-    /** How widely what a venture in an industry this close to its company's own turns out to earn spreads. */
-    public static function outcomeSpread(float $closeness): float
-    {
-        return self::OUTCOME_SPREAD_BASE + (self::OUTCOME_SPREAD_DISTANCE * (1.0 - $closeness));
-    }
-
     /**
      * What a venture turns out to earn once learned against what its company expects, in log: a lognormal draw whose
      * mean is the margin it really attains, which falls short of the one counted on by more the further it is from home
@@ -182,7 +167,7 @@ final class SegmentEntry
      */
     public static function outcome(float $closeness, float $uniform): float
     {
-        $spread = self::outcomeSpread($closeness);
+        $spread = self::OUTCOME_SPREAD;
         $shortfall = log((1.0 - (self::REALISED_DISTANCE_PENALTY * (1.0 - $closeness))) / (1.0 - (self::ATTAINMENT_DISTANCE_PENALTY * (1.0 - $closeness))));
 
         return $shortfall + ($spread * Distributions::standardNormalQuantile($uniform)) - ($spread * $spread / 2.0);
@@ -192,14 +177,15 @@ final class SegmentEntry
      * What a business bought into an industry this close to its buyer's turns out to earn against what its buyer counts
      * on, in log: the buyer counts on what the business earned before, as a going concern brings its trade with it, but
      * under an owner further from what it knows it keeps less of its rivals' margin (REALISED_DISTANCE_PENALTY), the
-     * gap that makes diversifying acquisitions the ones sold again (Kaplan & Weisbach 1992); spread as widely as a
-     * venture's outcome.
+     * gap that makes diversifying acquisitions the ones sold again (Kaplan & Weisbach 1992: ~44% of large acquisitions
+     * were sold within a decade, diversifying ones ~4 times as often as related ones); spread as a venture's outcome
+     * is.
      *
      * @param float $uniform A draw on (0, 1).
      */
     public static function boughtOutcome(float $closeness, float $uniform): float
     {
-        $spread = self::outcomeSpread($closeness);
+        $spread = self::OUTCOME_SPREAD;
 
         return log(1.0 - (self::REALISED_DISTANCE_PENALTY * (1.0 - $closeness))) + ($spread * Distributions::standardNormalQuantile($uniform)) - ($spread * $spread / 2.0);
     }
@@ -208,6 +194,19 @@ final class SegmentEntry
     public static function integrationLeft(float $unshown, float $dt): float
     {
         return max(0.0, $unshown - (max(0.0, $dt) / self::INTEGRATION_YEARS));
+    }
+
+    /**
+     * How far a venture means to grow its share of its new market, in log: to the share a typical incumbent there holds
+     * (Biggadike 1979: entrants that succeeded reached a share like an incumbent's, not the one their parents held at
+     * home), within the room its fringe leaves and the growth it can manage (MAX_VENTURE_GROWTH); none where it entered
+     * at that share already.
+     */
+    public static function ventureTarget(float $entryShare, float $typicalShare, float $room): float
+    {
+        $share = min($typicalShare, $room);
+
+        return $entryShare > 0.0 && $share > $entryShare ? min(log($share / $entryShare), self::MAX_VENTURE_GROWTH * self::VENTURE_GROWTH_YEARS) : 0.0;
     }
 
     /** How far a venture growing toward its target share has gone, in log, after this many years. */
@@ -223,7 +222,8 @@ final class SegmentEntry
     }
 
     /**
-     * The e-folding time of a venture's path: its growth time, or longer where that would grow it faster than it can.
+     * The e-folding time of a venture's path: its growth time, or longer where that would grow it faster than it can,
+     * as for a target set before ventureTarget() bounded it.
      */
     private static function pathYears(float $target): float
     {

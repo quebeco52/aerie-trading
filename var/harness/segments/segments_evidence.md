@@ -574,3 +574,39 @@ pending construction left at +3 y median 3% (p90 20%); 54 abandoned with positiv
 sold within a year; revenue/GDP beyond 3x in 44 firm-seeds (21 segmented or entrants). Industry price medians 1.000
 each decade, range 0.93-1.07; held per seed y10/y20/y30/y40: built ventures 6.8/12.1/17.6/22.2, bought 2.8/3.1/
 3.9/4.2, plan segments 20; entered goodwill / company goodwill max 1.000.
+
+## 2026-10-27: segment fixes steps 1-2 over 45-year games (prefix 102d2f80, step1 0a48fbac, step2 working tree)
+
+    YEARS=45 BASE=<tree> bin/harness-batch var/harness/segments/run.sh 1-8 prefix   (and step1; step2 without BASE)
+    hard4.py 1-8 45 prefix step1 step2 > hard4_45y.out; hard2.py 1-8 <arm> 45; hard3.py 1-8 prefix step2 step1
+
+Board vs prefix (n 8, live macro): all |t| <= 1.8 in both arms (step2: cap y40 -12.5 tn, se 10.7; P/E -1.2, t -1.8;
+defaults+deaths +0.88, t 1.5; shortage share +0.48 pt, t 1.6). Entry/yr build prefix 0.57, step1 0.51, step2 0.46;
+buy 0.17 / 0.17 / 0.16. Built held at y40: 22.2 / 20.5 / 16.9; bought 4.2 / 3.0 / 4.6. Exits within 10 y: prefix
+builds abandoned 38 + sold 3 of 164, buys sold 19 of 52; step1 builds abandoned 48 of 154, buys sold 29 of 53;
+step2 builds sold 12 of 142 (0.5: 9/83, 0.25: 3/53), buys sold 7 of 43 (0.25 only). Years on the block median
+0.31 / 0.38 / 1.20. Sale price / revenue of the business: step2 builds 1.84 (max 4.45), buys 0.79 (max 3.12);
+prefix buys 0.34, step1 buys 0.44. Losses 21/32, 20/34, 6/45. Realism: firms per seed with entered revenue >= 50% at
+y40 1.38 / 1.12 / 0.00 (>= 30%: 3.12 / 2.88 / 0.62); entrants' share of an entered industry at the end median 0.125 /
+0.129 / 0.092, max 0.85 / 0.80 / 0.66, largest single entrant 0.85 SILC comm. equipment / 0.80 BRKW industrial
+distribution / 0.55 WEAV advertising; entered margin / peers p90 1.74 / 1.65 / 1.33 (above 2x 7.6% / 6.1% / 3.2%);
+x: deals goodwill/price p50 0.58 / 0.62 / 0.62, margin/peers at the deal p90 1.68 / 2.25 / 1.45; entered segment
+above 15% of its industry 36 / 35 / 13; 3+ entrants at once 23 / 14 / 16; revenue/GDP beyond 3x 57 / 61 / 55
+firm-seeds (25 / 28 / 20 entrants or segmented). Identities exact in all arms. Orphans after a sale: prefix keeps
+target, margin, builds, outcome, market, turnover, goodwill, integrating, for_sale (29); step1 and step2 keep only
+zeroed target/market/builds plus stale margin, turnover and a still-filed outlook (36 / 46), and step2 keeps
+venture_start on 26 sold builds. One step2 business on the block at the end (TERN s4, stamped y42.9).
+
+## 2026-10-27: calibration round on failed-entry sales (step2b / step2c spread 0.45 / step2d penalty 0.6), 8 x 45 y
+
+    YEARS=45 bin/harness-batch var/harness/segments/run.sh 1-8 step2b step2c step2d   (overlays ovr_step2c, ovr_step2d)
+    hard4.py 1-8 45 prefix step2 step2b step2c step2d > hard4_calib_45y.out; hard2.py 1-8 <arm> 45
+
+Buys sold within 10 y (0.5 / 0.25): step2b 6/26, 8/24 (27% overall); step2c 3/14, 7/26 (24%); step2d 6/20, 16/26
+(47%, distant 2.0x related). Builds sold within 10 y: 4% / 13% / 8% (step2c 0.5 17%, 0.25 11%). Losses 10/43,
+6/45, 10/69. Sale price / revenue builds 1.23 / 1.09 / 0.89, buys 1.01 / 0.93 / 1.09; years on the block 1.8 / 1.3 /
+1.3; still for sale at the end 4 / 3 / 5. Entered margin above 2x peers 2.8% / 3.4% / 1.1%; firms >= 50% entered at
+y40 0 / 0 / 0.12 per seed; largest entrant 0.56 / 0.53 / 0.54. Held at y40 built 18.5 / 15.6 / 15.4, bought 4.1 /
+3.9 / 3.9. Board vs prefix: step2b P/E -0.96 (t -2.2), capex/revenue -0.011 (t -2.1); step2c P/E -0.85 (t -2.0);
+step2d shortage share +1.03 pt (se 0.30, t 3.5); all else |t| < 1.8. Identities exact. Sold-segment leftovers now
+only zeroed target / market plus margin, turnover, outlook (43 / 46 / 72); venture_start, builds, pays gone.

@@ -17,6 +17,8 @@ class DivestitureContext
         public readonly Stock $seller,
         public readonly MacroStateDTO $macroState,
         public readonly float $dt,
+        public readonly int $tickCount = 0,
+        public readonly int $ticksPerYear = 252,
     ) {}
 
     // State Variables
@@ -93,6 +95,11 @@ class DivestitureContext
      * Market value of what is handed over: the slice of the firm's value without the cash and listed stakes it keeps.
      */
     public float $soldValue = 0.0;
+    /**
+     * The share of the company's operating income the business sold would earn at its industry's margin, which its
+     * buyer pays for; null where the buyer pays for what it earns its seller.
+     */
+    public ?float $pricedIncomeFraction = null;
     public float $salePrice = 0.0;
     public float $newTreasury = 0.0;
     public float $gainOnSale = 0.0;

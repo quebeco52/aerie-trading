@@ -75,7 +75,10 @@ final class SegmentBooks
     public const STATE_VENTURE_TARGET = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_target:';
     /** Carried stream-state key prefix: when a venture entered its industry, in years of play. */
     public const STATE_VENTURE_START = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_start:';
-    /** Carried stream-state key prefix: when its company gave up on a venture that does not earn its cost, in years. */
+    /**
+     * Carried stream-state key prefix of games from before failed ventures were sold: when its company gave up on one,
+     * in years. Read only to put such a venture up for sale (CapitalBudgetEngine).
+     */
     public const STATE_VENTURE_ABANDONED = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_venture_abandoned:';
     /**
      * Carried stream-state key prefix: the share of what a business bought into a new industry will turn out to earn
@@ -732,7 +735,7 @@ final class SegmentBooks
         $strategy = Sectors::strategyFor($stock->getIndustry());
         foreach (array_keys($plant) as $segment) {
             if (in_array($segment, self::jointSegments($stock), true) || $strategy->resolveSegmentPath($stock, $segment) !== null
-                || self::isAbandoned($momentum, $segment) || isset($momentum[self::STATE_FOR_SALE . $segment])) {
+                || self::isForSale($momentum, $segment)) {
                 unset($plant[$segment]);
             }
         }
@@ -758,8 +761,8 @@ final class SegmentBooks
     }
 
     /**
-     * Whether the company still runs, or is still building, a business it entered in play and has not given up on: it
-     * takes on one new industry at a time.
+     * Whether the company still runs, or is still building, a business it entered in play and has not put up for sale:
+     * it takes on one new industry at a time.
      */
     public static function isDiversifying(Stock $stock): bool
     {
@@ -928,24 +931,24 @@ final class SegmentBooks
 
     /**
      * The path a segment entered in play grows along toward the share of its new market it means to reach
-     * (SegmentEntry::pathLevel()), from where it entered; for one its company has given up on, a claim to almost none
-     * of it, so its plant withers. Null for any other segment.
+     * (SegmentEntry::pathLevel()), from where it entered; one its company has put up for sale grows no further while it
+     * waits for a buyer. Null for any other segment.
      *
      * @param array<string, mixed> $momentum
      * @return array{level: float, growth: float}|null
      */
     public static function venturePath(array $momentum, string $segment, float $totalTime): ?array
     {
-        if (self::isAbandoned($momentum, $segment)) {
-            return ['level' => log(SegmentEntry::ABANDONED_TREND_SHARE), 'growth' => 0.0];
-        }
         if (!isset($momentum[self::STATE_VENTURE_TARGET . $segment])) {
             return null;
         }
         $target = (float) $momentum[self::STATE_VENTURE_TARGET . $segment];
-        $years = $totalTime - (float) ($momentum[self::STATE_VENTURE_START . $segment] ?? $totalTime);
+        $start = (float) ($momentum[self::STATE_VENTURE_START . $segment] ?? $totalTime);
+        if (self::isForSale($momentum, $segment)) {
+            return ['level' => SegmentEntry::pathLevel($target, min($totalTime, (float) $momentum[self::STATE_FOR_SALE . $segment]) - $start), 'growth' => 0.0];
+        }
 
-        return ['level' => SegmentEntry::pathLevel($target, $years), 'growth' => SegmentEntry::pathGrowth($target, $years)];
+        return ['level' => SegmentEntry::pathLevel($target, $totalTime - $start), 'growth' => SegmentEntry::pathGrowth($target, $totalTime - $start)];
     }
 
     /**
@@ -982,13 +985,13 @@ final class SegmentBooks
     }
 
     /**
-     * Whether its company has given up on a segment it entered in play.
+     * Whether its company has put a business it entered in play up for sale, as one that does not earn its cost.
      *
      * @param array<string, mixed> $momentum
      */
-    public static function isAbandoned(array $momentum, string $segment): bool
+    public static function isForSale(array $momentum, string $segment): bool
     {
-        return isset($momentum[self::STATE_VENTURE_ABANDONED . $segment]);
+        return isset($momentum[self::STATE_FOR_SALE . $segment]);
     }
 
     /**
@@ -1142,15 +1145,16 @@ final class SegmentBooks
     }
 
     /**
-     * The carried state without what a business entered in play still had to build, learn, show or be sold for, once it
-     * is sold: its plant share stays at none, so its company does not enter its industry again.
+     * The carried state without what a business entered in play still had to build, learn, show or be sold for, or how
+     * its plant was last judged, once it is sold: its plant share stays at none, so its company does not enter its
+     * industry again.
      *
      * @param array<string, mixed> $momentum
      * @return array<string, mixed>
      */
     public static function withoutEntryState(array $momentum, string $segment): array
     {
-        foreach ([self::STATE_PENDING, self::STATE_LEARNING, self::STATE_LEARNING_START, self::STATE_VENTURE_OUTCOME, self::STATE_VENTURE_TARGET, self::STATE_INTEGRATING, self::STATE_FOR_SALE, self::STATE_GOODWILL] as $prefix) {
+        foreach ([self::STATE_PENDING, self::STATE_LEARNING, self::STATE_LEARNING_START, self::STATE_VENTURE_OUTCOME, self::STATE_VENTURE_TARGET, self::STATE_VENTURE_START, self::STATE_VENTURE_ABANDONED, self::STATE_INTEGRATING, self::STATE_FOR_SALE, self::STATE_GOODWILL, self::STATE_BUILDS, self::STATE_PAYS] as $prefix) {
             unset($momentum[$prefix . $segment]);
         }
 

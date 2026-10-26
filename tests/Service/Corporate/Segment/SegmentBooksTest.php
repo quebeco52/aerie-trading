@@ -294,9 +294,12 @@ class SegmentBooksTest extends TestCase
             SegmentBooks::STATE_INTEGRATING . $segment => 0.0,
             SegmentBooks::STATE_FOR_SALE . $segment => 30.0,
             SegmentBooks::STATE_GOODWILL . $segment => 0.0,
+            SegmentBooks::STATE_VENTURE_START . $segment => 2.0,
+            SegmentBooks::STATE_BUILDS . $segment => 0.0,
+            SegmentBooks::STATE_PAYS . $segment => 0.0,
         ] + $books, $segment);
         $this->assertSame(0.0, $sold[SegmentBooks::STATE_PLANT . $segment] ?? null);
-        foreach ([SegmentBooks::STATE_PENDING, SegmentBooks::STATE_LEARNING, SegmentBooks::STATE_LEARNING_START, SegmentBooks::STATE_VENTURE_OUTCOME, SegmentBooks::STATE_VENTURE_TARGET, SegmentBooks::STATE_INTEGRATING, SegmentBooks::STATE_FOR_SALE, SegmentBooks::STATE_GOODWILL] as $prefix) {
+        foreach ([SegmentBooks::STATE_PENDING, SegmentBooks::STATE_LEARNING, SegmentBooks::STATE_LEARNING_START, SegmentBooks::STATE_VENTURE_OUTCOME, SegmentBooks::STATE_VENTURE_TARGET, SegmentBooks::STATE_VENTURE_START, SegmentBooks::STATE_INTEGRATING, SegmentBooks::STATE_FOR_SALE, SegmentBooks::STATE_GOODWILL, SegmentBooks::STATE_BUILDS, SegmentBooks::STATE_PAYS] as $prefix) {
             $this->assertArrayNotHasKey($prefix . $segment, $sold);
         }
         $this->assertArrayHasKey($segment, SegmentBooks::industries($stock->setEarningsMomentumZ($sold)), 'its place is kept');
@@ -407,8 +410,8 @@ class SegmentBooksTest extends TestCase
         $shrk->setEarningsMomentumZ($entered);
         $this->assertTrue(SegmentBooks::paysAnywhere($shrk));
         $this->assertTrue(SegmentBooks::isDiversifying($shrk), 'it runs a business it entered');
-        $shrk->setEarningsMomentumZ($entered + [SegmentBooks::STATE_VENTURE_ABANDONED . $venture => 3.0]);
-        $this->assertFalse(SegmentBooks::paysAnywhere($shrk), 'a venture given up on');
+        $shrk->setEarningsMomentumZ($entered + [SegmentBooks::STATE_FOR_SALE . $venture => 3.0]);
+        $this->assertFalse(SegmentBooks::paysAnywhere($shrk), 'a venture put up for sale');
         $this->assertFalse(SegmentBooks::isDiversifying($shrk));
         $shrk->setEarningsMomentumZ([SegmentBooks::STATE_PENDING . $venture => 1.0e8, SegmentBooks::STATE_PAYS . Segments::MAIN => 0.0]);
         $this->assertTrue(SegmentBooks::isDiversifying($shrk), 'still building one');
@@ -750,8 +753,8 @@ class SegmentBooksTest extends TestCase
     }
 
     /**
-     * A venture follows a path of its own toward the share of its new market it means to reach; one given up on keeps a
-     * claim to almost none, so its plant withers; any other segment follows its model's path or none.
+     * A venture follows a path of its own toward the share of its new market it means to reach; one put up for sale
+     * grows no further while it waits for a buyer; any other segment follows its model's path or none.
      */
     public function testAVentureFollowsAPathOfItsOwn(): void
     {
@@ -759,9 +762,9 @@ class SegmentBooksTest extends TestCase
         $momentum = [SegmentBooks::STATE_VENTURE_TARGET . $segment => 1.0, SegmentBooks::STATE_VENTURE_START . $segment => 2.0];
 
         $this->assertEqualsWithDelta(['level' => SegmentEntry::pathLevel(1.0, 5.0), 'growth' => SegmentEntry::pathGrowth(1.0, 5.0)], SegmentBooks::venturePath($momentum, $segment, 7.0), 1e-12);
-        $abandoned = [SegmentBooks::STATE_VENTURE_ABANDONED . $segment => 6.0] + $momentum;
-        $this->assertTrue(SegmentBooks::isAbandoned($abandoned, $segment));
-        $this->assertEqualsWithDelta(log(SegmentEntry::ABANDONED_TREND_SHARE), SegmentBooks::venturePath($abandoned, $segment, 7.0)['level'] ?? null, 1e-12);
+        $forSale = [SegmentBooks::STATE_FOR_SALE . $segment => 6.0] + $momentum;
+        $this->assertTrue(SegmentBooks::isForSale($forSale, $segment));
+        $this->assertEqualsWithDelta(['level' => SegmentEntry::pathLevel(1.0, 4.0), 'growth' => 0.0], SegmentBooks::venturePath($forSale, $segment, 7.0), 1e-12, 'held where it was put up for sale');
         $this->assertNull(SegmentBooks::venturePath($momentum, 'air_cargo', 7.0));
         $loon = (new Stock())->setTicker('LOON')->setIndustry('Telecom Services')->setEarningsMomentumZ([SegmentBooks::STATE_PENDING . $segment => 1.0] + $momentum);
         $this->assertSame(SegmentBooks::venturePath($momentum, $segment, 7.0), SegmentBooks::segmentPath(Sectors::strategyFor('Telecom Services'), $loon, $segment, 7.0));

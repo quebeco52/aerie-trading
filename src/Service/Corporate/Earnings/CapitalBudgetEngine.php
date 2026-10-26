@@ -329,8 +329,8 @@ final class CapitalBudgetEngine
      * cannot copy of their margin, at the hurdle its manager applies; the market is drawn in proportion to what each is
      * worth weighed by how close it is, as a company searches near home first (Cyert & March 1963), and the venture
      * must fit in the room the industry's fringe holds. A holding company buys businesses and builds none, and a
-     * company still losing money on one venture starts no other. Draws are keyed (MathUtility::hashedUniform()), so
-     * nothing is taken from the stream every other draw follows.
+     * company takes on one new industry at a time, building or buying (SegmentBooks::isDiversifying()). Draws are keyed
+     * (MathUtility::hashedUniform()), so nothing is taken from the stream every other draw follows.
      *
      * @param float $spareFunds Internal funds left after the company's own plans.
      * @return float The capex the venture commits this quarter, queued as construction.
@@ -340,11 +340,9 @@ final class CapitalBudgetEngine
         $stock = $ctx->stock;
         $ledger = $this->industryShareLedger;
         $strategy = $ctx->strategy;
-        $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $learning = SegmentBooks::learningGaps($momentum);
         if ($ledger === null || $strategy->isFinancial() || !$strategy->allowsPhysicalOrganicCapex() || $stock->getGrossPpe() === null || !SegmentBooks::canEnter($stock)
             || IndustryAdjacency::isHoldingCompany((string) $stock->getIndustry()) || $ctx->macroState->totalTime < SegmentEntry::FIRST_ENTRY_YEARS
-            || SegmentBooks::pending($momentum) !== [] || max([0.0, ...array_values($learning)]) >= 1.0) {
+            || SegmentBooks::isDiversifying($stock)) {
             return 0.0;
         }
         $plantBase = max(0.0, $stock->getNetPpe());
@@ -368,7 +366,7 @@ final class CapitalBudgetEngine
             $learnedReturn = (1.0 - $ctx->corporateTaxRate) * $market['turnover'] * $margin;
             $value = SegmentEntry::value($learnedReturn, $hurdle, $longRunGrowth, $market['excess'], $learnedReturn * $gap);
             if ($value > 0.0) {
-                $plans[$target] = ['value' => $value, 'closeness' => $market['closeness'], 'construction' => $construction, 'margin' => $margin, 'turnover' => $market['turnover'], 'gap' => $gap, 'market' => $market['market'], 'room' => $market['room']];
+                $plans[$target] = ['value' => $value, 'closeness' => $market['closeness'], 'construction' => $construction, 'margin' => $margin, 'turnover' => $market['turnover'], 'gap' => $gap, 'market' => $market['market'], 'room' => $market['room'], 'typical' => $market['typical']];
             }
         }
         $target = SegmentEntry::choose(array_map(static fn(array $plan): float => $plan['value'] * $plan['closeness'], $plans), MathUtility::hashedUniform($salt, "entry-market:{$stock->getTicker()}:{$ctx->tickCount}"));
@@ -386,10 +384,11 @@ final class CapitalBudgetEngine
      * openForEntry()), the venture's plant is queued as construction and booked as building (SegmentBooks::
      * startVenture()), at the share of the industry's market its plant will hold, and the industry's ledger anchors it
      * at that plant, which adds to supply as it comes on line (IndustryShareLedger::openVentureRecord()). It means to
-     * grow to the share of its new market its company holds of its own, as far as the room there allows; what it will
-     * earn once learned is drawn now and shown only as it learns (SegmentEntry::outcome()).
+     * grow to the share a typical incumbent holds there, as far as the room allows and it can manage
+     * (SegmentEntry::ventureTarget()); what it will earn once learned is drawn now and shown only as it learns
+     * (SegmentEntry::outcome()).
      *
-     * @param array{value: float, closeness: float, construction: float, margin: float, turnover: float, gap: float, market: float, room: float} $plan
+     * @param array{value: float, closeness: float, construction: float, margin: float, turnover: float, gap: float, market: float, room: float, typical: float} $plan
      */
     private function startVenture(EarningsSimulationContext $ctx, string $industry, array $plan, float $plantBase): void
     {
@@ -409,7 +408,6 @@ final class CapitalBudgetEngine
         // A venture holds what its plant sells of the market its industry's firms sell into, not the share its parent
         // holds of its own.
         $marketShare = SegmentBooks::entryMarketShare($revenue, $plan['market'], 0.0);
-        $targetShare = min($firmShare, $plan['room']);
         // Plant shares are of the capital the company's plant sells on, as its revenue is.
         $capital = $ctx->revenueGeneratingCapital > 0.0 ? $ctx->revenueGeneratingCapital : $plantBase;
         $stock->setEarningsMomentumZ(SegmentBooks::startVenture(
@@ -425,7 +423,7 @@ final class CapitalBudgetEngine
                 'turnover' => $plan['turnover'],
                 'learning' => $plan['gap'],
                 'outcome' => SegmentEntry::outcome($plan['closeness'], MathUtility::hashedUniform($this->industryShareLedger?->runSalt() ?? 0, "entry-outcome:{$stock->getTicker()}:{$ctx->tickCount}")),
-                'target' => $marketShare > 0.0 && $targetShare > $marketShare ? log($targetShare / $marketShare) : 0.0,
+                'target' => SegmentEntry::ventureTarget($marketShare, $plan['typical'], $plan['room']),
                 'start' => $years,
             ],
         ) + $momentum);
@@ -454,10 +452,10 @@ final class CapitalBudgetEngine
      * of the rest (ManagementProfile::weakSegmentSupport()). A by-product follows the main segment. Whether each
      * segment builds is filed for the deals between reports.
      *
-     * A venture built into a new industry that has learned enough to turn a profit and still earns less on its plant at
-     * a balanced price than its manager's hurdle, at the margin its learning has shown, is given up on: its market
-     * claim falls away and its plant withers (SegmentBooks::venturePath()). One bought as a going concern that, once
-     * integrated, earns less than that hurdle is put up for sale whole (DivestitureEngine).
+     * A business entered in play that has shown what it earns and still earns less on its plant at a balanced price
+     * than its manager's hurdle is put up for sale whole (DivestitureEngine), as firms sell the businesses they entered
+     * that did not work out (Kaplan & Weisbach 1992): one built, once it has learned enough to turn a profit; one
+     * bought as a going concern, once integrated.
      */
     private function resolveSegmentGates(EarningsSimulationContext $ctx, ?float $growthHurdle = null): void
     {
@@ -502,17 +500,13 @@ final class CapitalBudgetEngine
         $learning = SegmentBooks::learningGaps($momentum);
         $appliedHurdle = $stock->getManagementProfile()->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
         foreach ($ctx->segments as $segment => $books) {
-            $industry = Segments::enteredIndustry($segment);
-            if ($industry === null || (1.0 - $ctx->corporateTaxRate) * $books['turnover'] * $books['margin'] >= $appliedHurdle) {
+            $givenUp = isset($momentum[SegmentBooks::STATE_VENTURE_ABANDONED . $segment]);
+            if (Segments::enteredIndustry($segment) === null || (!$givenUp && (1.0 - $ctx->corporateTaxRate) * $books['turnover'] * $books['margin'] >= $appliedHurdle)) {
                 continue;
             }
-            if (!SegmentBooks::isBuilt($momentum, $segment)) {
-                if (SegmentBooks::isIntegrated($momentum, $segment) && !isset($momentum[SegmentBooks::STATE_FOR_SALE . $segment])) {
-                    $filed[SegmentBooks::STATE_FOR_SALE . $segment] = $ctx->macroState->totalTime;
-                }
-            } elseif (!SegmentBooks::isAbandoned($momentum, $segment) && ($learning[$segment] ?? 0.0) < 1.0) {
-                $filed[SegmentBooks::STATE_VENTURE_ABANDONED . $segment] = $ctx->macroState->totalTime;
-                $ctx->marketExit = ['industry' => $industry, 'segment' => $segment];
+            $shown = $givenUp || (SegmentBooks::isBuilt($momentum, $segment) ? ($learning[$segment] ?? 0.0) < 1.0 : SegmentBooks::isIntegrated($momentum, $segment));
+            if ($shown && !SegmentBooks::isForSale($momentum, $segment)) {
+                $filed[SegmentBooks::STATE_FOR_SALE . $segment] = $ctx->macroState->totalTime;
             }
         }
         $stock->setEarningsMomentumZ($filed + $momentum);

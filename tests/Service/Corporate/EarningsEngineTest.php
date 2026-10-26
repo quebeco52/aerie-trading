@@ -647,6 +647,10 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(-$entry->operatingCapex, $entry->investingCashFlow, 1e-3, 'paid once, in the quarter\'s capex');
         $this->assertGreaterThanOrEqual($entry->maintenanceCapex + $entry->scheduledCapex + $capex - 1e-3, $entry->operatingCapex);
         $this->assertGreaterThanOrEqual($capex - 1e-3, (float) $carmaker->getCipBalance(), 'queued as construction');
+        // It means to grow toward a typical incumbent's share, no more than it can grow a business in its growth years.
+        $target = ($carmaker->getEarningsMomentumZ() ?? [])[SegmentBooks::STATE_VENTURE_TARGET . $entry->marketEntry['segment']] ?? null;
+        $this->assertGreaterThan(0.0, $target);
+        $this->assertLessThanOrEqual(SegmentEntry::MAX_VENTURE_GROWTH * SegmentEntry::VENTURE_GROWTH_YEARS + 1e-12, $target);
 
         // Plant shares are of the capital the company's plant sells on.
         $plannedShare = $capex / ($entry->revenueGeneratingCapital + $capex);

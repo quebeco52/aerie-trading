@@ -65,10 +65,10 @@ class DivestitureEngine
     public const DIV_PREMIUM_ANNUAL_PROB = 0.05;
 
     /**
-     * Annual hazard at which a company sells a business it bought into a new industry and put up for sale once it
-     * showed it does not earn its cost: 2, a buyer found in about half a year.
+     * Annual hazard at which a company sells a business it entered in play and put up for sale once it showed it does
+     * not earn its cost: 0.5, a buyer found in about two years.
      */
-    public const DIV_FAILED_ENTRY_ANNUAL_PROB = 2.0;
+    public const DIV_FAILED_ENTRY_ANNUAL_PROB = 0.5;
 
     /** P/E threshold for divestiture consideration. */
     public const DIV_PE_THRESHOLD = 30.0;
@@ -110,7 +110,7 @@ class DivestitureEngine
         private ?IndustryShareLedger $industryShareLedger = null,
     ) {}
 
-    public function evaluateCorporateDivestiture(Stock $seller, MacroStateDTO $macroState, float $dt): ?array
+    public function evaluateCorporateDivestiture(Stock $seller, MacroStateDTO $macroState, float $dt, int $tickCount = 0, int $ticksPerYear = 252): ?array
     {
         if ($seller->isBankrupt()) {
             return null;
@@ -122,13 +122,12 @@ class DivestitureEngine
             return null;
         }
 
-        $ctx = new DivestitureContext($seller, $macroState, $dt);
+        $ctx = new DivestitureContext($seller, $macroState, $dt, $tickCount, $ticksPerYear);
 
         $this->initializeDivestitureContext($ctx);
 
-        // A business bought into a new industry that does not earn its cost is sold whatever the rest of the company
-        // is doing: firms refocus by selling the businesses they diversified into (Kaplan & Weisbach 1992; John &
-        // Ofek 1995).
+        // A business entered in play that does not earn its cost is sold whatever the rest of the company is doing:
+        // firms refocus by selling the businesses they diversified into (Kaplan & Weisbach 1992; John & Ofek 1995).
         $failedEntry = SegmentBooks::forSale($seller);
         if ($failedEntry !== null) {
             $this->determineRefocusingSale($ctx, $failedEntry);
@@ -295,9 +294,11 @@ class DivestitureEngine
     }
 
     /**
-     * The sale of a business bought into a new industry and put up for sale: whole, its share of the plant, at the
-     * multiple a buyer pays for a business earning less than its cost (or the market's value of it less the forced
-     * seller's discount, if more), once a buyer is found.
+     * The sale of a business entered in play and put up for sale: whole, its share of the plant, once a buyer is found.
+     * What did not work for its owner is worth what it earns to a buyer from its industry, who runs it as the
+     * incumbents do (Kaplan & Weisbach 1992: most such sales were not of failures): the income its sales make at their
+     * margin, at the multiple a motivated seller takes, and never less than the market's value of what it earns its
+     * seller less the forced seller's discount. Without a margin filed there, what it earns its seller.
      */
     private function determineRefocusingSale(DivestitureContext $ctx, string $segment): void
     {
@@ -315,6 +316,12 @@ class DivestitureEngine
         $earnings = SegmentBooks::earningShares($momentum, $segment);
         $ctx->revenueFraction = $earnings['revenue'];
         $ctx->incomeFraction = $earnings['income'];
+        $industry = SegmentBooks::industries($ctx->seller)[$segment] ?? null;
+        $peers = $industry === null ? null : $this->industryShareLedger?->resolvePeerEconomics($industry, $ctx->seller->getTicker(), $ctx->tickCount, $ctx->ticksPerYear);
+        if ($peers !== null) {
+            $asIncumbent = [SegmentBooks::STATE_MARGIN . $segment => $peers['margin']] + array_diff_key($momentum, [SegmentBooks::STATE_LEARNING . $segment => true]);
+            $ctx->pricedIncomeFraction = SegmentBooks::earningShares($asIncumbent, $segment)['income'];
+        }
         $ctx->dealExecuted = $ctx->divestedFraction > 0.0;
     }
 
@@ -367,8 +374,11 @@ class DivestitureEngine
         $ctx->soldValue = $ctx->incomeFraction * max(0.0, ($ctx->price * $ctx->shares) - $excessCash) * $operatingShare;
         $fireSaleValue = $ctx->soldValue * (1.0 - self::DIV_FIRE_SALE_DISCOUNT);
 
+        // A buyer pays for what the business earns in its hands: its seller's earnings, or for a business that did not
+        // work out for its owner, those it makes at its industry's margin.
+        $pricedIncome = $ctx->normalizedNetIncome * ($ctx->pricedIncomeFraction ?? $ctx->incomeFraction);
         $ctx->salePrice = $ctx->normalizedNetIncome > 0
-            ? max($ctx->lostNetIncome * $ctx->saleMultiple, $fireSaleValue)
+            ? max($pricedIncome * $ctx->saleMultiple, $fireSaleValue)
             : $fireSaleValue;
 
         $currentTreasury = (float) $ctx->seller->getCorporateTreasury();

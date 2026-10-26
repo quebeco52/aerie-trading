@@ -294,7 +294,7 @@ class StockTracker
             return;
         }
 
-        $divestResult = $this->divestitureEngine->evaluateCorporateDivestiture($tick->stock, $board->macro, $board->dt);
+        $divestResult = $this->divestitureEngine->evaluateCorporateDivestiture($tick->stock, $board->macro, $board->dt, $board->tickCount, $board->ticksPerYear);
         if ($divestResult) {
             $board->events[] = $divestResult['event'];
             $tick->dealShock = $divestResult['shock'];

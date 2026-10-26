@@ -513,10 +513,11 @@ class IndustryShareLedger
      * The market a firm from outside an industry would enter: what the industry's firms sell into now
      * (resolveIndustryMarketRevenue()), and the share of it the fringe holds, the room a newcomer can take its place
      * in: one less the anchored firms' trend shares, earlier entrants' included whether or not the fringe has yet
-     * yielded them theirs, so two entrants never count on the same room. Null while no firm in the industry is
-     * anchored.
+     * yielded them theirs, so two entrants never count on the same room. With it, the trend share a typical incumbent
+     * holds (the median of those that did not enter in play, or of all where none did) and the sales of the largest
+     * firm there. Null while no firm in the industry is anchored.
      *
-     * @return array{market: float, fringe_share: float}|null
+     * @return array{market: float, fringe_share: float, typical_share: float, leader_revenue: float}|null
      */
     public function describeEntrant(string $industry, string $ticker, MacroStateDTO $macroState, float $secularExcessGrowth, int $tick, int $ticksPerYear): ?array
     {
@@ -526,15 +527,32 @@ class IndustryShareLedger
         }
 
         $held = 0.0;
-        foreach ($this->store->readIndustry($industry) as $record) {
+        $incumbents = [];
+        $entrants = [];
+        $leader = 0.0;
+        foreach ($this->store->readIndustry($industry) as $key => $record) {
             $demandShare = (float) ($record['anchor_demand_share'] ?? 0.0);
             if ($demandShare <= 0.0 || (float) ($record['anchor_capacity_share'] ?? 0.0) <= 0.0 || $tick - $record['tick'] > $ticksPerYear) {
                 continue;
             }
-            $held += (float) $record['anchor_capacity_share'] * self::ownPathFactor($record) / $demandShare;
+            $share = (float) $record['anchor_capacity_share'] * self::ownPathFactor($record) / $demandShare;
+            $held += $share;
+            if (SegmentBooks::ownerOf((string) $key) === $ticker) {
+                continue;
+            }
+            if (isset($record['entry_time'])) {
+                $entrants[] = $share;
+            } else {
+                $incumbents[] = $share;
+            }
+            $leader = max($leader, (float) $record['revenue']);
         }
+        $typical = $incumbents !== [] ? $incumbents : $entrants;
+        sort($typical);
+        $count = count($typical);
+        $median = $count === 0 ? 0.0 : ($count % 2 === 1 ? $typical[intdiv($count, 2)] : ($typical[$count / 2 - 1] + $typical[$count / 2]) / 2.0);
 
-        return ['market' => $market, 'fringe_share' => max(0.0, 1.0 - $held)];
+        return ['market' => $market, 'fringe_share' => max(0.0, 1.0 - $held), 'typical_share' => $median, 'leader_revenue' => $leader];
     }
 
     /** The run's salt, which keyed draws hash from (MathUtility::hashedUniform()); zero before the outlooks open. */

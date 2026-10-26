@@ -77,10 +77,10 @@ class AcquisitionContext
     public array $target = [];
     /**
      * The industry a deal takes its buyer into when it buys outside its own markets (AcquisitionEngine): how close it
-     * is to the buyer's, its incumbents' margin and capital turnover, the market they sell into and the share of it
-     * the fringe holds. Null for a deal in a market the buyer is in.
+     * is to the buyer's, its incumbents' margin and capital turnover, the market they sell into, the share of it the
+     * fringe holds and the sales of its largest listed firm. Null for a deal in a market the buyer is in.
      *
-     * @var array{industry: string, closeness: float, margin: float, turnover: float, market: float, room: float}|null
+     * @var array{industry: string, closeness: float, margin: float, turnover: float, market: float, room: float, leader: float}|null
      */
     public ?array $entry = null;
     /** The segment a company that keeps plant by segment buys into (SegmentBooks); its main business otherwise. */

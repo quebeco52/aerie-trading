@@ -44,18 +44,19 @@ class SegmentEntryTest extends TestCase
     }
 
     /**
-     * What a venture turns out to earn spreads wider the further it is from home, and falls short of what its company
-     * counted on by more: next door ~4% on average, on a stretch ~18%; its middle draw a little lower still, by half
-     * the variance.
+     * What a venture turns out to earn spreads as margins do among one industry's firms, at any distance, and falls
+     * short of what its company counted on by more the further it is from home: next door ~8% on average, on a stretch
+     * ~35%; its middle draw a little lower still, by half the variance. Even a lucky one keeps no margin far above what
+     * it counted on.
      */
-    public function testAVenturesOutcomeIsUncertainAndMoreSoFurtherFromHome(): void
+    public function testAVenturesOutcomeIsUncertainAndDisappointsMoreFurtherFromHome(): void
     {
-        $this->assertEqualsWithDelta(0.46, SegmentEntry::outcomeSpread(IndustryAdjacency::CLOSE), 1e-12);
-        $this->assertEqualsWithDelta(0.90, SegmentEntry::outcomeSpread(IndustryAdjacency::DISTANT), 1e-12);
-        $this->assertEqualsWithDelta(log(0.70 / 0.85) - (0.9 * 0.9 / 2.0), SegmentEntry::outcome(IndustryAdjacency::DISTANT, 0.5), 1e-9);
-        $this->assertEqualsWithDelta(log(0.92 / 0.96) - (0.46 * 0.46 / 2.0), SegmentEntry::outcome(IndustryAdjacency::CLOSE, 0.5), 1e-9);
-        $this->assertLessThan(SegmentEntry::outcome(IndustryAdjacency::DISTANT, 0.9), SegmentEntry::outcome(IndustryAdjacency::CLOSE, 0.9));
-        $this->assertGreaterThan(SegmentEntry::outcome(IndustryAdjacency::DISTANT, 0.1), SegmentEntry::outcome(IndustryAdjacency::CLOSE, 0.1));
+        $this->assertEqualsWithDelta(log(0.55 / 0.85) - (0.3 * 0.3 / 2.0), SegmentEntry::outcome(IndustryAdjacency::DISTANT, 0.5), 1e-9);
+        $this->assertEqualsWithDelta(log(0.88 / 0.96) - (0.3 * 0.3 / 2.0), SegmentEntry::outcome(IndustryAdjacency::CLOSE, 0.5), 1e-9);
+        foreach ([0.01, 0.1, 0.9, 0.99] as $uniform) {
+            $this->assertLessThan(SegmentEntry::outcome(IndustryAdjacency::CLOSE, $uniform), SegmentEntry::outcome(IndustryAdjacency::DISTANT, $uniform), "at {$uniform}");
+        }
+        $this->assertLessThan(log(2.0), SegmentEntry::outcome(IndustryAdjacency::CLOSE, 0.99), 'one in a hundred earns less than twice what it counted on');
     }
 
     /**
@@ -82,18 +83,24 @@ class SegmentEntryTest extends TestCase
     }
 
     /**
-     * A venture that pays grows toward its target share of its new market, most of the way within a decade where the
-     * target is near, and no faster than a company can grow a business where it is far.
+     * A venture means to reach the share a typical incumbent holds in its new market, within the room the fringe leaves
+     * and no further than e times the share it entered at, the most it can grow at the fastest a company grows a
+     * business; it grows toward that most of the way within a decade.
      */
-    public function testAVentureGrowsTowardItsTargetShare(): void
+    public function testAVentureGrowsTowardATypicalIncumbentsShare(): void
     {
+        $this->assertEqualsWithDelta(log(2.0), SegmentEntry::ventureTarget(0.02, 0.04, 0.5), 1e-12);
+        $this->assertEqualsWithDelta(log(1.5), SegmentEntry::ventureTarget(0.02, 0.04, 0.03), 1e-12, 'within the room');
+        $this->assertEqualsWithDelta(SegmentEntry::MAX_VENTURE_GROWTH * SegmentEntry::VENTURE_GROWTH_YEARS, SegmentEntry::ventureTarget(0.01, 0.30, 0.9), 1e-12, 'no further than it can grow');
+        $this->assertSame(0.0, SegmentEntry::ventureTarget(0.05, 0.04, 0.5), 'already as large as a typical incumbent');
+        $this->assertSame(0.0, SegmentEntry::ventureTarget(0.0, 0.04, 0.5));
+
         $this->assertSame(0.0, SegmentEntry::pathLevel(1.0, 0.0));
         $this->assertEqualsWithDelta(1.0 - exp(-2.0), SegmentEntry::pathLevel(1.0, 10.0), 1e-12);
-        $this->assertEqualsWithDelta(0.2, SegmentEntry::pathGrowth(1.0, 0.0), 1e-12);
+        $this->assertEqualsWithDelta(SegmentEntry::MAX_VENTURE_GROWTH, SegmentEntry::pathGrowth(1.0, 0.0), 1e-12, 'its largest target grows at the fastest a company can');
         $this->assertEqualsWithDelta((SegmentEntry::pathLevel(1.0, 3.0 + 1e-6) - SegmentEntry::pathLevel(1.0, 3.0)) / 1e-6, SegmentEntry::pathGrowth(1.0, 3.0), 1e-6, 'the growth is the path\'s slope');
-        // A target forty times its entry share is approached no faster than a company can grow a business.
+        // A target set before targets were bounded is still approached no faster than a company can grow a business.
         $this->assertEqualsWithDelta(SegmentEntry::MAX_VENTURE_GROWTH, SegmentEntry::pathGrowth(log(40.0), 0.0), 1e-12);
-        $this->assertLessThan(log(40.0) / 2.0, SegmentEntry::pathLevel(log(40.0), 10.0), 'not halfway in a decade');
     }
 
     /** Entry arrives at a constant rate, scaled by the manager's appetite for deals: Poisson over the quarter. */

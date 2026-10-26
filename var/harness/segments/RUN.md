@@ -83,6 +83,12 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
     entered margins vs peers, M&A volume); `head40` = working tree on the live macro (YEARS=40), `hard2.py <seeds> head40 40`
     (identities, orphan keys, weird outcomes, long-run drift). The probe logs orphans, bad values, quarterly GDP index,
     the industry ledger table and every TICKER/seg record at the end.
+  - Segment fixes over long games: `prefix` (BASE 102d2f80) / `step1` (BASE 0a48fbac) on the live macro, `step2`
+    (working tree, live macro), YEARS=45: `hard4.py <seeds> 45 prefix step1 step2` (board vs prefix, entry/exits/sales,
+    realism), plus `hard2.py <seeds> <arm> 45` and `hard3.py`. One batch per BASE tree (BASE is per batch).
+  - Calibration round (2026-10-27): `step2b` (working tree, live macro), `step2c` (+ `ovr_step2c/` OUTCOME_SPREAD 0.45),
+    `step2d` (+ `ovr_step2d/` REALISED_DISTANCE_PENALTY 0.6); `step2same` = unmodified copy, OUT equal to step2b.
+    `hard4.py 1-8 45 prefix step2 step2b step2c step2d` (now also sale price / revenue by kind, margin / peers).
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

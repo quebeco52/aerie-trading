@@ -103,8 +103,8 @@ class AcquisitionEngine
     public const MA_SPEND_DRAW_MIN = 0.50;
     /**
      * Largest share of a market one off-board firm holds, and so the most of a new industry a buyer from outside it
-     * takes in one deal: 10%. The fringe is many firms, the largest of them a regional or family-owned leader, not a
-     * third of the market.
+     * takes in one deal: 10%, and never more than its largest listed firm sells. The fringe is many firms, the largest
+     * of them a regional or family-owned leader, not a third of the market.
      */
     public const MA_LARGEST_PRIVATE_SHARE = 0.10;
 
@@ -429,7 +429,7 @@ class AcquisitionEngine
      * Null where no market is worth entering, or for a buyer that keeps no plant ledger, or a financial, or before a
      * year of reports.
      *
-     * @return array{industry: string, closeness: float, margin: float, turnover: float, market: float, room: float}|null
+     * @return array{industry: string, closeness: float, margin: float, turnover: float, market: float, room: float, leader: float}|null
      */
     private function chooseEntryMarket(AcquisitionContext $ctx): ?array
     {
@@ -451,7 +451,7 @@ class AcquisitionEngine
             if ($market['room'] <= 0.0) {
                 continue;
             }
-            $markets[$industry] = ['industry' => $industry, 'closeness' => $market['closeness'], 'margin' => $market['margin'], 'turnover' => $market['turnover'], 'market' => $market['market'], 'room' => $market['room']];
+            $markets[$industry] = ['industry' => $industry, 'closeness' => $market['closeness'], 'margin' => $market['margin'], 'turnover' => $market['turnover'], 'market' => $market['market'], 'room' => $market['room'], 'leader' => $market['leader']];
             $values[$industry] = SegmentEntry::value($afterTax * $market['turnover'] * $market['margin'] * $expectedShare, $hurdle, $longRunGrowth, $market['excess'], 0.0);
         }
         $industry = SegmentEntry::choose($values, MathUtility::hashedUniform($ledger->runSalt(), "entry-deal:{$stock->getTicker()}:{$ctx->tickCount}"));
@@ -481,8 +481,9 @@ class AcquisitionEngine
     /**
      * Price of the largest target the acquirer's market holds for it, and the limit that set it: the fringe still off
      * the board, capped at the share merger review clears. A buyer from outside an industry overlaps no firm in it, so
-     * review clears the deal (a conglomerate merger), and it buys the largest firm off the board or what the fringe
-     * leaves, whichever is less. Unbounded when the ledger has not priced the firm's market.
+     * review clears the deal (a conglomerate merger), and it buys the largest firm off the board, no larger than the
+     * largest listed one, or what the fringe leaves, whichever is less. Unbounded when the ledger has not priced the
+     * firm's market.
      *
      * @return array{price: float, limit: string}
      */
@@ -491,11 +492,12 @@ class AcquisitionEngine
         $revenuePerDollar = $this->valueTarget($ctx, 1.0)['revenue'];
         $price = static fn(float $marketRevenue): float => $revenuePerDollar > 0.0 ? $marketRevenue / $revenuePerDollar : INF;
         if ($ctx->entry !== null) {
-            $fringeBinds = $ctx->entry['room'] < self::MA_LARGEST_PRIVATE_SHARE;
+            $largest = min(self::MA_LARGEST_PRIVATE_SHARE * $ctx->entry['market'], $ctx->entry['leader'] > 0.0 ? $ctx->entry['leader'] : INF);
+            $room = $ctx->entry['room'] * $ctx->entry['market'];
 
             return [
-                'price' => $price(min($ctx->entry['room'], self::MA_LARGEST_PRIVATE_SHARE) * $ctx->entry['market']),
-                'limit' => $fringeBinds ? self::LIMIT_AVAILABLE_MARKET : self::LIMIT_LARGEST_TARGET,
+                'price' => $price(min($room, $largest)),
+                'limit' => $room < $largest ? self::LIMIT_AVAILABLE_MARKET : self::LIMIT_LARGEST_TARGET,
             ];
         }
 

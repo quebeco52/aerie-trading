@@ -21,19 +21,19 @@ final class EntryMarkets
     public function __construct(private readonly IndustryShareLedger $ledger) {}
 
     /**
-     * Each industry next to a business the company still runs and has not given up on, at its closest link to any of
-     * them; not one it is in, is building into or has left (a sold segment keeps its place at none). It must run on
+     * Each industry next to a business the company still runs and has not put up for sale, at its closest link to any
+     * of them; not one it is in, is building into or has left (a sold segment keeps its place at none). It must run on
      * plant whose output its market prices (SegmentEntry::isEnterable()), its incumbents must have filed what they
      * earn, and the ledger must size its market. Its growth above the economy's is its industry's secular excess as it
-     * fades.
+     * fades; with it, the share a typical incumbent there holds and the sales of the largest.
      *
-     * @return array<string, array{closeness: float, margin: float, turnover: float, market: float, room: float, excess: float}>
+     * @return array<string, array{closeness: float, margin: float, turnover: float, market: float, room: float, typical: float, leader: float, excess: float}>
      */
     public function survey(Stock $stock, MacroStateDTO $macroState, int $tick, int $ticksPerYear): array
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $held = SegmentBooks::industries($stock);
-        $homes = array_filter($held, static fn(string $segment): bool => SegmentBooks::holdsPlant($stock, $segment) && !SegmentBooks::isAbandoned($momentum, $segment), ARRAY_FILTER_USE_KEY);
+        $homes = array_filter($held, static fn(string $segment): bool => SegmentBooks::holdsPlant($stock, $segment) && !SegmentBooks::isForSale($momentum, $segment), ARRAY_FILTER_USE_KEY);
         $markets = [];
         foreach ($homes as $industry) {
             foreach (IndustryAdjacency::neighbours($industry) as $target => $closeness) {
@@ -56,6 +56,8 @@ final class EntryMarkets
                     'turnover' => $peers['turnover'],
                     'market' => $market['market'],
                     'room' => $market['fringe_share'],
+                    'typical' => $market['typical_share'],
+                    'leader' => $market['leader_revenue'],
                     'excess' => $strategy->getFadedSecularGrowthRate($stock, $macroState->totalTime) - MacroConstants::TREND_REAL_GROWTH,
                 ];
             }

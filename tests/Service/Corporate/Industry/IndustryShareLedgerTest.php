@@ -711,6 +711,27 @@ class IndustryShareLedgerTest extends TestCase
     }
 
     /**
+     * A newcomer learns what a typical incumbent holds of the market, the median share of the firms that did not enter
+     * it in play, and what the largest firm there sells; a firm reading for itself leaves its own record out.
+     */
+    public function testAnEntrantSeesATypicalIncumbentAndTheLargest(): void
+    {
+        $macro = new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 1.0);
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $ledger->resolveIndustrySupply($this->stock('MILL', 1_000.0), 1_000.0, 0.5, 1.0, 1.0, 0.0, 252, 252);
+        $ledger->resolveIndustrySupply($this->stock('FORG', 300.0), 300.0, 0.15, 1.0, 1.0, 0.0, 252, 252);
+        $ledger->resolveIndustrySupply($this->stock('ROLL', 200.0), 200.0, 0.10, 1.0, 1.0, 0.0, 252, 252);
+        $entrant = $this->stock('AUTO', 5_000.0, 'Auto Manufacturers');
+        $entrant->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 1.0], 1.0, []) + [SegmentBooks::STATE_PENDING . Segments::enteredKey('Steel') => 100.0]);
+        $ledger->openVentureRecord($entrant, Segments::enteredKey('Steel'), 20.0, 0.01, $macro, 252);
+
+        $described = $ledger->describeEntrant('Steel', 'NEWC', $macro, 0.0, 252, 252) ?? [];
+        $this->assertEqualsWithDelta(0.15, $described['typical_share'] ?? null, 1e-12, 'the middle incumbent, the venture left out');
+        $this->assertEqualsWithDelta(1_000.0, $described['leader_revenue'] ?? null, 1e-9);
+        $this->assertEqualsWithDelta(0.125, $ledger->describeEntrant('Steel', 'MILL', $macro, 0.0, 252, 252)['typical_share'] ?? null, 1e-12, 'its own record left out');
+    }
+
+    /**
      * A venture growing its share along its own path takes the growth as it took its first share: the fringe yields it
      * only as fast as the fringe builds, so what the fringe owes it rises by the step and the earlier debt fades.
      */

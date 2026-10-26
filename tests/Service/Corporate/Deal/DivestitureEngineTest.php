@@ -446,6 +446,49 @@ class DivestitureEngineTest extends TestCase
     }
 
     /**
+     * A business that does not earn its cost for its owner is worth what it earns to a buyer from its industry: where
+     * the incumbents there have filed a margin ten times its own, it sells for that income at a motivated seller's
+     * multiple, more than the market valued it in its owner's hands, so the news lifts the seller, and more than where
+     * none has filed and it sells at its own earnings.
+     */
+    public function testAFailedEntryIsSoldAtWhatItEarnsAnIncumbent(): void
+    {
+        $machinery = Segments::enteredKey('Farm & Heavy Construction Machinery');
+        $shock = function (bool $peers) use ($machinery): float {
+            $stock = $this->buildLedgeredAcquirer('ENTR', treasury: 1_000_000_000.0, debt: 4_000_000_000.0, shares: 100_000_000.0);
+            $stock->setIndustry('Auto Manufacturers');
+            $stock->setTotalNetIncome('2000000000');
+            $stock->setTotalEquity((string) ($stock->getTotalAssets() - $stock->getTotalLiabilities()));
+            $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.96, $machinery => 0.04], 1.0, []) + [
+                SegmentBooks::STATE_TARGET . Segments::MAIN => 0.95,
+                SegmentBooks::STATE_TARGET . $machinery => 0.05,
+                SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.20,
+                SegmentBooks::STATE_MARGIN . $machinery => 0.02,
+                SegmentBooks::STATE_FOR_SALE . $machinery => 3.0,
+            ]);
+            $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+            if ($peers) {
+                $incumbent = (new Stock())->setTicker('MACH')->setIndustry('Farm & Heavy Construction Machinery')->setTotalRevenue('4000000000');
+                $ledger->resolveIndustrySupply($incumbent, 4_000_000_000.0, 0.3, 1.0, 1.0, 0.0, 300, 252);
+                $ledger->recordIdiosyncraticGain($incumbent, 4_000_000_000.0, 0.0, 0.3, 300, ['margin' => 0.20, 'turnover' => 1.0]);
+            }
+            $engine = new DivestitureEngine($this->createStub(MarketEventPublisher::class), $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+            $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0);
+            $result = $engine->evaluateCorporateDivestiture($stock, $macro, 1.0, 300, 252);
+            $this->assertIsArray($result);
+
+            return $result['shock'];
+        };
+        $this->debtEngineMock->method('analyzeDebtHealth')->willReturn(DebtHealthBuilder::healthy()->build());
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(20_000_000_000.0);
+        $this->corporateMetricsMock->method('calculateAddressableShare')->willReturn(0.10);
+        $this->mathUtilityMock->script(checkProbability: true, generateUniform: 0.0, generateUniformBetween: 8.0);
+
+        $this->assertGreaterThan(0.0, $shock(true));
+        $this->assertGreaterThan($shock(false), $shock(true));
+    }
+
+    /**
      * A business a company bought into a new industry and put up for sale, once it showed it does not earn its cost, is
      * sold whole however the rest of the company is doing: the same company with nothing for sale sells nothing. The
      * goodwill paid for it leaves with it, not its share of the plant's worth of the company's goodwill, so the sale

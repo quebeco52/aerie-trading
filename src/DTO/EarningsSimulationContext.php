@@ -229,13 +229,6 @@ class EarningsSimulationContext
      * @var array{industry: string, segment: string, capex: float, closeness: float}|null
      */
     public ?array $marketEntry = null;
-    /**
-     * The industry a company gave up a venture in this quarter, and the segment it is winding down there
-     * (CapitalBudgetEngine); null in any other quarter.
-     *
-     * @var array{industry: string, segment: string}|null
-     */
-    public ?array $marketExit = null;
     /** The plant base a company that keeps plant by segment planned its segments' growth on (net PP&E). */
     public float $segmentPlantBase = 0.0;
     /** The quarter's idiosyncratic demand shock to utilisation. */

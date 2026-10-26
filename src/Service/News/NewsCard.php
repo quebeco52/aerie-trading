@@ -49,7 +49,6 @@ enum NewsCard: string
         'STOCK-FOR-STOCK MERGER' => self::Deal,
         'DIVESTITURE' => self::Deal,
         'MARKET ENTRY' => self::Deal,
-        'MARKET EXIT' => self::Deal,
         'ANALYST' => self::Analyst,
         'GUIDANCE' => self::Analyst,
         'BANKRUPTCY' => self::Bankruptcy,

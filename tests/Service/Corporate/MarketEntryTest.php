@@ -17,6 +17,7 @@ use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\EntryMarkets;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentEntry;
 use App\Service\Math\MathUtility;
@@ -77,6 +78,11 @@ final class MarketEntryTest extends TestCase
 
                 return $ctx;
             },
+            'one new industry at a time' => function (EarningsSimulationContext $ctx): EarningsSimulationContext {
+                $ctx->stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.97, Segments::enteredKey('Steel') => 0.03], 1.0, []) + [SegmentBooks::STATE_LEARNING . Segments::enteredKey('Steel') => 0.1]);
+
+                return $ctx;
+            },
         ];
         foreach ($blocked as $why => $change) {
             [$ctx, $ledger] = $this->entrant();
@@ -99,17 +105,18 @@ final class MarketEntryTest extends TestCase
     }
 
     /**
-     * A venture built into its industry that has learned enough to turn a profit, and still earns less than its
-     * manager's hurdle on its plant at the margin its learning has shown, is given up on and the news says so; one
-     * still learning, one that pays, or one bought as a going concern (left to the gate and the sale of weak segments)
-     * is not.
+     * A business entered in play that has shown what it earns, and still earns less than its manager's hurdle on its
+     * plant, is put up for sale: one built once it has learned enough to turn a profit, one bought once integrated. One
+     * still learning or being integrated, or one that pays, is not; a venture given up on before failed ventures were
+     * sold is put up for sale whatever it earns now.
      */
-    public function testAVentureThatDoesNotPayIsGivenUpOnceItKnows(): void
+    public function testABusinessEnteredThatDoesNotPayIsPutUpForSaleOnceItKnows(): void
     {
         $segment = Segments::enteredKey(self::TARGET);
-        $gate = function (float $margin, float $learning, bool $built = true, float $integrating = 0.0) use ($segment): EarningsSimulationContext {
+        $gate = function (float $margin, float $learning, bool $built = true, float $integrating = 0.0, bool $givenUp = false) use ($segment): EarningsSimulationContext {
             [$ctx, $ledger] = $this->entrant();
             $venture = $built ? [SegmentBooks::STATE_LEARNING . $segment => $learning, SegmentBooks::STATE_VENTURE_START . $segment => 1.0] : [SegmentBooks::STATE_INTEGRATING . $segment => $integrating];
+            $venture += $givenUp ? [SegmentBooks::STATE_VENTURE_ABANDONED . $segment => 1.5] : [];
             $ctx->stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.97, $segment => 0.03], 1.0, []) + $venture);
             foreach ([Segments::MAIN => [0.97, 0.10], $segment => [0.03, $margin]] as $key => [$plant, $segmentMargin]) {
                 $ctx->segments[$key] = ['plant' => $plant, 'sales' => $plant, 'margin' => $segmentMargin, 'turnover' => 1.0, 'market' => 0.1, 'price' => 1.0, 'load' => 1.0, 'drain' => 0.0, 'growth' => 0.0, 'leftover' => 0.0];
@@ -121,19 +128,31 @@ final class MarketEntryTest extends TestCase
             return $ctx;
         };
 
-        $failed = $gate(0.02, 0.5);
-        $this->assertSame(['industry' => self::TARGET, 'segment' => $segment], $failed->marketExit);
-        $this->assertTrue(SegmentBooks::isAbandoned($failed->stock->getEarningsMomentumZ() ?? [], $segment));
-        $this->assertNull($gate(0.02, 1.5)->marketExit, 'still learning');
-        $this->assertNull($gate(0.30, 0.5)->marketExit, 'it pays');
-        $bought = $gate(0.02, 0.0, built: false);
-        $this->assertNull($bought->marketExit, 'a business bought is not given up but sold');
-        $this->assertSame(2.0, ($bought->stock->getEarningsMomentumZ() ?? [])[SegmentBooks::STATE_FOR_SALE . $segment] ?? null, 'put up for sale once integrated');
-        $this->assertFalse(SegmentBooks::isAbandoned($bought->stock->getEarningsMomentumZ() ?? [], $segment));
-        $integrating = $gate(0.02, 0.0, built: false, integrating: 0.5);
-        $this->assertArrayNotHasKey(SegmentBooks::STATE_FOR_SALE . $segment, $integrating->stock->getEarningsMomentumZ() ?? [], 'still showing what it earns');
-        $paying = $gate(0.30, 0.0, built: false);
-        $this->assertArrayNotHasKey(SegmentBooks::STATE_FOR_SALE . $segment, $paying->stock->getEarningsMomentumZ() ?? [], 'it pays');
+        $forSale = static fn(EarningsSimulationContext $ctx): ?float => ($ctx->stock->getEarningsMomentumZ() ?? [])[SegmentBooks::STATE_FOR_SALE . $segment] ?? null;
+        $this->assertSame(2.0, $forSale($gate(0.02, 0.5)), 'a venture that has learned and does not pay');
+        $this->assertNull($forSale($gate(0.02, 1.5)), 'still learning');
+        $this->assertNull($forSale($gate(0.30, 0.5)), 'it pays');
+        $this->assertSame(2.0, $forSale($gate(0.02, 0.0, built: false)), 'a business bought, once integrated');
+        $this->assertNull($forSale($gate(0.02, 0.0, built: false, integrating: 0.5)), 'still showing what it earns');
+        $this->assertSame(2.0, $forSale($gate(0.30, 0.5, givenUp: true)), 'given up on before failures were sold');
+        $this->assertNull($forSale($gate(0.30, 0.0, built: false)), 'it pays');
+    }
+
+    /**
+     * A company looks for markets next to the businesses it still means to keep: a restaurant chain that built into
+     * industrial machinery looks next door to it, at heavy machinery, until it puts that business up for sale.
+     */
+    public function testACompanyLooksNextToTheBusinessesItKeeps(): void
+    {
+        $machinery = Segments::enteredKey('Specialty Industrial Machinery');
+        [$ctx, $ledger] = $this->entrant(industry: 'Restaurants');
+        $books = SegmentBooks::open([Segments::MAIN => 0.97, $machinery => 0.03], 1.0, []);
+        $survey = fn(): array => (new EntryMarkets($ledger))->survey($ctx->stock, $ctx->macroState, $ctx->tickCount, $ctx->ticksPerYear);
+
+        $ctx->stock->setEarningsMomentumZ($books);
+        $this->assertArrayHasKey(self::TARGET, $survey());
+        $ctx->stock->setEarningsMomentumZ($books + [SegmentBooks::STATE_FOR_SALE . $machinery => 1.5]);
+        $this->assertArrayNotHasKey(self::TARGET, $survey(), 'not next to a business it is selling');
     }
 
     /**

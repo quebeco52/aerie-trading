@@ -1054,6 +1054,15 @@ class AcquisitionEngineTest extends TestCase
         $this->assertIsArray($engine->evaluatePrivateAcquisition($diversifying, $this->enteringMacro(), 1.0, self::ENTRY_TICK, 252));
         $this->assertArrayNotHasKey($segment, SegmentBooks::plant($diversifying->getEarningsMomentumZ() ?? []) ?? [], 'one new industry at a time');
 
+        // In a market where the incumbent holds a twenty-fifth, a tenth of it is more than the largest firm there
+        // sells: what is bought is no larger than that firm.
+        [$engine, , $small] = $this->entrant(pays: false, incumbentShare: 0.04);
+        $this->mathUtilityMock->script(generateUniform: [0.0]);
+        $deal = $engine->evaluatePrivateAcquisition($small, $this->enteringMacro(), 1.0, self::ENTRY_TICK, 252);
+        $this->assertIsArray($deal);
+        $this->assertEqualsWithDelta(4_000_000_000.0, (float) $small->getTotalRevenue() - 20_000_000_000.0, 1.0, 'what the incumbent sells, not a tenth of the market');
+        $this->assertStringEndsWith('Sized to ' . AcquisitionEngine::LIMIT_LARGEST_TARGET . '.', $deal['event']['description']);
+
         // A conglomerate's business is owning others: its plant paying does not keep it at home.
         $machinery = Segments::enteredKey('Specialty Industrial Machinery');
         [$engine, , $holding] = $this->entrant(pays: true, industry: 'Conglomerates', target: 'Specialty Industrial Machinery');
@@ -1162,7 +1171,7 @@ class AcquisitionEngineTest extends TestCase
      *
      * @return array{0: AcquisitionEngine, 1: InMemoryIndustryShareStore, 2: Stock, 3: IndustryShareLedger, 4: Stock}
      */
-    private function entrant(bool $pays, string $industry = 'Auto Manufacturers', string $target = self::ENTERED, float $outlook = 0.0): array
+    private function entrant(bool $pays, string $industry = 'Auto Manufacturers', string $target = self::ENTERED, float $outlook = 0.0, float $incumbentShare = 0.3): array
     {
         $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
         $this->bookIssuedDebt();
@@ -1175,8 +1184,8 @@ class AcquisitionEngineTest extends TestCase
         $macro = $this->enteringMacro();
         $store->writeOutlooks(['salt' => 0, 'quarter' => 1, 'industries' => [$target => ['x' => $outlook, 'm' => $outlook, 'v' => 0.0, 'f' => $outlook, 'w' => 1.0, 'prior_belief' => $outlook, 'revised_tick' => -1]]]);
         $incumbent = (new Stock())->setTicker('MACH')->setIndustry($target)->setTotalRevenue('4000000000');
-        $ledger->resolveIndustrySupply($incumbent, 4_000_000_000.0, 0.3, IndustryShareLedger::trendNominalGdp($macro), $macro->totalTime, 0.0, self::ENTRY_TICK, 252);
-        $ledger->recordIdiosyncraticGain($incumbent, 4_000_000_000.0, 0.0, 0.3, self::ENTRY_TICK, ['margin' => 0.30, 'turnover' => 1.5]);
+        $ledger->resolveIndustrySupply($incumbent, 4_000_000_000.0, $incumbentShare, IndustryShareLedger::trendNominalGdp($macro), $macro->totalTime, 0.0, self::ENTRY_TICK, 252);
+        $ledger->recordIdiosyncraticGain($incumbent, 4_000_000_000.0, 0.0, $incumbentShare, self::ENTRY_TICK, ['margin' => 0.30, 'turnover' => 1.5]);
 
         $stock = $this->buildLedgeredAcquirer('ENTR', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
         $stock->setIndustry($industry);

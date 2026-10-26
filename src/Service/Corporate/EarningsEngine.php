@@ -1366,16 +1366,6 @@ class EarningsEngine
                 $entry['capex'] / max(1.0, (float) $stock->getPrice() * $ctx->sharesOutstanding),
             );
         }
-        if ($ctx->marketExit !== null) {
-            $business = lcfirst(SegmentBooks::label($stock, $ctx->marketExit['segment']));
-            $events[] = $this->marketEvent->publish(
-                $stock,
-                'MARKET EXIT',
-                "{$stock->getName()} is winding down its {$business} business, which has not earned what its plant costs.",
-                0.0,
-                ['industry' => $ctx->marketExit['industry'], 'business' => $business],
-            );
-        }
 
         $this->eventDispatcher->dispatch(new EarningsReportedEvent($ctx));
 

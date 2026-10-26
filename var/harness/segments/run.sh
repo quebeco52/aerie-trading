@@ -38,10 +38,16 @@ case "$1" in
   cal1same) BASEV=""; export OVR=$H/ovr_cal1same ;;  # cal1 through an unmodified SegmentEntry copy (neutrality check)
   pre) BASEV=${BASE:?set BASE=<tree>} ;;  # 5d3b769a, the board before segments
   head40) BASEV=""; PATH_GZ="" ;;  # working tree, live macro (40-year anomaly scan)
+  prefix|step1) BASEV=${BASE:?set BASE=<tree>}; PATH_GZ="" ;;  # live macro on a BASE tree (prefix 102d2f80, step1 0a48fbac)
+  step2) BASEV=""; PATH_GZ="" ;;  # working tree on the live macro (segment fixes step 2)
+  step2b) BASEV=""; PATH_GZ="" ;;  # working tree, live macro (failed-entry sales at distressed multiples)
+  step2c) BASEV=""; PATH_GZ=""; export OVR=$H/ovr_step2c ;;  # step2b with OUTCOME_SPREAD 0.45 (SegmentEntry copy, 2026-10-27)
+  step2d) BASEV=""; PATH_GZ=""; export OVR=$H/ovr_step2d ;;  # step2b with REALISED_DISTANCE_PENALTY 0.6
+  step2same) BASEV=""; PATH_GZ=""; export OVR=$H/ovr_step2same ;;  # unmodified copy (neutrality check)
   econlive) BASEV=""; PATH_GZ="" ;;  # econ on the live macro, for YEARS > 20
   segplain) BASEV=""; SEGV="SEG_OFF=1" ;;
   gapfix) BASEV=""; export OVR=$H/ovr_gap ;;  # working tree + Redis store that reads segment_outlook_gap back
-  *) echo "usage: run.sh head|seg|seg2|p3|p4|p4live|p4c|econ|econlive|econ2|econ2nj|econ3|skyl|wave2|wave2pl|p5a|p5b1|div1|pre|head40|div2|div3|div4|div5|buy1|buy2|buy3|cal1|cal1old|cal1same|segplain|gapfix <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh head|seg|seg2|p3|p4|p4live|p4c|econ|econlive|econ2|econ2nj|econ3|skyl|wave2|wave2pl|p5a|p5b1|div1|pre|head40|prefix|step1|step2|step2b|step2c|step2d|step2same|div2|div3|div4|div5|buy1|buy2|buy3|cal1|cal1old|cal1same|segplain|gapfix <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env MACRO_REPLAY="$PATH_GZ" "$SEGV" BASE="$BASEV" OUTLOOK_SALT=1 SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" IDLE_OUT="$H/runs/$1-$2.idle.json" OUTLOOK_OUT="$H/runs/$1-$2.outlook.json" \
