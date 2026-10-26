@@ -43,6 +43,8 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
   - `econ.py <seeds> A B` (segment economics): firm stable margin/turnover, segment margins/turnovers, revenue
     identity on every report, revenue-share lag behind targets, rev/cap per segment, sale price vs segment EBIT.
   - `econ3`: working tree after the takeover-asset fix (probe adds `gw` goodwill, `tax` effective rate).
+  - `skyl` (working tree, SKYL plant by segment) vs `head` = BASE 642a842c: `sky.py <seeds> head skyl` (internet
+    kappa vs planned share, capacity gap, SKYL books, telecom peers LOON/SKUA, identities, board).
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

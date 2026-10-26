@@ -257,7 +257,8 @@ final class CapitalBudgetEngine
             } else {
                 $trendNominalGrowth = max(0.0, $strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + $inflation);
                 $growth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, self::CAPITAL_ERROR_CORRECTION_SPEED);
-                $budgets[$segment] = max(0.0, ($plant * $growth * $ctx->dt * $cycleCapExModifier * $books['load']) - ($plant * (1.0 - $books['load'])));
+                $budgets[$segment] = max(0.0, ($plant * $growth * $ctx->dt * $cycleCapExModifier * $books['load']) - ($plant * (1.0 - $books['load']))
+                    + self::pathPlant($ctx, $segment, $books, $plant * exp($capitalGap)));
             }
         }
         $main = $ctx->segments[Segments::MAIN] ?? null;
@@ -288,6 +289,22 @@ final class CapitalBudgetEngine
         }
 
         return $growthCapEx;
+    }
+
+    /**
+     * The plant a segment on its model's own path needs for the step the path takes before its next report: its trend
+     * plant grown from the level the ledger priced this quarter to the level the quarter's physics leaves, a revision
+     * of the belief included. Built on the trend plant, not on the plant installed, so a segment behind its path does
+     * not fall further behind as the path climbs, and apart from the cycle, which moves the build around a path, not
+     * the path. Nothing for any other segment.
+     *
+     * @param array{path?: float} $books
+     */
+    private static function pathPlant(EarningsSimulationContext $ctx, string $segment, array $books, float $trendPlant): float
+    {
+        $next = $ctx->strategy->resolveSegmentPath($ctx->stock, $segment)['level'] ?? null;
+
+        return isset($books['path']) && $next !== null ? $trendPlant * (exp($next - $books['path']) - 1.0) : 0.0;
     }
 
     /**

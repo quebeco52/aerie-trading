@@ -20,10 +20,11 @@ case "$1" in
   econ2) BASEV=""; export OVR=$H/ovr_pl ;;  # working tree + SegmentBooks copy that logs segment prices/loads (read-only)
   econ2nj) BASEV=""; export OVR=$H/ovr_nj ;;  # as econ2, and every segment at the company avoidable-cost ratio (undoes fix 8)
   econ3) BASEV="" ;;  # working tree: takeover assets at revenue / the joined segment's turnover
+  skyl) BASEV="" ;;  # working tree: SKYL keeps plant by segment, internet on its Bass path (head = 642a842c)
   econlive) BASEV=""; PATH_GZ="" ;;  # econ on the live macro, for YEARS > 20
   segplain) BASEV=""; SEGV="SEG_OFF=1" ;;
   gapfix) BASEV=""; export OVR=$H/ovr_gap ;;  # working tree + Redis store that reads segment_outlook_gap back
-  *) echo "usage: run.sh head|seg|seg2|p3|p4|p4live|p4c|econ|econlive|econ2|econ2nj|econ3|segplain|gapfix <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh head|seg|seg2|p3|p4|p4live|p4c|econ|econlive|econ2|econ2nj|econ3|skyl|segplain|gapfix <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env MACRO_REPLAY="$PATH_GZ" "$SEGV" BASE="$BASEV" OUTLOOK_SALT=1 SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" IDLE_OUT="$H/runs/$1-$2.idle.json" \

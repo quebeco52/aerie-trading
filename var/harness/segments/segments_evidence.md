@@ -295,3 +295,21 @@ margin 0.106 -> 0.100 (-0.005, se 0.005), turnover 1.78 -> 2.68 (+0.93, t 8.0), 
 for econ2). Board econ3 - econ2: cap +0.58 tn (se 0.65), P/E -0.04 (0.08), vol -0.0014 (0.0019), defaults+deaths
 -0.13 (0.30), B-or-worse +0.30 pt (0.09, t 3.3: ALBT, FALC, WING, unrelated to segments), ND/EBITDA 0.00, real growth
 +0.06 pt/yr (0.04). Eight: JDAW op margin +0.91 pt (t 4.7), WEAV -0.73 pt (t -2.0), others |t| < 1.5.
+
+## 2026-10-26: SKYL plant by segment (skyl, working tree) vs 642a842c (head), 4 seeds x 20 years (sanity)
+
+Probe adds `sky` for SKYL (planned share from SpaceSystemsBusinessModel::resolveSegmentPath, ledger
+resolveSegmentCapacityGap for satellite_internet) and record `path`/`apath`. `sky.py` reads them.
+
+    BASE=<scratchpad>/basetree-642a842c bin/harness-batch var/harness/segments/run.sh 1-4 head skyl
+    python3 var/harness/segments/sky.py 1-4 head skyl > skyl_n4.out
+
+Internet enters at y4.36 in all seeds. kappa / planned share: y5 0.030/0.035, y8 0.227/0.233, y10 0.364/0.368, y15
+0.483/0.504, y20 0.503/0.542. Capacity gap after entry median +0.066 (p5 -0.063, p95 +0.160, min -0.160); one entry
+spike in seed 3 (+0.75 at y4.6, +0.30 by y5.4). Internet revenue share head/skyl y10 0.283/0.313, y20 0.565/0.517.
+SKYL head -> skyl: revenue y20 90.6 -> 84.0 bn; real growth y1-10 10.0% -> 8.2%, y10-20 8.0% -> 8.4%; op margin
+0.175 -> 0.193; P/E y10-20 14.4 -> 13.6; cap y20 220 -> 212 bn; ND/EBITDA y20 0.54 -> 0.65; worst rating B/BB, no
+default, no whole sale. Telecom: LOON/SKUA price y12-20 about 0.01-0.03 lower in skyl; LOON revenue y20 196 -> 170 bn,
+SKUA 75 -> 84; internet record 14% of telecom record revenue by y15-20. Identities: sum kappa 2e-16; main + internet
+record revenue = 4 x revenue (3e-14); path/anchor_path on every post-entry report; no internet kappa key before
+entry. Board (n 4): cap -0.97 tn (se 1.53), defaults+deaths 0, B-or-worse -0.17 pt (se 0.08), P/E +0.11 (0.07).

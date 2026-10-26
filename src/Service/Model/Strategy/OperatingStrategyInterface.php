@@ -259,10 +259,14 @@ interface OperatingStrategyInterface
     public function depreciatesByUnitsOfProduction(): bool;
 
     /**
-     * Whether the model plans its own lines' paths into a segment's market (a line it opens from nothing on its own
-     * adoption curve), so the company keeps one plant split by that plan rather than plant by segment (SegmentBooks).
+     * A segment whose share of its market the model plans along a path of its own (a line it opens from nothing on its
+     * own adoption curve): the log level of that path, its expected growth a year, and the segment's expected share of
+     * the company's sales now. The segment's plant is planned along it (SegmentBooks); its market grows as its
+     * industry's. Null for a segment that holds its share of its industry's market, and before the path opens.
+     *
+     * @return array{level: float, growth: float, share: float}|null
      */
-    public function plansOwnSegmentMix(): bool;
+    public function resolveSegmentPath(Stock $stock, string $segment): ?array;
 
     /**
      * Lines whose output is a by-product of the main business's plant (an airline's belly cargo flies on its passenger

@@ -20,6 +20,7 @@ use PHPUnit\Framework\TestCase;
 class SegmentLedgerTest extends TestCase
 {
     private const FREIGHT = 'Integrated Freight & Logistics';
+    private const TELECOM = 'Telecom Services';
 
     /**
      * When the books open, the main record keeps the main segment's plant and market, so its share of its own market
@@ -57,6 +58,25 @@ class SegmentLedgerTest extends TestCase
         // A report replayed after its tick rolled back opens the books again; the main record is split once.
         $ledger->openSegmentBooks($tern, 0.9);
         $this->assertEqualsWithDelta(0.9 * $before['anchor_capacity_share'], $store->readIndustry('Airlines')['TERN']['anchor_capacity_share'], 1e-15);
+    }
+
+    /**
+     * A company whose model grew all its lines on one plant grows its main segment's alone once its books open: the
+     * change in the rate its main record grows by is folded into the anchor, so its trend plant does not move that day.
+     */
+    public function testOpeningTheBooksFoldsAChangeInTheMainRecordsRate(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $skyl = (new Stock())->setTicker('SKYL')->setIndustry('Space Systems')->setTotalRevenue('1000');
+        $ledger->resolveIndustryCapacityRatio($skyl, 1_000.0, 0.1, 1.0, 0.0, 0.05, 10, 252);
+        $later = new MacroStateDTO(totalTime: 6.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0);
+        $gapBefore = $ledger->resolveTrendCapacityGap($skyl, $later, 0.05);
+
+        $ledger->openSegmentBooks($skyl, 1.0, 6.0, 0.05, 0.02);
+
+        $this->assertNotNull($gapBefore);
+        $this->assertEqualsWithDelta($gapBefore, $ledger->resolveTrendCapacityGap($skyl, $later, 0.02), 1e-12);
     }
 
     /**
@@ -191,6 +211,66 @@ class SegmentLedgerTest extends TestCase
         $rival = (new Stock())->setTicker('CANV')->setIndustry(self::FREIGHT);
 
         $this->assertSame(1, $ledger->openIndustryRegimes($rival, 20, 252)?->members());
+    }
+
+    /**
+     * A segment whose model plans its own path (a satellite service signing subscribers up) holds a share of its
+     * market that rides that path: plant built along it is on trend, the fringe cedes the share it takes so the market
+     * stays balanced, and the market itself grows as its industry's.
+     */
+    public function testASegmentOnItsOwnPathTakesItsShareFromTheFringe(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $macro = new MacroStateDTO(totalTime: 0.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0);
+        $ledger->resolveIndustryCapacityRatio((new Stock())->setTicker('LOON')->setIndustry(self::TELECOM), 10_000.0, 0.5, 1.0, 0.0, 0.0, 5, 252);
+        $skyl = (new Stock())->setTicker('SKYL')->setIndustry('Space Systems')->setTotalRevenue('5000');
+        $skyl->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.99, 'satellite_internet' => 0.01], 1.0, []));
+        $ledger->resolveSegmentSupply($skyl, 'satellite_internet', 100.0, 100.0, 0.01, 1.0, 0.0, 0.0, 10, 252, log(0.5));
+
+        // The path doubles and the plant with it.
+        $supply = $ledger->resolveSegmentSupply($skyl, 'satellite_internet', 200.0, 200.0, 0.02, 1.0, 0.0, 0.0, 70, 252, 0.0);
+
+        $this->assertEqualsWithDelta(0.0, $ledger->resolveSegmentCapacityGap($skyl, 'satellite_internet', $macro, 0.0), 1e-12, 'plant built along its path is on trend');
+        $this->assertNotNull($supply);
+        $this->assertEqualsWithDelta(0.52, $supply['roster'], 1e-12);
+        $this->assertEqualsWithDelta(0.48, $supply['fringe'], 1e-12, 'the fringe cedes the share the path took');
+        $this->assertEqualsWithDelta(10_000.0, $ledger->resolveIndustryMarketRevenue(self::TELECOM, 'LOON', $macro, 0.0, 70, 252), 1e-9, 'its market does not ride the path');
+        $this->assertEqualsWithDelta(0.02, $ledger->describeMergerMarket($skyl, $macro, 0.0, 70, 252, 'satellite_internet')['acquirer_share'] ?? null, 1e-12, 'a merger review sees the share it holds now');
+
+        $ledger->recordSegmentGain($skyl, 'satellite_internet', 210.0, 0.05, 0.02, 70);
+        $ledger->resolveSegmentSupply($skyl, 'satellite_internet', 210.0, 200.0, 0.02, 1.0, 0.0, 0.0, 130, 252);
+        $record = $store->readIndustry(self::TELECOM)['SKYL/satellite_internet'];
+        $this->assertSame(0.0, $record['path'] ?? null, 'a sales write and a report without a path keep the path');
+        $this->assertEqualsWithDelta(log(0.5), $record['anchor_path'] ?? null, 1e-15);
+
+        // A division sold pro rata takes its slice of the plant and of the trend plant on the path alike.
+        $ledger->recordDivestedFraction($skyl, 0.25, $macro, 0.0);
+        $this->assertEqualsWithDelta(0.0, $ledger->resolveSegmentCapacityGap($skyl, 'satellite_internet', $macro, 0.0), 1e-12);
+    }
+
+    /**
+     * A segment sold whole is the buyer's plant: the seller's later pro rata sale or failure takes nothing from its
+     * record.
+     */
+    public function testASoldSegmentsRecordIsTheBuyers(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $macro = new MacroStateDTO(totalTime: 0.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0);
+        $tern = $this->tern();
+        $ledger->resolveIndustryCapacityRatio($tern, 900.0, 0.4, 1.0, 0.0, 0.0, 10, 252);
+        $tern->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []));
+        $ledger->resolveSegmentSupply($tern, 'air_cargo', 100.0, 100.0, 0.02, 1.0, 0.0, 0.0, 10, 252);
+        $ledger->recordSoldSegment($tern, 'air_cargo');
+        $tern->setEarningsMomentumZ(SegmentBooks::open(SegmentBooks::sellSegment([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 'air_cargo'), 1.0, []) + [SegmentBooks::STATE_PLANT . 'air_cargo' => 0.0]);
+
+        $ledger->recordDivestedFraction($tern, 0.25, $macro, 0.0);
+        $this->assertEqualsWithDelta(675.0, $store->readIndustry('Airlines')['TERN']['capacity'], 1e-9);
+        $ledger->retireFirm($tern);
+
+        $this->assertSame(0.0, $store->readIndustry('Airlines')['TERN']['capacity']);
+        $this->assertEqualsWithDelta(100.0, $store->readIndustry(self::FREIGHT)['TERN/air_cargo']['capacity'], 1e-9);
     }
 
     private function tern(): Stock

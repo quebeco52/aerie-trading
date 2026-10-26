@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\Segments;
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
@@ -33,7 +35,8 @@ use App\Service\Model\StreamContext;
  *   market revise their estimate as they arrive. Each extra subscriber costs little to serve.
  * - Growth: the firm's expected growth is the growth of the three lines along their expected paths, so its plant, its
  *   capital budget and the market's multiple all read the same S-curve, drawn to the market as believed; sign-ups
- *   ahead of or behind it, and the revisions they bring, are the surprise.
+ *   ahead of or behind it, and the revisions they bring, are the surprise. The internet is a telecom segment of its own
+ *   (Segments) whose share of that market, and the plant built for it, ride the curve (resolveSegmentPath()).
  * - Launch Failures: a rocket lost grounds the fleet while the cause is found; the manifest waits and flies off when
  *   the fleet returns.
  */
@@ -125,8 +128,8 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
      */
     public const BROADBAND_MATURE_SIZE = 2.0;
     /**
-     * Log standard deviation of the eventual internet market at the listing (0.4): nobody knows how many will sign up,
-     * so nine runs in ten land between about half and 1.8 times the estimate.
+     * Log standard deviation of the eventual internet market, the firm's share of telecom's, at the listing (0.4):
+     * nobody knows how many will sign up, so nine runs in ten land between about half and 1.8 times the estimate.
      */
     public const MARKET_SIZE_UNCERTAINTY = 0.40;
     /**
@@ -203,23 +206,14 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
     public function getSecularGrowthRate(Stock $stock): float
     {
         $years = self::yearsListed($stock);
-        $levels = $this->resolveLineLevels($stock, $years);
-        $opening = array_sum($this->resolveLineLevels($stock, 0.0));
+        $levels = self::ownLines($stock, $this->resolveLineLevels($stock, $years));
+        $opening = array_sum(self::ownLines($stock, $this->resolveLineLevels($stock, 0.0)));
         $unitFade = TimeSeries::fadedExcessIntegral(1.0, 0.0, $years, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
         if ($years <= 0.0 || $unitFade <= 0.0 || $opening <= 0.0) {
-            return MacroConstants::TREND_REAL_GROWTH + $this->resolveExcessGrowth($stock, 0.0);
+            return MacroConstants::TREND_REAL_GROWTH + $this->resolveExcessGrowth($stock, 0.0, true);
         }
 
         return MacroConstants::TREND_REAL_GROWTH + (log(array_sum($levels) / $opening) / $unitFade);
-    }
-
-    /**
-     * Satellite internet opens from nothing on the firm's own adoption curve, a path the industry ledger cannot yet
-     * carry for one record, so the curve plans the mix on one plant.
-     */
-    public function plansOwnSegmentMix(): bool
-    {
-        return true;
     }
 
     /**
@@ -228,7 +222,31 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
      */
     public function getFadedSecularGrowthRate(Stock $stock, float $simYears): float
     {
-        return MacroConstants::TREND_REAL_GROWTH + $this->resolveExcessGrowth($stock, self::yearsListed($stock));
+        return MacroConstants::TREND_REAL_GROWTH + $this->resolveExcessGrowth($stock, self::yearsListed($stock), true);
+    }
+
+    /**
+     * Satellite internet takes its share of telecom's market along the adoption curve, to the market as believed: the
+     * curve's level, its expected growth (learning moves the level, not the expected growth) and the line's share of
+     * the sales the three lines are expected to make. Nothing before the service opens.
+     */
+    public function resolveSegmentPath(Stock $stock, string $segment): ?array
+    {
+        if ($segment === Segments::MAIN || $segment !== Segments::segmentOf($stock->getTicker(), 'satellite_broadband')) {
+            return null;
+        }
+        $years = self::yearsListed($stock);
+        $levels = $this->resolveLineLevels($stock, $years);
+        $adoption = ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION);
+        if ($levels['satellite_broadband'] <= 0.0 || $adoption <= 0.0) {
+            return null;
+        }
+
+        return [
+            'level' => log($levels['satellite_broadband']),
+            'growth' => ResponseCurves::bassAdoptionRate($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION) / $adoption,
+            'share' => $levels['satellite_broadband'] / array_sum($levels),
+        ];
     }
 
     /**
@@ -301,11 +319,13 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
         $years = $streams->getPersistedState(self::STATE_YEARS_LISTED, 0.0);
         $streams->registerState(self::STATE_YEARS_LISTED, $years + FinancialConstants::QUARTER_YEARS);
 
-        // The plan splits across the lines as their expected levels stand.
+        // The plan splits across the lines as their expected levels stand; with plant by segment each segment's lines
+        // share that segment's part of it.
         $levels = $this->resolveLineLevels($stock, $years);
         $total = array_sum($levels);
-
-        $plan = $total > 0.0 ? $expectedRevenue / $total : 0.0;
+        $split = SegmentBooks::splitToTargets($stock->getTicker(), $momentum, $levels)
+            ?? array_map(static fn(float $level): float => $total > 0.0 ? $level / $total : 0.0, $levels);
+        $planned = array_map(static fn(float $share): float => $expectedRevenue * $share, $split);
 
         $launchZ = $streams->generateZ('launch_services', 0.30);
         $governmentZ = $streams->generateZ('government_missions', 0.50);
@@ -324,7 +344,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
             + $this->resolveFxDemandShift($macroState, self::LAUNCH_EXPORT_SHARE));
         $launch = $streams->recognizeBacklog(
             'launch_services',
-            $plan * $levels['launch_services'],
+            $planned['launch_services'] ?? 0.0,
             $launchBookings,
             self::LAUNCH_BURN_RATE,
             deferredShare: $groundedElapsed > 0 ? self::GROUNDED_LAUNCH_SHARE : 0.0,
@@ -334,7 +354,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
         $awards = max(0.0, 1.0
             + ($governmentZ * $baselineVol * self::GOVERNMENT_VARIANCE_SCALAR)
             + (MacroConstants::ALLIED_PROCUREMENT_ELASTICITY * OpenEconomy::alliedDefenseGap($macroState->alliedDefenseSpendingIndexEma)));
-        $government = $streams->recognizeBacklog('government_missions', $plan * $levels['government_missions'], $awards, self::GOVERNMENT_BURN_RATE);
+        $government = $streams->recognizeBacklog('government_missions', $planned['government_missions'] ?? 0.0, $awards, self::GOVERNMENT_BURN_RATE);
 
         // --- Satellite internet: subscribers sign up to the true market, which the plan only estimates, ahead of the
         // expected curve or behind it ---
@@ -346,7 +366,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
         }
         $streams->registerState(self::STATE_MARKET_SIZE, $trueMarket);
         $signUps = max(0.0, 1.0 + ($broadbandZ * $baselineVol * self::BROADBAND_VARIANCE_SCALAR));
-        $broadband = $plan * $levels['satellite_broadband'] * ($trueMarket / $market) * $signUps;
+        $broadband = ($planned['satellite_broadband'] ?? 0.0) * ($trueMarket / $market) * $signUps;
 
         // The quarter's sign-ups are a reading of the true market, weighed by how much of it has signed up.
         $takeUp = ResponseCurves::bassAdoption($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION);
@@ -365,7 +385,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
         $actualRevenue = array_sum($streamRevenues);
 
         // --- Reusable rockets: each launch flown makes the next cheaper, and competition passes half the saving on ---
-        $plannedLaunch = $plan * $levels['launch_services'];
+        $plannedLaunch = $planned['launch_services'] ?? 0.0;
         $flown = $plannedLaunch > 0.0 ? FinancialConstants::QUARTER_YEARS * ($levels['launch_services'] / self::LAUNCH_SERVICES_WEIGHT) * ($launch['revenue'] / $plannedLaunch) : 0.0;
         $streams->registerState(self::STATE_LAUNCH_EXPERIENCE, $experience + $flown);
         $launchCostRatio = self::launchCostRatio($experience);
@@ -493,19 +513,41 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    /** Growth above trend the three lines add along their expected paths: the log derivative of their sum. */
-    private function resolveExcessGrowth(Stock $stock, float $years): float
+    /**
+     * Growth above trend the lines add along their expected paths: the log derivative of their sum, over all three or
+     * over the model's own (ownLines()).
+     */
+    private function resolveExcessGrowth(Stock $stock, float $years, bool $ownLinesOnly = false): float
     {
         $levels = $this->resolveLineLevels($stock, $years);
-        $total = array_sum($levels);
-        if ($total <= 0.0) {
-            return 0.0;
-        }
-        $launchGrowth = $levels['launch_services'] * self::LAUNCH_EXCESS_GROWTH * (0.5 ** ($years / self::LAUNCH_EXCESS_HALF_LIFE_YEARS));
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $signUps = self::believedMarketSize($momentum) * ResponseCurves::bassAdoptionRate($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION) * SegmentOutlook::tilt($momentum, 'satellite_broadband');
+        $slopes = [
+            'launch_services'     => $levels['launch_services'] * self::LAUNCH_EXCESS_GROWTH * (0.5 ** ($years / self::LAUNCH_EXCESS_HALF_LIFE_YEARS)),
+            'government_missions' => 0.0,
+            'satellite_broadband' => self::believedMarketSize($momentum) * ResponseCurves::bassAdoptionRate($years - self::BROADBAND_SERVICE_START_YEARS, self::BROADBAND_INNOVATION, self::BROADBAND_IMITATION) * SegmentOutlook::tilt($momentum, 'satellite_broadband'),
+        ];
+        if ($ownLinesOnly) {
+            $levels = self::ownLines($stock, $levels);
+        }
+        $total = array_sum($levels);
 
-        return ($launchGrowth + $signUps) / $total;
+        return $total > 0.0 ? array_sum(array_intersect_key($slopes, $levels)) / $total : 0.0;
+    }
+
+    /**
+     * The lines whose growth is the model's own: all three on one plant; with plant by segment the main segment's,
+     * since the internet's is its segment's path (resolveSegmentPath()).
+     *
+     * @param array{launch_services: float, government_missions: float, satellite_broadband: float} $levels
+     * @return array<string, float>
+     */
+    private static function ownLines(Stock $stock, array $levels): array
+    {
+        if (SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null) {
+            unset($levels['satellite_broadband']);
+        }
+
+        return $levels;
     }
 
     /**

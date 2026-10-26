@@ -45,13 +45,10 @@ final class SegmentBooks
     /** Joins a ticker and a segment into the key of the segment's record in its industry's ledger. */
     public const RECORD_KEY_SEPARATOR = '/';
 
-    /**
-     * Whether the company keeps plant by segment: it sells into several markets and its model does not plan the mix.
-     */
+    /** Whether the company keeps plant by segment: it sells into several markets. */
     public static function keepsBooks(Stock $stock): bool
     {
-        return Segments::forTicker($stock->getTicker()) !== null
-            && !Sectors::strategyFor($stock->getIndustry())->plansOwnSegmentMix();
+        return Segments::forTicker($stock->getTicker()) !== null;
     }
 
     /**
@@ -172,7 +169,8 @@ final class SegmentBooks
     /**
      * The state that opens the books: each segment holds its share of the plant and a market sized so that it holds
      * its share of that market now (the company's share where its industry's market is not known), given the
-     * company's market growth and each segment's since trading opened.
+     * company's market growth and each segment's since trading opened. A segment that sells nothing yet is left out
+     * until it does (enter()); one sold later keeps its place at none.
      *
      * @param array<string, float> $plantShares    Segment => its share of the plant.
      * @param array<string, float> $segmentGrowths Segment => its market's growth since trading opened.
@@ -182,11 +180,73 @@ final class SegmentBooks
     public static function open(array $plantShares, float $firmMarketGrowth, array $segmentGrowths, float $firmMarketShare = 0.0, array $marketShares = []): array
     {
         $state = [];
-        foreach ($plantShares as $segment => $share) {
+        foreach (array_filter($plantShares, static fn(float $share): bool => $share > 0.0) as $segment => $share) {
             $known = $marketShares[$segment] ?? 0.0;
             $state[self::STATE_PLANT . $segment] = $share;
             $state[self::STATE_MARKET . $segment] = $share * $firmMarketGrowth / max(1e-9, $segmentGrowths[$segment] ?? 1.0)
                 * ($firmMarketShare > 0.0 && $known > 0.0 ? $firmMarketShare / $known : 1.0);
+        }
+
+        return $state;
+    }
+
+    /**
+     * Plant shares with one segment set to a share and the others scaled to the rest in the proportions they held.
+     *
+     * @param array<string, float> $plant Segment => plant share.
+     * @return array<string, float>
+     */
+    public static function reshare(array $plant, string $segment, float $share): array
+    {
+        $share = max(0.0, min(1.0, $share));
+        $others = array_sum($plant) - ($plant[$segment] ?? 0.0);
+        $shares = [];
+        foreach ($plant as $key => $held) {
+            $shares[$key] = $others > 0.0 ? $held * (1.0 - $share) / $others : 0.0;
+        }
+        $shares[$segment] = $share;
+
+        return $shares;
+    }
+
+    /**
+     * Whether a segment's plant still sells into its industry: the main segment always, another while it holds plant
+     * (not one sold, whose record is the buyer's plant now, nor one not yet entered).
+     */
+    public static function holdsPlant(Stock $stock, string $segment): bool
+    {
+        return $segment === Segments::MAIN || ((self::plant($stock->getEarningsMomentumZ() ?? []) ?? [])[$segment] ?? 0.0) > 0.0;
+    }
+
+    /**
+     * The state that brings a segment in once the books are open: the plant its share of the sales calls for at its own
+     * turnover, taken from the main segment; a market in which it holds its share of its industry's (open()); and the
+     * main segment's margin and turnover scaled as its lore sets them (Segments::economicsOf()). Nothing while that
+     * share is none.
+     *
+     * @param array<string, mixed> $momentum
+     * @param float $salesShare  The segment's expected share of the company's sales.
+     * @param float $marketShare Its share of its industry's market, where known.
+     * @return array<string, float> Carried state.
+     */
+    public static function enter(string $ticker, array $momentum, string $segment, float $salesShare, float $firmMarketGrowth, float $segmentGrowth, float $firmShare, float $marketShare): array
+    {
+        $mainPlant = (self::plant($momentum) ?? [])[Segments::MAIN] ?? 0.0;
+        $relative = Segments::economicsOf($ticker)[$segment] ?? ['margin' => 1.0, 'turnover' => 1.0];
+        $margins = self::filed($momentum, self::STATE_MARGIN);
+        $turnovers = self::filed($momentum, self::STATE_TURNOVER);
+        $company = self::companyEconomics($momentum);
+        $turnover = ($turnovers[Segments::MAIN] ?? 0.0) * $relative['turnover'];
+        $share = min($mainPlant, max(0.0, $company !== null && $turnover > 0.0 ? $salesShare * $company['turnover'] / $turnover : $salesShare));
+        if ($share <= 0.0) {
+            return [];
+        }
+
+        $state = self::open([$segment => $share], $firmMarketGrowth, [$segment => $segmentGrowth], $firmShare, $marketShare > 0.0 ? [$segment => $marketShare] : []);
+        $state[self::STATE_PLANT . Segments::MAIN] = $mainPlant - $share;
+        if (isset($margins[Segments::MAIN], $turnovers[Segments::MAIN])) {
+            $state[self::STATE_MARGIN . $segment] = $margins[Segments::MAIN] * $relative['margin'];
+            $state[self::STATE_TURNOVER . $segment] = $turnover;
         }
 
         return $state;
@@ -292,8 +352,8 @@ final class SegmentBooks
     }
 
     /**
-     * The company's secular growth now: its model's, or for a company that keeps plant by segment each segment's
-     * industry's on its plant.
+     * The company's secular growth now: its model's, or for a company that keeps plant by segment each segment's on its
+     * plant.
      */
     public static function fadedSecularGrowth(OperatingStrategyInterface $strategy, Stock $stock, float $totalTime): float
     {
@@ -302,14 +362,25 @@ final class SegmentBooks
             return $strategy->getFadedSecularGrowthRate($stock, $totalTime);
         }
 
-        $industries = self::industries($stock);
         $growth = 0.0;
         foreach ($plant as $segment => $share) {
-            $segmentStrategy = $segment === Segments::MAIN ? $strategy : Sectors::strategyFor($industries[$segment] ?? '');
-            $growth += $share * $segmentStrategy->getFadedSecularGrowthRate($stock, $totalTime);
+            $growth += $share * self::segmentGrowth($strategy, $stock, $segment, $totalTime);
         }
 
         return $growth;
+    }
+
+    /**
+     * A segment's secular growth now: its industry's, the main segment's its company model's, and along the path the
+     * model plans where it plans one (OperatingStrategyInterface::resolveSegmentPath()).
+     *
+     * @param OperatingStrategyInterface $strategy The company's model.
+     */
+    public static function segmentGrowth(OperatingStrategyInterface $strategy, Stock $stock, string $segment, float $totalTime): float
+    {
+        $segmentStrategy = $segment === Segments::MAIN ? $strategy : Sectors::strategyFor(self::industries($stock)[$segment] ?? '');
+
+        return $segmentStrategy->getFadedSecularGrowthRate($stock, $totalTime) + ($strategy->resolveSegmentPath($stock, $segment)['growth'] ?? 0.0);
     }
 
     /**
@@ -539,8 +610,9 @@ final class SegmentBooks
 
     /**
      * The segment a company that keeps plant by segment would sell whole: of those it can sell apart from its main
-     * business (not one whose output rides the main plant), the one whose plant earns least, its share of the operating
-     * income over its share of the plant. Null when it has none.
+     * business (not one whose output rides the main plant, nor one on its model's own path, whose value is mostly the
+     * path still ahead and not the share of the income a sale is priced on), the one whose plant earns least, its share
+     * of the operating income over its share of the plant. Null when it has none.
      */
     public static function weakestSegment(Stock $stock): ?string
     {
@@ -548,7 +620,8 @@ final class SegmentBooks
         $weakest = null;
         $lowest = INF;
         foreach (self::plant($momentum) ?? [] as $segment => $share) {
-            if ($segment === Segments::MAIN || $share <= 0.0 || in_array($segment, self::jointSegments($stock), true)) {
+            if ($segment === Segments::MAIN || $share <= 0.0 || in_array($segment, self::jointSegments($stock), true)
+                || Sectors::strategyFor($stock->getIndustry())->resolveSegmentPath($stock, $segment) !== null) {
                 continue;
             }
             $earning = self::earningShares($momentum, $segment)['income'] / $share;
@@ -563,15 +636,20 @@ final class SegmentBooks
 
     /**
      * The segment a deal buys into, drawn in proportion to the plant each holds, so deals keep the mix in expectation;
-     * a by-product's plant is bought only with the plant it rides. The main segment before the books open.
+     * a by-product's plant is bought only with the plant it rides, and none into a segment on its model's own path. The
+     * main segment before the books open.
      *
      * @param float $uniform A draw on [0, 1).
      */
     public static function acquiringSegment(Stock $stock, float $uniform): string
     {
         $plant = self::plant($stock->getEarningsMomentumZ() ?? []) ?? [];
-        foreach (self::jointSegments($stock) as $joint) {
-            unset($plant[$joint]);
+        // A segment that rides its model's own path would not carry a bought rival along it.
+        $strategy = Sectors::strategyFor($stock->getIndustry());
+        foreach (array_keys($plant) as $segment) {
+            if (in_array($segment, self::jointSegments($stock), true) || $strategy->resolveSegmentPath($stock, $segment) !== null) {
+                unset($plant[$segment]);
+            }
         }
         $plant = array_filter($plant, static fn(float $share): bool => $share > 0.0);
         $total = array_sum($plant);

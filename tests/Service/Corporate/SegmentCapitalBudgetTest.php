@@ -19,6 +19,7 @@ use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\MathUtility;
+use App\Service\Model\Sector\SpaceSystemsBusinessModel;
 use PHPUnit\Framework\TestCase;
 use ReflectionMethod;
 
@@ -93,6 +94,33 @@ final class SegmentCapitalBudgetTest extends TestCase
         $this->assertEqualsWithDelta($growthCapEx, $ctx->segments['ads_and_cloud']['growth'], 1e-6);
     }
 
+    /**
+     * A segment on its model's own path (satellite internet signing subscribers up) builds its industry's growth plus
+     * the step its path takes before the next report, from the level the ledger priced to the one the quarter leaves,
+     * on its trend plant and apart from the cycle; the main segment builds at its own growth.
+     */
+    public function testASegmentOnItsOwnPathBuildsTheStepItsPathTakes(): void
+    {
+        $ctx = $this->context('SKYL', 'Space Systems', [Segments::MAIN => 0.9, 'satellite_internet' => 0.1], null);
+        $space = Sectors::strategyFor('Space Systems');
+        $priced = (new Stock())->setTicker('SKYL')->setIndustry('Space Systems')->setEarningsMomentumZ([SpaceSystemsBusinessModel::STATE_YEARS_LISTED => 4.75]);
+        $pricedLevel = $space->resolveSegmentPath($priced, 'satellite_internet')['level'] ?? 0.0;
+        $ctx->segments['satellite_internet'] = ['path' => $pricedLevel] + $ctx->segments['satellite_internet'];
+        $ctx->stock->setEarningsMomentumZ([SpaceSystemsBusinessModel::STATE_YEARS_LISTED => 5.0] + ($ctx->stock->getEarningsMomentumZ() ?? []));
+        $step = ($space->resolveSegmentPath($ctx->stock, 'satellite_internet')['level'] ?? 0.0) - $pricedLevel;
+        $inflation = (float) $ctx->macroState->inflationEma;
+        $base = abs($ctx->investedCapital);
+        $main = 0.9 * $base * ($space->getFadedSecularGrowthRate($ctx->stock, 0.0) + $inflation) * $ctx->dt * 0.8;
+        $internet = (0.1 * $base * (Sectors::strategyFor('Telecom Services')->getFadedSecularGrowthRate($ctx->stock, 0.0) + $inflation) * $ctx->dt * 0.8)
+            + (0.1 * $base * (exp($step) - 1.0));
+        $this->assertGreaterThan(0.3, $step, 'a steep stretch of the curve');
+
+        $growthCapEx = $this->growthCapEx($ctx, null, 0.8);
+
+        $this->assertEqualsWithDelta($main + $internet, $growthCapEx, 1e-3);
+        $this->assertEqualsWithDelta($internet, $ctx->segments['satellite_internet']['growth'], 1e-3);
+    }
+
     /** @param array<string, float> $plant */
     private function context(string $ticker, string $industry, array $plant, ?IndustryShareLedger $ledger): EarningsSimulationContext
     {
@@ -125,10 +153,10 @@ final class SegmentCapitalBudgetTest extends TestCase
         return $ctx;
     }
 
-    private function growthCapEx(EarningsSimulationContext $ctx, ?IndustryShareLedger $ledger): float
+    private function growthCapEx(EarningsSimulationContext $ctx, ?IndustryShareLedger $ledger, float $cycle = 1.0): float
     {
         return (new ReflectionMethod(CapitalBudgetEngine::class, 'calculateGrowthCapEx'))
-            ->invoke($this->budget($ledger), $ctx, 1.0, $ctx->quarterlyDepreciation, 1e15);
+            ->invoke($this->budget($ledger), $ctx, $cycle, $ctx->quarterlyDepreciation, 1e15);
     }
 
     private function budget(?IndustryShareLedger $ledger): CapitalBudgetEngine

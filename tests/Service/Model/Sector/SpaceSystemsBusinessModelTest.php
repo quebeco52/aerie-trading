@@ -8,6 +8,7 @@ use App\Data\Company\Segments;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
@@ -53,9 +54,9 @@ class SpaceSystemsBusinessModelTest extends TestCase
     }
 
     /** @param array<string, float> $momentum */
-    private static function stock(array $momentum = []): Stock
+    private static function stock(array $momentum = [], string $ticker = 'SPACE_TEST'): Stock
     {
-        $stock = (new Stock())->setTicker('SPACE_TEST')->setBeta('1.00');
+        $stock = (new Stock())->setTicker($ticker)->setBeta('1.00');
         $stock->setEarningsMomentumZ($momentum);
 
         return $stock;
@@ -252,6 +253,71 @@ class SpaceSystemsBusinessModelTest extends TestCase
         $growth = fn(float $years): float => $this->model->getFadedSecularGrowthRate(self::stock([Space::STATE_YEARS_LISTED => $years]), 0.0);
         $this->assertGreaterThan($growth(2.0), $growth(10.0));
         $this->assertGreaterThan($growth(20.0), $growth(10.0));
+    }
+
+    /**
+     * The internet is a segment whose share of telecom's market rides the adoption curve: its level, its expected
+     * growth and its share of the three lines' sales. Nothing before the service opens, and the main business has no
+     * path.
+     */
+    public function testTheInternetSegmentRidesTheAdoptionCurve(): void
+    {
+        $years = 12.0;
+        $levels = self::levels($years);
+        $path = $this->model->resolveSegmentPath(self::stock([Space::STATE_YEARS_LISTED => $years], 'SKYL'), 'satellite_internet');
+
+        $this->assertNotNull($path);
+        $this->assertEqualsWithDelta(log($levels['broadband']), $path['level'], 1e-12);
+        $step = 1e-5;
+        $this->assertEqualsWithDelta((log(self::levels($years + $step)['broadband']) - log(self::levels($years - $step)['broadband'])) / (2.0 * $step), $path['growth'], 1e-6);
+        $this->assertEqualsWithDelta($levels['broadband'] / array_sum($levels), $path['share'], 1e-12);
+        $this->assertNull($this->model->resolveSegmentPath(self::stock([Space::STATE_YEARS_LISTED => 3.0], 'SKYL'), 'satellite_internet'), 'before the service opens');
+        $this->assertNull($this->model->resolveSegmentPath(self::stock([Space::STATE_YEARS_LISTED => $years], 'SKYL'), Segments::MAIN));
+    }
+
+    /**
+     * With plant by segment the model's own growth is the launches' and missions': the internet's is its segment's
+     * path, so the main market and the plant it builds follow those two lines alone.
+     */
+    public function testWithPlantBySegmentTheModelGrowsItsOwnLines(): void
+    {
+        $years = 12.0;
+        $stock = self::stock([Space::STATE_YEARS_LISTED => $years, SegmentBooks::STATE_PLANT . Segments::MAIN => 0.6, SegmentBooks::STATE_PLANT . 'satellite_internet' => 0.4], 'SKYL');
+        $main = static fn(float $at): float => self::levels($at)['launch'] + self::levels($at)['government'];
+
+        $step = 1e-5;
+        $slope = (log($main($years + $step)) - log($main($years - $step))) / (2.0 * $step);
+        $this->assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + $slope, $this->model->getFadedSecularGrowthRate($stock, 0.0), 1e-6);
+        $excess = $this->model->getSecularGrowthRate($stock) - MacroConstants::TREND_REAL_GROWTH;
+        $this->assertEqualsWithDelta(log($main($years) / $main(0.0)), TimeSeries::fadedExcessIntegral($excess, 0.0, $years, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS), 1e-9);
+    }
+
+    /** With plant by segment each segment's lines share that segment's part of the plan. */
+    public function testEachSegmentsLinesSplitItsShareOfThePlan(): void
+    {
+        $years = 12.0;
+        $levels = self::levels($years);
+        $result = $this->model->computeActualFinancials(
+            self::stock([
+                Space::STATE_YEARS_LISTED => $years,
+                Space::STATE_LAUNCH_EXPERIENCE => Space::INITIAL_LAUNCH_EXPERIENCE_YEARS,
+                Space::STATE_MARKET_SIZE => Space::BROADBAND_MATURE_SIZE,
+                SegmentBooks::STATE_PLANT . Segments::MAIN => 0.7,
+                SegmentBooks::STATE_PLANT . 'satellite_internet' => 0.3,
+                SegmentBooks::STATE_TARGET . Segments::MAIN => 0.7,
+                SegmentBooks::STATE_TARGET . 'satellite_internet' => 0.3,
+            ], 'SKYL'),
+            self::EXPECTED_REVENUE,
+            self::VARIABLE_COST_RATIO,
+            10_000_000.0,
+            0.0,
+            new MacroStateDTO(),
+            new ScriptedDraws(generatePersistentZ: fn(float $prev): float => 0.0),
+        );
+
+        $this->assertEqualsWithDelta(0.3 * self::EXPECTED_REVENUE, $result->streamRevenue['satellite_broadband'], 1.0);
+        $this->assertEqualsWithDelta(0.7 * self::EXPECTED_REVENUE * $levels['launch'] / ($levels['launch'] + $levels['government']), $result->streamRevenue['launch_services'], 1.0);
+        $this->assertEqualsWithDelta(self::EXPECTED_REVENUE, array_sum($result->streamRevenue), 1.0);
     }
 
     public function testEachLaunchFlownMakesTheNextCheaperAndHalfTheSavingIsPassedOn(): void

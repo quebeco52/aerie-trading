@@ -1006,10 +1006,10 @@ trait StandardOperatingPhysicsTrait
         return false;
     }
 
-    /** A company in several markets keeps plant by segment, each building toward its own market. */
-    public function plansOwnSegmentMix(): bool
+    /** Every segment holds its share of its own industry's market. */
+    public function resolveSegmentPath(Stock $stock, string $segment): ?array
     {
-        return false;
+        return null;
     }
 
     /** Every line is made on plant of its own. */

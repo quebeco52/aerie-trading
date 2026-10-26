@@ -39,6 +39,7 @@ use App\Service\Math\ResponseCurves;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\HomebuilderBusinessModel;
+use App\Service\Model\Sector\SpaceSystemsBusinessModel;
 use App\Service\Model\Sector\TechBusinessModel;
 use App\Tests\Support\BalanceSheetAssertions;
 use App\Tests\Support\CorporateEngineFactory;
@@ -377,6 +378,85 @@ class EarningsEngineTest extends TestCase
         $this->assertNotNull($ads);
         $this->assertNotNull($retail);
         $this->assertNotEqualsWithDelta($retail['gain'], $ads['gain'], 1e-9, 'each segment\'s own lines, not the company\'s surprise');
+    }
+
+    /**
+     * A segment its model opens on a path of its own (satellite internet signing subscribers up) is not in the books
+     * while it sells nothing; once its path opens it takes the plant its share of the sales calls for from the main
+     * segment, enters its industry's ledger on its path, and the company's revenue is still booked once across them.
+     */
+    public function testASegmentOnItsOwnPathEntersTheBooksWhenItOpens(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $store = new InMemoryIndustryShareStore();
+        $engine = $this->buildEngine($dispatcher, new IndustryShareLedger($store));
+        mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $stock = $this->buildMatureIndustrial('SKYL');
+        $stock->setIndustry('Space Systems');
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+        $tick = EarningsEngine::resolveReportingTick('SKYL', 252);
+        $engine->calculate($stock, $macro, $tick, 252);
+        $engine->calculate($stock, $macro, $tick + 63, 252);
+
+        $this->assertSame([Segments::MAIN => 1.0], SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []), 'the internet sells nothing yet');
+
+        $stock->setEarningsMomentumZ([SpaceSystemsBusinessModel::STATE_YEARS_LISTED => 12.0] + ($stock->getEarningsMomentumZ() ?? []));
+        $path = Sectors::strategyFor('Space Systems')->resolveSegmentPath($stock, 'satellite_internet');
+        $this->assertNotNull($path);
+        $engine->calculate($stock, $macro, $tick + 126, 252);
+
+        $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+        $this->assertEqualsWithDelta($path['share'], $captured->segments['satellite_internet']['plant'] ?? null, 1e-9, 'its share of the sales, at the main segment\'s turnover');
+        $this->assertEqualsWithDelta(1.0 - $path['share'], $captured->segments[Segments::MAIN]['plant'] ?? null, 1e-9);
+        $this->assertEqualsWithDelta(1.0, array_sum(SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) ?? []), 1e-9);
+        $internet = $store->readIndustry('Telecom Services')['SKYL/satellite_internet'] ?? null;
+        $this->assertNotNull($internet);
+        $this->assertEqualsWithDelta($path['level'], $internet['path'] ?? null, 1e-12, 'it enters the ledger on its path');
+        $this->assertEqualsWithDelta($path['level'], $internet['anchor_path'] ?? null, 1e-12);
+        $this->assertGreaterThan(0.0, $captured->streamRevenue['satellite_broadband'] ?? 0.0);
+        $this->assertEqualsWithDelta($captured->actualRevenue * 4.0, $internet['revenue'] + (float) ($store->readIndustry('Space Systems')['SKYL']['revenue'] ?? 0.0), 1e-6 * $captured->actualRevenue);
+    }
+
+    /**
+     * A company whose books open once its own path has run for years (a live game): its model's growth covers the main
+     * segment alone from then on, so the main segment's market is struck at that growth and stays where it was.
+     */
+    public function testBooksOpenedLateKeepTheMainSegmentsMarket(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher, new IndustryShareLedger(new InMemoryIndustryShareStore()));
+        mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $stock = $this->buildMatureIndustrial('SKYL');
+        $stock->setIndustry('Space Systems');
+        $stock->setEarningsMomentumZ([SpaceSystemsBusinessModel::STATE_YEARS_LISTED => 8.0] + ($stock->getEarningsMomentumZ() ?? []));
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02, totalTime: 8.0);
+        $tick = EarningsEngine::resolveReportingTick('SKYL', 252);
+        $engine->calculate($stock, $macro, $tick, 252);
+        $onePlant = $stock->getEarningsMomentumZ() ?? [];
+        $firmGrowth = CorporateMetrics::secularMarketGrowth($stock, 8.0);
+        $planned = Sectors::strategyFor('Space Systems')->resolveSegmentPath($stock, 'satellite_internet');
+        $this->assertNotNull($planned);
+
+        $engine->calculate($stock, $macro, $tick + 63, 252);
+
+        $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+        $this->assertGreaterThan(0.1, $captured->segments['satellite_internet']['plant'] ?? 0.0, 'the internet is well under way');
+        $this->assertEqualsWithDelta($planned['share'], $captured->segments['satellite_internet']['plant'], 1e-9, 'at the share its path plans, not the quarter\'s');
+        $opened = [SpaceSystemsBusinessModel::STATE_YEARS_LISTED => $onePlant[SpaceSystemsBusinessModel::STATE_YEARS_LISTED]] + ($stock->getEarningsMomentumZ() ?? []);
+        $stock->setEarningsMomentumZ($opened);
+        $this->assertEqualsWithDelta(
+            $captured->segments[Segments::MAIN]['plant'] * $firmGrowth,
+            $opened[SegmentBooks::STATE_MARKET . Segments::MAIN] * SegmentBooks::marketGrowths($stock, 8.0)[Segments::MAIN],
+            1e-9,
+        );
     }
 
     /**

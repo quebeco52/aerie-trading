@@ -268,6 +268,67 @@ class SegmentBooksTest extends TestCase
         $tern = $this->tern();
         $tern->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []));
         $this->assertSame(Segments::MAIN, SegmentBooks::acquiringSegment($tern, 0.95));
+
+        // Nothing is bought into a segment that rides its model's own path, and it is not sold whole.
+        $this->assertSame(Segments::MAIN, SegmentBooks::acquiringSegment($this->skylarkAt(12.0, 0.6), 0.95));
+        $this->assertNull(SegmentBooks::weakestSegment($this->skylarkAt(12.0, 0.6)));
+        $this->assertTrue(SegmentBooks::holdsPlant($this->skylarkAt(12.0, 0.6), 'satellite_internet'));
+        $this->assertFalse(SegmentBooks::holdsPlant($this->skylarkAt(12.0, 1.0), 'satellite_internet'), 'one with no plant');
+    }
+
+    /** One segment set to a share, the others scaled to the rest in the proportions they held. */
+    public function testReshare(): void
+    {
+        $shares = SegmentBooks::reshare([Segments::MAIN => 0.6, 'a' => 0.3, 'b' => 0.1], 'b', 0.2);
+
+        $this->assertEqualsWithDelta([Segments::MAIN => 0.6 * 0.8 / 0.9, 'a' => 0.3 * 0.8 / 0.9, 'b' => 0.2], $shares, 1e-12);
+    }
+
+    /**
+     * A segment on its model's own path grows at its industry's rate plus the path's, and the company at its segments'
+     * on its plant.
+     */
+    public function testASegmentOnItsOwnPathGrowsAlongIt(): void
+    {
+        $skyl = $this->skylarkAt(12.0, 0.6);
+        $space = Sectors::strategyFor('Space Systems');
+        $path = $space->resolveSegmentPath($skyl, 'satellite_internet');
+        $this->assertNotNull($path);
+        $internet = Sectors::strategyFor('Telecom Services')->getFadedSecularGrowthRate($skyl, 5.0) + $path['growth'];
+
+        $this->assertEqualsWithDelta($internet, SegmentBooks::segmentGrowth($space, $skyl, 'satellite_internet', 5.0), 1e-12);
+        $this->assertEqualsWithDelta(
+            (0.6 * $space->getFadedSecularGrowthRate($skyl, 5.0)) + (0.4 * $internet),
+            SegmentBooks::fadedSecularGrowth($space, $skyl, 5.0),
+            1e-12,
+        );
+    }
+
+    /**
+     * The books open without a segment that sells nothing yet; it enters later with the plant its share of the sales
+     * calls for at its own turnover, taken from the main segment, a market in which it holds its share of its
+     * industry's, and the main segment's margin and turnover scaled as its lore sets them.
+     */
+    public function testASegmentEntersOnceItSells(): void
+    {
+        $opened = SegmentBooks::open([Segments::MAIN => 1.0, 'consumer_devices' => 0.0], 1.0, []);
+        $this->assertSame([Segments::MAIN => 1.0], SegmentBooks::plant($opened));
+
+        $momentum = $opened + [
+            SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.10,
+            SegmentBooks::STATE_TURNOVER . Segments::MAIN => 0.8,
+        ];
+        $this->assertSame([], SegmentBooks::enter('ERNE', $momentum, 'consumer_devices', 0.0, 1.2, 1.1, 0.05, 0.001));
+
+        $entered = SegmentBooks::enter('ERNE', $momentum, 'consumer_devices', 0.03, 1.2, 1.1, 0.05, 0.001) + $momentum;
+        $plant = SegmentBooks::plant($entered) ?? [];
+        // Devices turn their capital over 1.5 times as fast as the networks: 3% of the sales on 2% of the plant.
+        $this->assertEqualsWithDelta(0.02, $plant['consumer_devices'], 1e-12);
+        $this->assertEqualsWithDelta(0.98, $plant[Segments::MAIN], 1e-12);
+        $this->assertEqualsWithDelta(0.02 * 1.2 / 1.1 * 0.05 / 0.001, $entered[SegmentBooks::STATE_MARKET . 'consumer_devices'], 1e-12);
+        $this->assertEqualsWithDelta(0.04, $entered[SegmentBooks::STATE_MARGIN . 'consumer_devices'], 1e-12);
+        $this->assertEqualsWithDelta(1.2, $entered[SegmentBooks::STATE_TURNOVER . 'consumer_devices'], 1e-12);
+        $this->assertEqualsWithDelta(0.03, SegmentBooks::companyEconomics($entered)['sales']['consumer_devices'] ?? null, 0.001);
     }
 
     /** The company grows at its segments' industries' rates on its plant; before the books open, at its model's. */
@@ -305,11 +366,11 @@ class SegmentBooksTest extends TestCase
         }
     }
 
-    /** Only a company in several markets whose model does not plan its own mix keeps plant by segment. */
+    /** Every company in several markets keeps plant by segment, one whose model plans a segment's path included. */
     public function testWhoKeepsBooks(): void
     {
         $this->assertTrue(SegmentBooks::keepsBooks($this->tern()));
-        $this->assertFalse(SegmentBooks::keepsBooks((new Stock())->setTicker('SKYL')->setIndustry('Space Systems')), 'its adoption curve plans its mix');
+        $this->assertTrue(SegmentBooks::keepsBooks((new Stock())->setTicker('SKYL')->setIndustry('Space Systems')));
         $this->assertFalse(SegmentBooks::keepsBooks((new Stock())->setTicker('LOON')->setIndustry('Telecom Services')));
         $this->assertSame('TERN', SegmentBooks::ownerOf(SegmentBooks::recordKey('TERN', 'air_cargo')));
         $this->assertSame('TERN', SegmentBooks::recordKey('TERN', Segments::MAIN));
@@ -389,6 +450,16 @@ class SegmentBooksTest extends TestCase
         $this->assertEqualsWithDelta(0.015 / (0.055 + 0.015 + 0.03), $shares['income'], 1e-12);
         $triv = (new Stock())->setTicker('TRIV')->setIndustry('Conglomerates');
         $this->assertSame('industrial', SegmentBooks::weakestSegment($triv->setEarningsMomentumZ($momentum)));
+    }
+
+    private function skylarkAt(float $years, float $mainPlant): Stock
+    {
+        $skyl = (new Stock())->setTicker('SKYL')->setIndustry('Space Systems');
+        $skyl->setEarningsMomentumZ([
+            \App\Service\Model\Sector\SpaceSystemsBusinessModel::STATE_YEARS_LISTED => $years,
+        ] + SegmentBooks::open([Segments::MAIN => $mainPlant, 'satellite_internet' => 1.0 - $mainPlant], 1.0, []));
+
+        return $skyl;
     }
 
     private function tern(): Stock

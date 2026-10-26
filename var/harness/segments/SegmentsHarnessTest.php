@@ -163,6 +163,26 @@ final class SegmentsHarnessTest extends BoardRun
         return is_array($pl) && array_keys($pl['plant']) == array_keys(array_filter($kappa, static fn(float $v): bool => $v > 0.0)) ? $pl : null;
     }
 
+    /**
+     * SKYL's satellite internet: the planned plant share (SpaceSystemsBusinessModel::resolveSegmentPath) and the
+     * ledger's capacity gap for the segment record; nulls on a tree without them.
+     *
+     * @return array{plan: ?float, cgap: ?float}
+     */
+    private function skylPath(\App\Entity\Stock $stock): array
+    {
+        $model = \App\Data\Company\Sectors::strategyFor((string) $stock->getIndustry());
+        $plan = method_exists($model, 'resolveSegmentPath') ? $model->resolveSegmentPath($stock, 'satellite_internet') : null;
+        $ledgerId = 'App\\Service\\Corporate\\Industry\\IndustryShareLedger';
+        $gap = null;
+        if ($this->currentMacro !== null && method_exists($ledgerId, 'resolveSegmentCapacityGap')) {
+            $gap = static::getContainer()->get($ledgerId)->resolveSegmentCapacityGap($stock, 'satellite_internet', $this->currentMacro,
+                $ledgerId::secularExcessGrowth(\App\Data\Company\Sectors::strategyFor('Telecom Services'), $stock));
+        }
+
+        return ['plan' => is_array($plan) ? (float) ($plan['share'] ?? 0.0) : null, 'cgap' => $gap];
+    }
+
     /** @var list<array<string, mixed>> SEG_OUT rows for the segmented tickers. */
     private array $segRows = [];
     /** @var array<string, int> SEG_OUT identity violations: unsegmented firm with a segment key or a ledger gap. */
@@ -241,7 +261,8 @@ final class SegmentsHarnessTest extends BoardRun
         foreach ($industries as $seg => $ind) {
             $r = $store->readIndustry($ind)[$seg === 'main' ? $ticker : $ticker . '/' . $seg] ?? null;
             if (is_array($r)) {
-                $recs[$seg] = ['cap' => $r['capacity'], 'rev' => $r['revenue'], 'acs' => $r['anchor_capacity_share'], 'as' => $r['addressable_share'], 'tick' => $r['tick']];
+                $recs[$seg] = ['cap' => $r['capacity'], 'rev' => $r['revenue'], 'acs' => $r['anchor_capacity_share'], 'as' => $r['addressable_share'], 'tick' => $r['tick'],
+                    'path' => $r['path'] ?? null, 'apath' => $r['anchor_path'] ?? null];
             }
             $o = $store->readOutlook($ind);
             $truths[$seg] = is_array($o) ? (float) ($o['x'] ?? 0.0) : null;
@@ -267,6 +288,7 @@ final class SegmentsHarnessTest extends BoardRun
             'ie' => (float) $report->getInterestExpense(), 'ebit' => (float) $report->getEbit(), 'eq' => (float) $report->getEquity(),
             'nd' => (float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury(), 'ebitda' => (float) $report->getEbitda(),
             'gw' => (float) $stock->getGoodwill(), 'tax' => $this->currentMacro === null ? null : \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getEffectiveTaxRate($this->currentMacro->corporateTaxRate),
+            'sky' => $ticker === 'SKYL' ? $this->skylPath($stock) : null,
             'smar' => $segMargin, 'stur' => $segTurnover, 'fmar' => (float) $stock->getOperatingMargin(), 'ftur' => (float) $stock->getAssetTurnover(),
             't' => round($this->currentTime, 3), 'tk' => $ticker, 'rev' => (float) $report->getRevenue(),
             'om' => (float) $report->getOperatingMargin(), 'shares' => $shares, 'tilts' => $tilts,

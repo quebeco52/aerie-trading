@@ -206,9 +206,10 @@ class EarningsSimulationContext
     /**
      * For a company that keeps plant by segment (SegmentBooks), each segment's quarter: its plant share, its share of
      * its own market, the price its industry pays it, the share of its plant that runs, the growth capex it was
-     * allotted and what its plan still allows after it. Empty for any other.
+     * allotted and what its plan still allows after it, and the level of its own path where its model plans one.
+     * Empty for any other.
      *
-     * @var array<string, array{plant: float, sales: float, margin: float, turnover: float, market: float, price: float, load: float, drain: float, growth: float, leftover: float}>
+     * @var array<string, array{plant: float, sales: float, margin: float, turnover: float, market: float, price: float, load: float, drain: float, growth: float, leftover: float, path?: float}>
      */
     public array $segments = [];
     /** The plant base a company that keeps plant by segment planned its segments' growth on (net PP&E). */

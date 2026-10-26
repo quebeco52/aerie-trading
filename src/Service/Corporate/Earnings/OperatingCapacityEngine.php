@@ -161,6 +161,7 @@ final class OperatingCapacityEngine
             $stock->setEarningsMomentumZ($filed + ($stock->getEarningsMomentumZ() ?? []));
         }
         $this->openSegmentBooks($ctx);
+        $this->enterPathSegments($ctx);
         // A company that keeps plant by segment earns its segments' margins at their own turnovers: its own margin and
         // turnover are their blend at the plant it holds in each, and move as that mix does.
         $economics = $this->resolveSegmentEconomics($ctx, $annualTurnover);
@@ -495,6 +496,10 @@ final class OperatingCapacityEngine
         foreach ($ctx->segments as $segment => $books) {
             $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
             $substitutability = $strategy->getIndustrySubstitutability();
+            $path = $ctx->strategy->resolveSegmentPath($ctx->stock, $segment)['level'] ?? null;
+            if ($path !== null) {
+                $ctx->segments[$segment]['path'] = $path;
+            }
             $supply = $this->industryShareLedger === null || $strategy->isFinancial() || $substitutability <= 0.0 ? null : $this->industryShareLedger->resolveSegmentSupply(
                 $ctx->stock,
                 $segment,
@@ -506,6 +511,7 @@ final class OperatingCapacityEngine
                 IndustryShareLedger::secularExcessGrowth($strategy, $ctx->stock),
                 $ctx->tickCount,
                 $ctx->ticksPerYear,
+                $path,
             );
             [$prices[$segment], $loads[$segment]] = $supply === null
                 ? [1.0, 1.0]
@@ -602,6 +608,14 @@ final class OperatingCapacityEngine
         // Each other segment enters at its share of the market its industry's firms sell into (SegmentBooks::
         // entryMarketShare()); the main segment keeps the company's share of its own.
         $plant = SegmentBooks::openingPlantShares($stock->getTicker(), $momentum);
+        // A segment on its model's own path opens at the share of the sales its path plans: the quarter's share carries
+        // the path's surprise, which the model adds again to what the segment's plant sells.
+        foreach (array_keys(SegmentBooks::industries($stock)) as $segment) {
+            $path = $ctx->strategy->resolveSegmentPath($stock, $segment);
+            if ($path !== null) {
+                $plant = SegmentBooks::reshare($plant, $segment, $path['share']);
+            }
+        }
         $firmShare = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()), $macroState);
         $marketShares = [];
         foreach (SegmentBooks::industries($stock) as $segment => $industry) {
@@ -618,20 +632,61 @@ final class OperatingCapacityEngine
             }
         }
 
-        $opened = SegmentBooks::open(
-            $plant,
-            CorporateMetrics::secularMarketGrowth($stock, $macroState->totalTime),
-            SegmentBooks::marketGrowths($stock, $macroState->totalTime),
-            $firmShare,
-            $marketShares,
-        );
+        // A model whose growth covered every line on one plant covers its main segment's alone once the books open, so
+        // each segment's market growth is read with the books open, and the main record's path change is folded into
+        // its anchor: neither the main segment's market nor its trend plant moves the day the books open.
+        $firmGrowth = CorporateMetrics::secularMarketGrowth($stock, $macroState->totalTime);
+        $excessBefore = IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock);
+        $stock->setEarningsMomentumZ(SegmentBooks::open($plant, 1.0, []) + $momentum);
+        $opened = SegmentBooks::open($plant, $firmGrowth, SegmentBooks::marketGrowths($stock, $macroState->totalTime), $firmShare, $marketShares);
         foreach (array_keys($momentum) as $key) {
             if (str_starts_with((string) $key, SegmentOutlook::STATE_TILT)) {
                 unset($momentum[$key]);
             }
         }
         $stock->setEarningsMomentumZ($opened + $momentum);
-        $this->industryShareLedger?->openSegmentBooks($stock, $plant[Segments::MAIN] ?? 0.0);
+        $this->industryShareLedger?->openSegmentBooks($stock, $plant[Segments::MAIN] ?? 0.0, $macroState->totalTime, $excessBefore, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
+    }
+
+    /**
+     * Brings in a segment its model opens on a path of its own once the path opens (OperatingStrategyInterface::
+     * resolveSegmentPath()): it takes the share of the plant its expected sales call for from the main segment, whose
+     * plant built it, so the company's plant is unchanged; a market at its share of its industry's, as a segment does
+     * when the books open; and margin and turnover against the main segment's as its lore sets them. A segment once
+     * sold keeps its empty place and does not come back.
+     */
+    private function enterPathSegments(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $macroState = $ctx->macroState;
+        foreach (SegmentBooks::industries($stock) as $segment => $industry) {
+            $momentum = $stock->getEarningsMomentumZ() ?? [];
+            $plant = SegmentBooks::plant($momentum);
+            $path = $plant === null || isset($plant[$segment]) ? null : $ctx->strategy->resolveSegmentPath($stock, $segment);
+            if ($path === null) {
+                continue;
+            }
+
+            $firmShare = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()), $macroState);
+            $market = $this->industryShareLedger?->resolveIndustryMarketRevenue(
+                $industry,
+                $stock->getTicker(),
+                $macroState,
+                IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor($industry), $stock),
+                $ctx->tickCount,
+                $ctx->ticksPerYear,
+            );
+            $stock->setEarningsMomentumZ(SegmentBooks::enter(
+                $stock->getTicker(),
+                $momentum,
+                $segment,
+                $path['share'],
+                CorporateMetrics::secularMarketGrowth($stock, $macroState->totalTime),
+                SegmentBooks::marketGrowths($stock, $macroState->totalTime)[$segment] ?? 1.0,
+                $firmShare,
+                $market === null ? 0.0 : SegmentBooks::entryMarketShare($path['share'] * (float) $stock->getTotalRevenue(), $market, $firmShare),
+            ) + $momentum);
+        }
     }
 
     /**

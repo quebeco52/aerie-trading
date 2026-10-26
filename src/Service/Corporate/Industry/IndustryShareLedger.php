@@ -192,7 +192,7 @@ class IndustryShareLedger
      * share; zero for a firm the ledger has not seen them from yet.
      *
      * @param array<string, mixed>|null $record
-     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, segment_outlook_gap?: float, books_main_share?: float}
+     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float}
      */
     private static function carriedFields(?array $record): array
     {
@@ -208,15 +208,17 @@ class IndustryShareLedger
     /**
      * What a record carries for a company in several markets: on one plant, how far its blended outlook sits from its
      * industry's; with plant by segment, the main record's share of the plant its books opened at, so the opening is
-     * applied once. A company in one market carries nothing, so its record is unchanged.
+     * applied once, and a segment's own path where its model plans one. A company in one market carries nothing, so
+     * its record is unchanged.
      *
      * @param array<string, mixed>|null $record
-     * @return array{segment_outlook_gap?: float, books_main_share?: float}
+     * @return array{segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float}
      */
     private static function carriedMarks(?array $record): array
     {
         return (isset($record['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $record['segment_outlook_gap']] : [])
-            + (isset($record['books_main_share']) ? ['books_main_share' => (float) $record['books_main_share']] : []);
+            + (isset($record['books_main_share']) ? ['books_main_share' => (float) $record['books_main_share']] : [])
+            + (isset($record['path']) ? ['path' => (float) $record['path'], 'anchor_path' => (float) ($record['anchor_path'] ?? $record['path'])] : []);
     }
 
     /**
@@ -322,6 +324,7 @@ class IndustryShareLedger
      * resolveIndustrySupply() for one segment of a company that keeps its plant by segment: its plant, struck against
      * its own industry's demand, among that industry's firms.
      *
+     * @param float|null $path The log level of the segment's own path where its model plans one (ownPathFactor()).
      * @return array{roster: float, fringe: float}|null
      */
     public function resolveSegmentSupply(
@@ -335,11 +338,12 @@ class IndustryShareLedger
         float $secularExcessGrowth,
         int $tick,
         int $ticksPerYear,
+        ?float $path = null,
     ): ?array {
         $address = self::segmentAddress($stock, $segment);
         $balance = $address === null
             ? null
-            : $this->recordAndBalanceAt($address[0], $address[1], max(1.0, $segmentRevenue), null, $annualCapacity, $addressableShare, $trendNominalGdp, $totalTime, $secularExcessGrowth, $tick, $ticksPerYear);
+            : $this->recordAndBalanceAt($address[0], $address[1], max(1.0, $segmentRevenue), null, $annualCapacity, $addressableShare, $trendNominalGdp, $totalTime, $secularExcessGrowth, $tick, $ticksPerYear, $path);
 
         return $balance === null ? null : [
             'roster' => max($balance['roster_supply'], self::MIN_INDUSTRY_CAPACITY_RATIO - $balance['fringe_supply']),
@@ -350,6 +354,7 @@ class IndustryShareLedger
     /**
      * @param float|null $segmentGap How far a company in several markets on one plant reads its blend above its
      *                               industry's outlook; null for any other record.
+     * @param float|null $path       The log level of a segment's own path; null for a record that follows its industry.
      * @return array{supply_over_demand: float, roster_supply: float, fringe_supply: float, installed_capacity: float, trend_capacity: float, roster_trend_share: float}|null
      */
     private function recordAndBalanceAt(
@@ -364,6 +369,7 @@ class IndustryShareLedger
         float $secularExcessGrowth,
         int $tick,
         int $ticksPerYear,
+        ?float $path = null,
     ): ?array {
         if ($annualCapacity <= 0.0 || $addressableShare <= 0.0 || $trendNominalGdp <= 0.0) {
             return null;
@@ -374,6 +380,10 @@ class IndustryShareLedger
         $hasAnchor = $own !== null && (float) ($own['anchor_capacity_share'] ?? 0.0) > 0.0;
         $outlook = $this->outlook($industry);
         $segmentGap = $segmentGap === null ? [] : ['segment_outlook_gap' => $segmentGap];
+        // A path is struck with the anchor, so the record's plant starts on its trend wherever the path then stands; a
+        // report that brings none keeps the one the record has.
+        $path ??= isset($own['path']) ? (float) $own['path'] : null;
+        $ownPath = $path === null ? [] : ['path' => $path, 'anchor_path' => $hasAnchor ? (float) ($own['anchor_path'] ?? $path) : $path];
 
         // The anchor is struck once, the first time the ledger prices the firm: its plant then is trend
         // plant, and its plant over its share is the market it sells into as the public then saw it. Entry is
@@ -389,7 +399,7 @@ class IndustryShareLedger
             'addressable_share'     => min(1.0, $addressableShare),
             'tick'                  => $tick,
             'consumed_tick'         => (int) ($own['consumed_tick'] ?? $tick),
-        ] + $segmentGap + (isset($own['books_main_share']) ? ['books_main_share' => (float) $own['books_main_share']] : []);
+        ] + $segmentGap + $ownPath + (isset($own['books_main_share']) ? ['books_main_share' => (float) $own['books_main_share']] : []);
         $this->store->writeRecord($industry, $ticker, $record);
         $records[$ticker] = $record;
 
@@ -426,7 +436,7 @@ class IndustryShareLedger
 
         $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, $industry));
 
-        return log($anchorShare * $growth / $capacity);
+        return log($anchorShare * $growth * self::ownPathFactor($own) / $capacity);
     }
 
     /**
@@ -631,7 +641,7 @@ class IndustryShareLedger
             }
 
             $growth = self::trendFactor($record, $trendNominalGdp, $secularExcessGrowth, $totalTime, $outlook['belief'] + (float) ($record['segment_outlook_gap'] ?? 0.0));
-            $trendPlant = (float) $record['anchor_capacity_share'] * $growth;
+            $trendPlant = (float) $record['anchor_capacity_share'] * $growth * self::ownPathFactor($record);
             $trendDemand = (float) $record['anchor_demand_share'] * $growth;
             $capacity = max(0.0, (float) $record['capacity']);
 
@@ -639,7 +649,7 @@ class IndustryShareLedger
             $trendCapacity += $trendPlant;
             $excess += ($capacity - $trendPlant) / max(1.0, $trendDemand);
             $rosterSupply += $capacity / max(1.0, $trendDemand * $surprise);
-            // Trend plant over trend demand is the anchor share itself: the growth factor cancels.
+            // Trend plant over trend demand is the anchor share on the record's own path: the growth factor cancels.
             $rosterTrendShare += $trendDemand > 0.0 ? $trendPlant / $trendDemand : 0.0;
         }
 
@@ -676,6 +686,18 @@ class IndustryShareLedger
     private function recordBelief(array $record, string $industry): float
     {
         return $this->outlook($industry)['belief'] + (float) ($record['segment_outlook_gap'] ?? 0.0);
+    }
+
+    /**
+     * How far a segment whose model plans its own path (OperatingStrategyInterface::segmentPath()) has moved along it
+     * since its anchor: its trend plant, and so its share of the market it sells into, rides the path while that market
+     * grows as its industry's. One for any other record.
+     *
+     * @param ShareRecord $record
+     */
+    private static function ownPathFactor(array $record): float
+    {
+        return exp((float) ($record['path'] ?? 0.0) - (float) ($record['anchor_path'] ?? $record['path'] ?? 0.0));
     }
 
     /**
@@ -783,7 +805,7 @@ class IndustryShareLedger
 
     /**
      * Each anchored firm's trend share of the market: its anchor plant over its anchor market, which only a
-     * deal moves. This firm always; a peer while its record is under a year old.
+     * deal moves, along its own path where it has one. This firm always; a peer while its record is under a year old.
      *
      * @return array<string, float>
      */
@@ -798,7 +820,7 @@ class IndustryShareLedger
             if ($peerTicker !== $ticker && $tick - $record['tick'] > $ticksPerYear) {
                 continue;
             }
-            $shares[(string) $peerTicker] = (float) $record['anchor_capacity_share'] / $demandShare;
+            $shares[(string) $peerTicker] = (float) $record['anchor_capacity_share'] * self::ownPathFactor($record) / $demandShare;
         }
 
         return $shares;
@@ -885,9 +907,9 @@ class IndustryShareLedger
             return;
         }
 
-        // Every segment's plant leaves its industry with the company.
+        // Every segment's plant leaves its industry with the company; a segment sold is the buyer's plant now.
         foreach (array_keys(SegmentBooks::industries($stock)) as $segment) {
-            $address = self::segmentAddress($stock, $segment);
+            $address = SegmentBooks::holdsPlant($stock, $segment) ? self::segmentAddress($stock, $segment) : null;
             if ($address !== null) {
                 $this->retireRecord($address[0], $address[1]);
             }
@@ -954,9 +976,9 @@ class IndustryShareLedger
     public function recordDivestedFraction(Stock $stock, float $fraction, MacroStateDTO $macroState, float $secularExcessGrowth): void
     {
         $fraction = max(0.0, min(1.0, $fraction));
-        // A division sold off pro rata takes the same slice of every segment's plant.
+        // A division sold off pro rata takes the same slice of every segment's plant it still holds.
         foreach (SegmentBooks::industries($stock) as $segment => $industry) {
-            $address = self::segmentAddress($stock, $segment);
+            $address = SegmentBooks::holdsPlant($stock, $segment) ? self::segmentAddress($stock, $segment) : null;
             $own = $address === null ? null : ($this->store->readIndustry($address[0])[$address[1]] ?? null);
             if ($address === null || $own === null) {
                 continue;
@@ -976,9 +998,14 @@ class IndustryShareLedger
      * of its main record, which until now carried the whole company: the main record keeps its plant share of both,
      * so its share of its own market, and its excess over trend per unit of that market, stay where they were. The
      * other segments anchor afresh in their own industries at their first pricing. The blend's gap leaves with them,
-     * folded into the anchor's outlook so the main record's trend path does not move.
+     * folded into the anchor's outlook so the main record's trend path does not move; so does any change in the secular
+     * rate the record grows by, where the company's model grew all its lines on one plant and now grows the main
+     * segment's alone.
+     *
+     * @param float $excessBefore The secular excess the main record grew by on one plant.
+     * @param float $excessAfter  The one it grows by with the books open.
      */
-    public function openSegmentBooks(Stock $stock, float $mainPlantShare): void
+    public function openSegmentBooks(Stock $stock, float $mainPlantShare, float $totalTime = 0.0, float $excessBefore = 0.0, float $excessAfter = 0.0): void
     {
         $own = $this->readOwnRecord($stock);
         // Opened once: a report replayed after its tick rolled back finds the main record already split.
@@ -990,7 +1017,10 @@ class IndustryShareLedger
         foreach (['anchor_capacity_share', 'anchor_demand_share', 'capacity', 'revenue'] as $field) {
             $own[$field] = (float) ($own[$field] ?? 0.0) * $share;
         }
-        $own['anchor_outlook'] = (float) ($own['anchor_outlook'] ?? 0.0) - (float) ($own['segment_outlook_gap'] ?? 0.0);
+        $anchorTime = (float) ($own['anchor_time'] ?? 0.0);
+        $pathChange = TimeSeries::fadedExcessIntegral($excessBefore, $anchorTime, $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)
+            - TimeSeries::fadedExcessIntegral($excessAfter, $anchorTime, $totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
+        $own['anchor_outlook'] = (float) ($own['anchor_outlook'] ?? 0.0) - (float) ($own['segment_outlook_gap'] ?? 0.0) - $pathChange;
         $own['books_main_share'] = $share;
         unset($own['segment_outlook_gap']);
 
@@ -1016,7 +1046,7 @@ class IndustryShareLedger
             return;
         }
 
-        $growth = self::trendFactor($own, $trendNominalGdp, $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, $industry));
+        $growth = self::trendFactor($own, $trendNominalGdp, $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, $industry)) * self::ownPathFactor($own);
         $own['anchor_capacity_share'] = max(0.0, (float) $own['anchor_capacity_share'] + ($capacityDelta / $growth));
         $own['capacity'] = max(0.0, (float) $own['capacity'] + $capacityDelta);
 
