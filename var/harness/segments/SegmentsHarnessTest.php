@@ -223,6 +223,13 @@ final class SegmentsHarnessTest extends BoardRun
         $storeId = 'App\\Service\\Corporate\\Industry\\IndustryShareStoreInterface';
         $store = static::getContainer()->get($storeId);
         $plan = App\Data\Company\Segments::forTicker($ticker);
+        // Venture state (5b): any momentum key for an entered segment (':x:') or pending/learning plant, on any firm.
+        foreach (array_keys($z) as $k) {
+            if (str_contains((string) $k, ':x:') || str_contains((string) $k, 'segment_pending') || str_contains((string) $k, 'segment_learning')) {
+                $this->segLeaks['venture'] = ($this->segLeaks['venture'] ?? 0) + 1;
+                break;
+            }
+        }
         if ($plan === null) {
             ++$this->segLeaks['checked'];
             foreach (array_keys($z) as $k) {

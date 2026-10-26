@@ -8,6 +8,7 @@ use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FinancialConstants;
@@ -136,8 +137,11 @@ class IndustryShareLedger
      *
      * @param float $addressableShare The firm's share of the market it sells into; sizes the market its gain came out
      *                                of.
+     * @param array{margin: float, turnover: float, price: float}|null $economics What its plant earned there: its
+     *                                operating margin at the balanced price, its annual capital turnover and the price
+     *                                it sold at.
      */
-    public function recordIdiosyncraticGain(Stock $stock, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick): void
+    public function recordIdiosyncraticGain(Stock $stock, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick, ?array $economics = null): void
     {
         $industry = $stock->getIndustry();
         $ticker = $stock->getTicker();
@@ -145,22 +149,24 @@ class IndustryShareLedger
             return;
         }
 
-        $this->gainAt($industry, $ticker, $annualRevenue, $gainFraction, $addressableShare, $tick);
+        $this->gainAt($industry, $ticker, $annualRevenue, $gainFraction, $addressableShare, $tick, $economics);
     }
 
     /**
      * Books one segment's revenue and gain in its industry for a company that keeps its plant by segment: the segment's
      * revenue only, so the company's sales are counted once across its industries.
      */
-    public function recordSegmentGain(Stock $stock, string $segment, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick): void
+    /** @param array{margin: float, turnover: float, price: float}|null $economics As recordIdiosyncraticGain(). */
+    public function recordSegmentGain(Stock $stock, string $segment, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick, ?array $economics = null): void
     {
         $address = self::segmentAddress($stock, $segment);
         if ($address !== null) {
-            $this->gainAt($address[0], $address[1], $annualRevenue, $gainFraction, $addressableShare, $tick);
+            $this->gainAt($address[0], $address[1], $annualRevenue, $gainFraction, $addressableShare, $tick, $economics);
         }
     }
 
-    private function gainAt(string $industry, string $ticker, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick): void
+    /** @param array{margin: float, turnover: float, price: float}|null $economics */
+    private function gainAt(string $industry, string $ticker, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick, ?array $economics = null): void
     {
         $existing = $this->store->readIndustry($industry)[$ticker] ?? null;
         $this->store->writeRecord($industry, $ticker, [
@@ -168,6 +174,7 @@ class IndustryShareLedger
             'gain'              => max(-self::MAX_SHARE_DRAIN_PER_REPORT, min(self::MAX_SHARE_DRAIN_PER_REPORT, $gainFraction)),
             'capacity'          => (float) ($existing['capacity'] ?? 0.0),
             ...self::carriedFields($existing),
+            ...($economics ?? []),
             'addressable_share' => max(0.0, min(1.0, $addressableShare)),
             'tick'              => $tick,
             'consumed_tick'     => (int) ($existing['consumed_tick'] ?? $tick),
@@ -192,7 +199,7 @@ class IndustryShareLedger
      * share; zero for a firm the ledger has not seen them from yet.
      *
      * @param array<string, mixed>|null $record
-     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float}
+     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float, margin?: float, turnover?: float, price?: float, entry_offset?: float, entry_time?: float}
      */
     private static function carriedFields(?array $record): array
     {
@@ -208,17 +215,33 @@ class IndustryShareLedger
     /**
      * What a record carries for a company in several markets: on one plant, how far its blended outlook sits from its
      * industry's; with plant by segment, the main record's share of the plant its books opened at, so the opening is
-     * applied once, and a segment's own path where its model plans one. A company in one market carries nothing, so
-     * its record is unchanged.
+     * applied once, and a segment's own path where its model plans one; and what any record's plant earns and how it
+     * entered (peerMarks()).
      *
      * @param array<string, mixed>|null $record
-     * @return array{segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float}
+     * @return array{segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float, margin?: float, turnover?: float, price?: float, entry_offset?: float, entry_time?: float}
      */
     private static function carriedMarks(?array $record): array
     {
         return (isset($record['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $record['segment_outlook_gap']] : [])
             + (isset($record['books_main_share']) ? ['books_main_share' => (float) $record['books_main_share']] : [])
-            + (isset($record['path']) ? ['path' => (float) $record['path'], 'anchor_path' => (float) ($record['anchor_path'] ?? $record['path'])] : []);
+            + (isset($record['path']) ? ['path' => (float) $record['path'], 'anchor_path' => (float) ($record['anchor_path'] ?? $record['path'])] : [])
+            + self::peerMarks($record);
+    }
+
+    /**
+     * What a record's plant earns, as its last report filed it: its margin at the balanced price, its capital turnover
+     * and the price it sold at, which a firm entering the industry benchmarks itself against (resolvePeerEconomics());
+     * and for plant built into the industry from outside it, the share of the market the fringe has yet to give up to
+     * it, and when it entered (capacityBalance()).
+     *
+     * @param array<string, mixed>|null $record
+     * @return array{margin?: float, turnover?: float, price?: float, entry_offset?: float, entry_time?: float}
+     */
+    private static function peerMarks(?array $record): array
+    {
+        return (isset($record['margin']) ? ['margin' => (float) $record['margin'], 'turnover' => (float) ($record['turnover'] ?? 0.0), 'price' => (float) ($record['price'] ?? 1.0)] : [])
+            + (isset($record['entry_offset']) ? ['entry_offset' => (float) $record['entry_offset'], 'entry_time' => (float) ($record['entry_time'] ?? 0.0)] : []);
     }
 
     /**
@@ -399,7 +422,7 @@ class IndustryShareLedger
             'addressable_share'     => min(1.0, $addressableShare),
             'tick'                  => $tick,
             'consumed_tick'         => (int) ($own['consumed_tick'] ?? $tick),
-        ] + $segmentGap + $ownPath + (isset($own['books_main_share']) ? ['books_main_share' => (float) $own['books_main_share']] : []);
+        ] + $segmentGap + $ownPath + (isset($own['books_main_share']) ? ['books_main_share' => (float) $own['books_main_share']] : []) + self::peerMarks($own);
         $this->store->writeRecord($industry, $ticker, $record);
         $records[$ticker] = $record;
 
@@ -460,6 +483,36 @@ class IndustryShareLedger
     }
 
     /**
+     * What an industry's firms earn on their plant, as a firm entering it from outside benchmarks itself: the margin,
+     * capital turnover and price their fresh records filed (under a year old), over their revenue capacity and so the
+     * industry's as a whole (the turnover is its capacity over its plant), leaving out the entrant's own. Null where no
+     * firm in the industry has filed them.
+     *
+     * @return array{margin: float, turnover: float, price: float}|null
+     */
+    public function resolvePeerEconomics(string $industry, string $excludedTicker, int $tick, int $ticksPerYear): ?array
+    {
+        $capacity = 0.0;
+        $plant = 0.0;
+        $income = 0.0;
+        $sales = 0.0;
+        foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
+            $peerCapacity = max(0.0, (float) $record['capacity']);
+            $turnover = (float) ($record['turnover'] ?? 0.0);
+            if (!isset($record['margin']) || $peerCapacity <= 0.0 || $turnover <= 0.0 || $tick - $record['tick'] > $ticksPerYear
+                || SegmentBooks::ownerOf((string) $peerTicker) === $excludedTicker) {
+                continue;
+            }
+            $capacity += $peerCapacity;
+            $plant += $peerCapacity / $turnover;
+            $income += $peerCapacity * $record['margin'];
+            $sales += $peerCapacity * (float) ($record['price'] ?? 1.0);
+        }
+
+        return $capacity > 0.0 && $plant > 0.0 ? ['margin' => $income / $capacity, 'turnover' => $capacity / $plant, 'price' => $sales / $capacity] : null;
+    }
+
+    /**
      * The level the public expects the firm's demand to reach, in log against its path: its industry's outlook (0 if
      * untracked), or for a company in several markets the blend of its segments' at the shares its last report filed.
      */
@@ -480,14 +533,13 @@ class IndustryShareLedger
      */
     public function resolveSegmentBeliefs(Stock $stock): ?array
     {
-        $plan = Segments::forTicker($stock->getTicker());
-        if ($plan === null) {
+        if (!SegmentBooks::keepsBooks($stock)) {
             return null;
         }
 
-        $beliefs = [Segments::MAIN => $this->outlook((string) $stock->getIndustry())['belief']];
-        foreach ($plan['segments'] as $key => $segment) {
-            $beliefs[$key] = $this->outlook($segment['industry'])['belief'];
+        $beliefs = [];
+        foreach (SegmentBooks::industries($stock) as $segment => $industry) {
+            $beliefs[$segment] = $this->outlook($industry)['belief'];
         }
 
         return $beliefs;
@@ -609,7 +661,8 @@ class IndustryShareLedger
      * behind it. Trend plant and market grow by trendFactor(), so a revision of the outlook moves both and leaves the
      * believed balance where it was. Against the TRUE demand the roster supplies its plant over each firm's market at
      * the true level, and the fringe the plant it has built toward the belief; at an outlook of zero the two sum to the
-     * believed balance.
+     * believed balance. Plant built into the industry from outside it adds to supply: the fringe yields it its share of
+     * the market only as fast as the fringe builds (entry_offset).
      *
      * @param array<string, ShareRecord> $records
      * @param array{truth: float, belief: float, fringe: float} $outlook
@@ -630,6 +683,7 @@ class IndustryShareLedger
         $trendCapacity = 0.0;
         $rosterTrendShare = 0.0;
         $rosterSupply = 0.0;
+        $entryOffset = 0.0;
         $surprise = exp($outlook['truth'] - $outlook['belief']);
 
         foreach ($records as $peerTicker => $record) {
@@ -651,12 +705,14 @@ class IndustryShareLedger
             $rosterSupply += $capacity / max(1.0, $trendDemand * $surprise);
             // Trend plant over trend demand is the anchor share on the record's own path: the growth factor cancels.
             $rosterTrendShare += $trendDemand > 0.0 ? $trendPlant / $trendDemand : 0.0;
+            $entryOffset += (float) ($record['entry_offset'] ?? 0.0)
+                * exp(-CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED * max(0.0, $totalTime - (float) ($record['entry_time'] ?? $totalTime)));
         }
 
         return [
             'supply_over_demand' => 1.0 + $excess,
             'roster_supply' => $rosterSupply,
-            'fringe_supply' => (1.0 - min(1.0, $rosterTrendShare)) * exp($outlook['fringe'] - $outlook['truth']),
+            'fringe_supply' => (1.0 - min(1.0, max(0.0, $rosterTrendShare - $entryOffset))) * exp($outlook['fringe'] - $outlook['truth']),
             'installed_capacity' => $installed,
             'trend_capacity' => $trendCapacity,
             'roster_trend_share' => min(1.0, $rosterTrendShare),
@@ -907,9 +963,11 @@ class IndustryShareLedger
             return;
         }
 
-        // Every segment's plant leaves its industry with the company; a segment sold is the buyer's plant now.
+        // Every segment's plant leaves its industry with the company, and so does plant it was still building there; a
+        // segment sold is the buyer's plant now.
+        $pending = SegmentBooks::pending($stock->getEarningsMomentumZ() ?? []);
         foreach (array_keys(SegmentBooks::industries($stock)) as $segment) {
-            $address = SegmentBooks::holdsPlant($stock, $segment) ? self::segmentAddress($stock, $segment) : null;
+            $address = SegmentBooks::holdsPlant($stock, $segment) || isset($pending[$segment]) ? self::segmentAddress($stock, $segment) : null;
             if ($address !== null) {
                 $this->retireRecord($address[0], $address[1]);
             }
@@ -1025,6 +1083,40 @@ class IndustryShareLedger
         unset($own['segment_outlook_gap']);
 
         $this->store->writeRecord((string) $stock->getIndustry(), $stock->getTicker(), $own);
+    }
+
+    /**
+     * Anchors the record of a segment a company starts building into a new industry: its trend plant is the plant it
+     * builds, none of it installed yet, at its share of the industry's market. That plant adds to the industry's supply
+     * as it is placed in service, since the fringe yields it its share of the market only as fast as the fringe builds
+     * (entry_offset; capacityBalance()); bought plant was the fringe's already and needs no such record.
+     *
+     * @param float $annualCapacity   The revenue its plant will earn a year at full use and the balanced price.
+     * @param float $addressableShare Its share of its industry's market once built.
+     */
+    public function openVentureRecord(Stock $stock, string $segment, float $annualCapacity, float $addressableShare, MacroStateDTO $macroState, int $tick): void
+    {
+        $address = self::segmentAddress($stock, $segment);
+        $trendNominalGdp = self::trendNominalGdp($macroState);
+        if ($address === null || $annualCapacity <= 0.0 || $addressableShare <= 0.0 || $trendNominalGdp <= 0.0) {
+            return;
+        }
+
+        $share = min(1.0, $addressableShare);
+        $this->store->writeRecord($address[0], $address[1], [
+            'revenue'               => 0.0,
+            'gain'                  => 0.0,
+            'capacity'              => 0.0,
+            'anchor_capacity_share' => $annualCapacity / $trendNominalGdp,
+            'anchor_demand_share'   => $annualCapacity / ($share * $trendNominalGdp),
+            'anchor_time'           => $macroState->totalTime,
+            'anchor_outlook'        => $this->outlook($address[0])['belief'],
+            'entry_offset'          => $share,
+            'entry_time'            => $macroState->totalTime,
+            'addressable_share'     => $share,
+            'tick'                  => $tick,
+            'consumed_tick'         => $tick,
+        ]);
     }
 
     /**

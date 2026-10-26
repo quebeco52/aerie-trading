@@ -11,6 +11,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Segment\SegmentBooks;
+use App\Service\Corporate\Segment\SegmentEntry;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\MathUtility;
 use App\Service\Model\StreamContext;
@@ -485,6 +486,92 @@ class SegmentBooksTest extends TestCase
         $this->assertEqualsWithDelta(0.015 / (0.055 + 0.015 + 0.03), $shares['income'], 1e-12);
         $triv = (new Stock())->setTicker('TRIV')->setIndustry('Conglomerates');
         $this->assertSame('industrial', SegmentBooks::weakestSegment($triv->setEarningsMomentumZ($momentum)));
+    }
+
+    /**
+     * A company in one market that starts building into another keeps books from then on: the new segment is known by
+     * its industry while its plant is still under construction, holds no plant share until some is in service, carries
+     * the economics it will earn once learned and how far short of them it starts, and its one revenue line is its own.
+     */
+    public function testACompanyEnteringAnIndustryKeepsItByName(): void
+    {
+        $segment = Segments::enteredKey('Computer Hardware');
+        $loon = (new Stock())->setTicker('LOON')->setIndustry('Telecom Services');
+        $this->assertFalse(SegmentBooks::keepsBooks($loon));
+        $loon->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 1.0], 1.0, [])
+            + SegmentBooks::startVenture($segment, 300.0, 0.05, 1.0, 1.0, 0.1, 0.0, 0.08, 1.5, 2.5));
+
+        $momentum = $loon->getEarningsMomentumZ() ?? [];
+        $this->assertTrue(SegmentBooks::keepsBooks($loon));
+        $this->assertSame([Segments::MAIN => 'Telecom Services', $segment => 'Computer Hardware'], SegmentBooks::industries($loon));
+        $this->assertSame([Segments::MAIN => 1.0], SegmentBooks::plant($momentum), 'no plant until some is in service');
+        $this->assertSame([$segment => 300.0], SegmentBooks::pending($momentum));
+        $this->assertSame(0.08, $momentum[SegmentBooks::STATE_MARGIN . $segment] ?? null);
+        $this->assertSame(2.5, $momentum[SegmentBooks::STATE_LEARNING . $segment] ?? null);
+        $this->assertEqualsWithDelta(0.05, (float) ($momentum[SegmentBooks::STATE_MARKET . $segment] ?? 0.0), 1e-12, 'the company\'s share of its new market');
+        $this->assertSame('Computer Hardware', SegmentBooks::label($loon, $segment));
+        $this->assertSame($segment, Segments::segmentOf('LOON', $segment));
+        $this->assertSame('Computer Hardware', \App\Data\Company\RevenueStreams::label($segment));
+
+        // A line it has no model for is never a by-product of the plant it does have.
+        $tern = $this->tern()->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []) + [SegmentBooks::STATE_PENDING . $segment => 300.0]);
+        $this->assertSame(['air_cargo'], SegmentBooks::jointSegments($tern));
+    }
+
+    /**
+     * The model earned the whole quarter on lines it knows; a segment entered in play takes its share of that revenue
+     * as a line of its own and the model's lines give it up in proportion, so the quarter adds up to what was earned. A
+     * seeded segment's share is its lines' own, and nothing is carved for it.
+     */
+    public function testAnEnteredSegmentIsCarvedFromTheQuarterOnce(): void
+    {
+        $segment = Segments::enteredKey('Computer Hardware');
+        $momentum = [SegmentBooks::STATE_TARGET . Segments::MAIN => 0.9, SegmentBooks::STATE_TARGET . $segment => 0.1];
+
+        $lines = SegmentBooks::carveEnteredLines($momentum, ['core_business' => 900.0, 'services' => 100.0]);
+
+        $this->assertEqualsWithDelta(['core_business' => 810.0, 'services' => 90.0, $segment => 100.0], $lines, 1e-9);
+        $this->assertEqualsWithDelta(1_000.0, array_sum($lines), 1e-9);
+        $this->assertEqualsWithDelta([Segments::MAIN => 0.9, $segment => 0.1], SegmentOutlook::shares('LOON', $lines, true), 1e-12);
+        $this->assertSame([], SegmentOutlook::shares('LOON', $lines), 'no books, no segments');
+        $seeded = [SegmentBooks::STATE_TARGET . Segments::MAIN => 0.9, SegmentBooks::STATE_TARGET . 'air_cargo' => 0.1];
+        $this->assertSame(['passenger' => 900.0, 'air_cargo' => 100.0], SegmentBooks::carveEnteredLines($seeded, ['passenger' => 900.0, 'air_cargo' => 100.0]));
+    }
+
+    /**
+     * A venture's plant comes on line as the company's construction does, a quarter of it when a quarter of the queue
+     * is placed in service, and joins its plant share; what is left below what the queue empties whole is placed with
+     * it.
+     */
+    public function testAVenturesPlantComesOnLineWithTheQueue(): void
+    {
+        $segment = Segments::enteredKey('Computer Hardware');
+        $momentum = SegmentBooks::open([Segments::MAIN => 1.0], 1.0, []) + [SegmentBooks::STATE_PENDING . $segment => 40_000.0];
+
+        $state = SegmentBooks::completePending($momentum, 0.25, 100_000.0);
+
+        $this->assertEqualsWithDelta(30_000.0, $state[SegmentBooks::STATE_PENDING . $segment] ?? null, 1e-9);
+        $plant = SegmentBooks::plant($state + $momentum) ?? [];
+        $this->assertEqualsWithDelta(10_000.0 / 110_000.0, $plant[$segment] ?? null, 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($plant), 1e-12);
+
+        $tail = SegmentBooks::completePending([SegmentBooks::STATE_PENDING . $segment => 1_500.0] + $momentum, 0.5, 1_000.0);
+        $this->assertSame(0.0, $tail[SegmentBooks::STATE_PENDING . $segment] ?? null, 'the tail is placed whole');
+        $this->assertSame([], SegmentBooks::completePending(SegmentBooks::open([Segments::MAIN => 1.0], 1.0, []), 0.5, 1_000.0));
+    }
+
+    /**
+     * A venture learns its trade: its shortfall from the margin it will earn fades by e over the learning time, and
+     * while it lasts it costs the company the venture's sales times that margin times the shortfall.
+     */
+    public function testAVentureLearnsItsTrade(): void
+    {
+        $segment = Segments::enteredKey('Computer Hardware');
+        $momentum = [SegmentBooks::STATE_LEARNING . $segment => 2.0, SegmentBooks::STATE_MARGIN . $segment => 0.10, SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.20];
+
+        $this->assertEqualsWithDelta(2.0 / M_E, SegmentBooks::learn($momentum, SegmentEntry::LEARNING_YEARS)[SegmentBooks::STATE_LEARNING . $segment] ?? null, 1e-12);
+        $this->assertEqualsWithDelta(0.05 * 0.10 * 2.0, SegmentBooks::learningDrag($momentum, [Segments::MAIN => 0.95, $segment => 0.05]), 1e-12);
+        $this->assertSame(0.0, SegmentBooks::learningDrag([SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.2], [Segments::MAIN => 1.0]));
     }
 
     private function skylarkAt(float $years, float $mainPlant): Stock

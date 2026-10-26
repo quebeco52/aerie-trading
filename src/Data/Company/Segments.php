@@ -20,6 +20,11 @@ final class Segments
 {
     /** Key of the segment every line not listed belongs to. */
     public const MAIN = 'main';
+    /**
+     * Prefix of the key of a segment a company entered in play, followed by its industry's name; the segment's one
+     * revenue line carries the same key.
+     */
+    public const ENTERED_PREFIX = 'x:';
 
     /**
      * @var array<string, array{main: string, segments: array<string, Segment>}> Ticker => its main segment's name and its other segments.
@@ -132,9 +137,24 @@ final class Segments
         return $economics;
     }
 
-    /** The segment a revenue line belongs to: the listed one, or the main segment. */
+    /** The key of the segment a company enters an industry with. */
+    public static function enteredKey(string $industry): string
+    {
+        return self::ENTERED_PREFIX . $industry;
+    }
+
+    /** The industry of a segment a company entered in play; null for a segment of its seeded books. */
+    public static function enteredIndustry(string $segment): ?string
+    {
+        return str_starts_with($segment, self::ENTERED_PREFIX) ? substr($segment, strlen(self::ENTERED_PREFIX)) : null;
+    }
+
+    /** The segment a revenue line belongs to: an entered segment's own, the listed one, or the main segment. */
     public static function segmentOf(string $ticker, string $stream): string
     {
+        if (self::enteredIndustry($stream) !== null) {
+            return $stream;
+        }
         foreach (self::BY_TICKER[$ticker]['segments'] ?? [] as $key => $segment) {
             if (in_array($stream, $segment['streams'], true)) {
                 return $key;

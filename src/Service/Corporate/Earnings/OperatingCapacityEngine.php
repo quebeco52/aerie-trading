@@ -11,6 +11,7 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBookOpener;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FinancialConstants;
@@ -162,11 +163,13 @@ final class OperatingCapacityEngine
         }
         $this->openSegmentBooks($ctx);
         $this->enterPathSegments($ctx);
+        $this->completeVenturePlant($ctx);
         // A company that keeps plant by segment earns its segments' margins at their own turnovers: its own margin and
         // turnover are their blend at the plant it holds in each, and move as that mix does.
         $economics = $this->resolveSegmentEconomics($ctx, $annualTurnover);
         if ($economics !== null) {
             $assetTurnover = min(self::MAX_QUARTERLY_ASSET_TURNOVER, $economics['turnover'] / 4.0);
+            $ctx->ventureLearningDrag = SegmentBooks::learningDrag($stock->getEarningsMomentumZ() ?? [], $economics['sales']);
         }
 
         // The firm's reach into the market it sells into, on the base the saturation physics uses. The
@@ -285,7 +288,7 @@ final class OperatingCapacityEngine
         $costToEarningAssets = $strategy->getOperatingCostToEarningAssets($stock);
         $structuralCosts = $costToEarningAssets !== null
             ? $ctx->revenueGeneratingCapital * $costToEarningAssets / EarningsEngine::TTM_QUARTERS * ($inputCostMultiplier / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier))
-            : $balancedStructuralRevenue * ($inputCostMultiplier / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin);
+            : $balancedStructuralRevenue * ($inputCostMultiplier / max(self::MIN_PRICING_POWER_DIVISOR, $pricingPowerMultiplier)) * (1.0 - $ctx->stableMargin + $ctx->ventureLearningDrag);
 
         // Carve structural depreciation out of cash operating costs so EBITDA sits above depreciation and EBIT below.
         $ctx->structuralDepreciation = $this->plant->resolveStructuralDepreciation($ctx);
@@ -592,21 +595,17 @@ final class OperatingCapacityEngine
     }
 
     /**
-     * Opens the plant books of a company in several markets at the first report that finds its segments' revenue shares
-     * filed: each segment takes its share of the plant and a market of its own, and the industry ledger moves the other
-     * segments out of the main record. The lean the plan carried on one plant goes.
+     * Opens the plant books of a company whose seeded lines sell into several markets at the first report that finds
+     * their revenue shares filed (SegmentBookOpener).
      */
     private function openSegmentBooks(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
-        $macroState = $ctx->macroState;
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        if (SegmentOutlook::filedShares($momentum) === [] || SegmentBooks::plant($momentum) !== null || !SegmentBooks::keepsBooks($stock)) {
+        if (SegmentOutlook::filedShares($momentum) === [] || SegmentBooks::plant($momentum) !== null || Segments::forTicker($stock->getTicker()) === null) {
             return;
         }
 
-        // Each other segment enters at its share of the market its industry's firms sell into (SegmentBooks::
-        // entryMarketShare()); the main segment keeps the company's share of its own.
         $plant = SegmentBooks::openingPlantShares($stock->getTicker(), $momentum);
         // A segment on its model's own path opens at the share of the sales its path plans: the quarter's share carries
         // the path's surprise, which the model adds again to what the segment's plant sells.
@@ -616,36 +615,30 @@ final class OperatingCapacityEngine
                 $plant = SegmentBooks::reshare($plant, $segment, $path['share']);
             }
         }
-        $firmShare = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()), $macroState);
-        $marketShares = [];
-        foreach (SegmentBooks::industries($stock) as $segment => $industry) {
-            $market = $segment === Segments::MAIN ? null : $this->industryShareLedger?->resolveIndustryMarketRevenue(
-                $industry,
-                $stock->getTicker(),
-                $macroState,
-                IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor($industry), $stock),
-                $ctx->tickCount,
-                $ctx->ticksPerYear,
-            );
-            if ($market !== null) {
-                $marketShares[$segment] = SegmentBooks::entryMarketShare(($plant[$segment] ?? 0.0) * (float) $stock->getTotalRevenue(), $market, $firmShare);
-            }
-        }
+        $this->bookOpener()->open($stock, $ctx->strategy, $ctx->macroState, $ctx->tickCount, $ctx->ticksPerYear, $plant);
+    }
 
-        // A model whose growth covered every line on one plant covers its main segment's alone once the books open, so
-        // each segment's market growth is read with the books open, and the main record's path change is folded into
-        // its anchor: neither the main segment's market nor its trend plant moves the day the books open.
-        $firmGrowth = CorporateMetrics::secularMarketGrowth($stock, $macroState->totalTime);
-        $excessBefore = IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock);
-        $stock->setEarningsMomentumZ(SegmentBooks::open($plant, 1.0, []) + $momentum);
-        $opened = SegmentBooks::open($plant, $firmGrowth, SegmentBooks::marketGrowths($stock, $macroState->totalTime), $firmShare, $marketShares);
-        foreach (array_keys($momentum) as $key) {
-            if (str_starts_with((string) $key, SegmentOutlook::STATE_TILT)) {
-                unset($momentum[$key]);
-            }
+    /** Opens plant books for a company (SegmentBookOpener) on this engine's ledger. */
+    public function bookOpener(): SegmentBookOpener
+    {
+        return new SegmentBookOpener($this->corporateMetrics, $this->industryShareLedger);
+    }
+
+    /**
+     * Places in service the plant a segment entered in play has under construction, at the share of its construction
+     * the company's queue completed this quarter (SegmentBooks::completePending()), and lets each segment built into a
+     * new industry learn its trade for the quarter.
+     */
+    private function completeVenturePlant(EarningsSimulationContext $ctx): void
+    {
+        $stock = $ctx->stock;
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $construction = (float) $stock->getCipBalance() + $ctx->completedCip;
+        $state = SegmentBooks::completePending($momentum, $construction > 0.0 ? $ctx->completedCip / $construction : 1.0, $stock->getNetPpe())
+            + SegmentBooks::learn($momentum, $ctx->dt);
+        if ($state !== []) {
+            $stock->setEarningsMomentumZ($state + $momentum);
         }
-        $stock->setEarningsMomentumZ($opened + $momentum);
-        $this->industryShareLedger?->openSegmentBooks($stock, $plant[Segments::MAIN] ?? 0.0, $macroState->totalTime, $excessBefore, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
     }
 
     /**

@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Industry;
 
+use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\TimeSeries;
 use PHPUnit\Framework\TestCase;
@@ -622,5 +625,71 @@ class IndustryShareLedgerTest extends TestCase
 
         $this->assertSame(2, $ledger->openIndustryRegimes($self, 500, 252)?->members());
         $this->assertNull($ledger->openIndustryRegimes($this->stock('', 1.0, 'Telecom Services'), 500, 252));
+    }
+
+    /**
+     * What a firm's plant earns rides on its record through every write, so a firm entering the industry can read it:
+     * a report's gain files it, and the next pricing keeps it.
+     */
+    public function testWhatAPlantEarnsSurvivesEveryWrite(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $firm = $this->stock('MILL', 1_000.0);
+        $ledger->resolveIndustrySupply($firm, 1_000.0, 0.5, 1.0, 0.0, 0.0, 10, 252);
+        $ledger->recordIdiosyncraticGain($firm, 1_000.0, 0.0, 0.5, 10, ['margin' => 0.12, 'turnover' => 1.5, 'price' => 0.97]);
+        $ledger->resolveIndustrySupply($firm, 1_100.0, 0.5, 1.0, 0.25, 0.0, 73, 252);
+
+        $this->assertSame(
+            ['margin' => 0.12, 'turnover' => 1.5, 'price' => 0.97],
+            $ledger->resolvePeerEconomics('Steel', 'ENTR', 73, 252),
+        );
+    }
+
+    /**
+     * An entrant benchmarks the industry as a whole: margins and prices over the revenue each plant can earn, and
+     * turnover as that revenue over the plant behind it. Its own records and those gone stale are left out.
+     */
+    public function testAnEntrantBenchmarksTheIndustryAsAWhole(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        foreach ([['SMAL', 1_000.0, 0.10, 2.0, 1.00, 300], ['LARG', 3_000.0, 0.20, 1.0, 0.90, 300], ['ENTR', 9_000.0, 0.90, 9.0, 2.00, 300], ['GONE', 9_000.0, 0.90, 9.0, 2.00, 10]] as [$ticker, $capacity, $margin, $turnover, $price, $tick]) {
+            $firm = $this->stock($ticker, $capacity);
+            $ledger->resolveIndustrySupply($firm, $capacity, 0.2, 1.0, 0.0, 0.0, $tick, 252);
+            $ledger->recordIdiosyncraticGain($firm, $capacity, 0.0, 0.2, $tick, ['margin' => $margin, 'turnover' => $turnover, 'price' => $price]);
+        }
+
+        $peers = $ledger->resolvePeerEconomics('Steel', 'ENTR', 300, 252);
+
+        $this->assertNotNull($peers);
+        $this->assertEqualsWithDelta(0.175, $peers['margin'], 1e-12);
+        $this->assertEqualsWithDelta(4_000.0 / 3_500.0, $peers['turnover'], 1e-12);
+        $this->assertEqualsWithDelta(0.925, $peers['price'], 1e-12);
+        $this->assertNull($ledger->resolvePeerEconomics('Copper', 'ENTR', 300, 252));
+    }
+
+    /**
+     * Plant built into an industry from outside it adds to supply: the fringe gives the entrant its share of the market
+     * only as fast as the fringe builds, so the day the venture is anchored the fringe is what it was, and a decade on
+     * it has yielded about half of it.
+     */
+    public function testABuiltVentureAddsToSupplyAndTheFringeYieldsSlowly(): void
+    {
+        $macro = new MacroStateDTO(potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 1.0);
+        $fringe = function (bool $venture, float $years) use ($macro): float {
+            $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+            $incumbent = $this->stock('MILL', 1_000.0);
+            $ledger->resolveIndustrySupply($incumbent, 1_000.0, 0.5, 1.0, 1.0, 0.0, 252, 252);
+            if ($venture) {
+                $entrant = $this->stock('AUTO', 5_000.0, 'Auto Manufacturers');
+                $entrant->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 1.0], 1.0, []) + [SegmentBooks::STATE_PENDING . Segments::enteredKey('Steel') => 100.0]);
+                $ledger->openVentureRecord($entrant, Segments::enteredKey('Steel'), 200.0, 0.1, $macro, 252);
+            }
+
+            return $ledger->resolveIndustrySupply($incumbent, 1_000.0, 0.5, 1.0, 1.0 + $years, 0.0, 300, 252)['fringe'] ?? 0.0;
+        };
+
+        $this->assertEqualsWithDelta($fringe(false, 0.0), $fringe(true, 0.0), 1e-12, 'the fringe has not yet yielded');
+        $decay = exp(-CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED * 10.0);
+        $this->assertEqualsWithDelta($fringe(false, 10.0) - (0.1 * (1.0 - $decay)), $fringe(true, 10.0), 1e-9, 'it yields at the speed it builds');
     }
 }

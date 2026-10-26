@@ -25,10 +25,11 @@ case "$1" in
   wave2pl) BASEV=""; export OVR=$H/ovr_pl ;;  # wave2 + ovr_pl price/load log (refreshed from src 2026-10-26; neutral)
   p5a) BASEV="" ;;  # working tree: phase 5a, capital follows return (head = 526ab166)
   p5b1) BASEV="" ;;  # working tree: one-plant harvest (head = e2e9fb3d)
+  div1) BASEV="" ;;  # working tree: 5b-1 entry infrastructure, should be output-identical (head = f64f5afa)
   econlive) BASEV=""; PATH_GZ="" ;;  # econ on the live macro, for YEARS > 20
   segplain) BASEV=""; SEGV="SEG_OFF=1" ;;
   gapfix) BASEV=""; export OVR=$H/ovr_gap ;;  # working tree + Redis store that reads segment_outlook_gap back
-  *) echo "usage: run.sh head|seg|seg2|p3|p4|p4live|p4c|econ|econlive|econ2|econ2nj|econ3|skyl|wave2|wave2pl|p5a|p5b1|segplain|gapfix <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh head|seg|seg2|p3|p4|p4live|p4c|econ|econlive|econ2|econ2nj|econ3|skyl|wave2|wave2pl|p5a|p5b1|div1|segplain|gapfix <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env MACRO_REPLAY="$PATH_GZ" "$SEGV" BASE="$BASEV" OUTLOOK_SALT=1 SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" IDLE_OUT="$H/runs/$1-$2.idle.json" OUTLOOK_OUT="$H/runs/$1-$2.outlook.json" \

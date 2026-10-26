@@ -217,6 +217,11 @@ class EarningsSimulationContext
      * @var array<string, array{plant: float, sales: float, margin: float, turnover: float, market: float, price: float, load: float, drain: float, growth: float, leftover: float, path?: float, capital_gap?: float, gap?: float, return?: float, builds?: bool, replaced?: float}>
      */
     public array $segments = [];
+    /**
+     * What the segments a company built into new industries still lose while they learn the trade, over its revenue at
+     * the balanced price (SegmentBooks::learningDrag()); a cost the margin the books carry leaves out.
+     */
+    public float $ventureLearningDrag = 0.0;
     /** The plant base a company that keeps plant by segment planned its segments' growth on (net PP&E). */
     public float $segmentPlantBase = 0.0;
     /** The quarter's idiosyncratic demand shock to utilisation. */

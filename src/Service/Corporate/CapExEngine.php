@@ -9,6 +9,10 @@ use App\Entity\Stock;
 
 class CapExEngine
 {
+    // --- Construction in Progress ---
+    /** Construction left below this much (in currency) is placed in service whole: the queue empties exponentially. */
+    public const CIP_SNAP_AMOUNT = 1000.0;
+
     public function allocateGrowthCapEx(Stock $stock, float $amount): void
     {
         $currentCip = (float) $stock->getCipBalance();
@@ -34,7 +38,7 @@ class CapExEngine
         $newlyCompletedAssets = $cipBalance * $completionRate;
 
         // Due to exponential decay, a tiny tail will remain forever unless we snap to zero
-        if ($cipBalance - $newlyCompletedAssets < 1000.0) {
+        if ($cipBalance - $newlyCompletedAssets < self::CIP_SNAP_AMOUNT) {
             $newlyCompletedAssets = $cipBalance;
         }
 

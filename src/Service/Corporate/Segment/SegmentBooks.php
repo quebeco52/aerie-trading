@@ -7,6 +7,7 @@ namespace App\Service\Corporate\Segment;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\Entity\Stock;
+use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Math\FinancialConstants;
@@ -43,6 +44,16 @@ final class SegmentBooks
      * last report, 0 when it did not (CapitalBudgetEngine).
      */
     public const STATE_BUILDS = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_builds:';
+    /**
+     * Carried stream-state key prefix: the plant a segment the company is building into a new industry still has under
+     * construction, in currency; it joins the segment's plant share as it is placed in service.
+     */
+    public const STATE_PENDING = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_pending:';
+    /**
+     * Carried stream-state key prefix: how far a business built into a new industry still falls short of the margin it
+     * will earn once it has learned the trade, as a share of that margin; it fades as the business learns.
+     */
+    public const STATE_LEARNING = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_learning:';
     /** Stream-state key prefix of a line's weight in the mix the plan steers to (StreamContext). */
     private const STREAM_WEIGHT_PREFIX = 'weight:';
 
@@ -50,14 +61,18 @@ final class SegmentBooks
     /** Joins a ticker and a segment into the key of the segment's record in its industry's ledger. */
     public const RECORD_KEY_SEPARATOR = '/';
 
-    /** Whether the company keeps plant by segment: it sells into several markets. */
+    /**
+     * Whether the company keeps plant by segment: its seeded lines sell into several markets, or it has opened books to
+     * enter a new one.
+     */
     public static function keepsBooks(Stock $stock): bool
     {
-        return Segments::forTicker($stock->getTicker()) !== null;
+        return Segments::forTicker($stock->getTicker()) !== null || self::plant($stock->getEarningsMomentumZ() ?? []) !== null;
     }
 
     /**
-     * Each segment's industry, the main segment's first.
+     * Each segment's industry, the main segment's first, then the seeded segments', then those the company entered in
+     * play (Segments::enteredKey()), whether their plant is in service yet or still being built.
      *
      * @return array<string, string>
      */
@@ -67,8 +82,26 @@ final class SegmentBooks
         foreach (Segments::forTicker($stock->getTicker())['segments'] ?? [] as $key => $segment) {
             $industries[$key] = $segment['industry'];
         }
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        foreach ([...array_keys(self::filed($momentum, self::STATE_PLANT)), ...array_keys(self::filed($momentum, self::STATE_PENDING))] as $segment) {
+            $industry = Segments::enteredIndustry((string) $segment);
+            if ($industry !== null) {
+                $industries[(string) $segment] = $industry;
+            }
+        }
 
         return $industries;
+    }
+
+    /** A segment's name as the company reports it: its lore's, or for one entered in play, its industry's. */
+    public static function label(Stock $stock, string $segment): string
+    {
+        $books = Segments::forTicker($stock->getTicker());
+        if ($segment === Segments::MAIN) {
+            return $books['main'] ?? (string) $stock->getIndustry();
+        }
+
+        return $books['segments'][$segment]['label'] ?? Segments::enteredIndustry($segment) ?? $segment;
     }
 
     /** The key of a segment's record in its industry's ledger: the ticker itself for the main segment. */
@@ -741,6 +774,146 @@ final class SegmentBooks
 
         // A segment the model sells nothing in leaves its share to the others.
         return $total > 0.0 ? array_map(static fn(float $weight): float => $weight / $total, $split) : null;
+    }
+
+    /**
+     * The state that starts building a segment into a new industry: its plant under construction until the company's
+     * queue places it in service (completePending()), so it holds no plant share yet; a market in which the plant it
+     * will hold has its share of its industry's (open()); the margin and turnover it will earn once it has learned the
+     * trade; and how far short of that margin it starts (SegmentEntry).
+     *
+     * @param float $construction  The plant it builds, in currency.
+     * @param float $plannedShare  The share of the company's plant that will be once built.
+     * @param float $marketShare   Its share of its industry's market once built, where known.
+     * @param float $learningGap   How far short of its learned margin it starts, as a share of it.
+     * @return array<string, float> Carried state.
+     */
+    public static function startVenture(string $segment, float $construction, float $plannedShare, float $firmMarketGrowth, float $segmentGrowth, float $firmShare, float $marketShare, float $margin, float $turnover, float $learningGap): array
+    {
+        if ($construction <= 0.0 || $plannedShare <= 0.0) {
+            return [];
+        }
+
+        $state = self::open([$segment => $plannedShare], $firmMarketGrowth, [$segment => $segmentGrowth], $firmShare, $marketShare > 0.0 ? [$segment => $marketShare] : []);
+        unset($state[self::STATE_PLANT . $segment]);
+
+        return $state + [
+            self::STATE_PENDING . $segment => $construction,
+            self::STATE_MARGIN . $segment => $margin,
+            self::STATE_TURNOVER . $segment => $turnover,
+            self::STATE_LEARNING . $segment => max(0.0, $learningGap),
+        ];
+    }
+
+    /**
+     * The plant each segment entered in play still has under construction, in currency; those with none left out.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array<string, float>
+     */
+    public static function pending(array $momentum): array
+    {
+        return array_filter(self::filed($momentum, self::STATE_PENDING), static fn(float $amount): bool => $amount > 0.0);
+    }
+
+    /**
+     * The state that places in service part of the plant each segment entered in play has under construction: each
+     * completes the share of its construction the company's whole queue completed this quarter, as the queue is one
+     * pool, and joins the segment's plant share (acquireInto(); a segment's first plant brings its share in). What is
+     * left below what the queue empties whole is placed with it.
+     *
+     * @param array<string, mixed> $momentum
+     * @param float $completedShare The share of the company's construction placed in service this quarter.
+     * @param float $plantBase      The plant the shares are of (net PP&E).
+     * @return array<string, float> Carried state.
+     */
+    public static function completePending(array $momentum, float $completedShare, float $plantBase): array
+    {
+        $pending = self::pending($momentum);
+        if ($pending === []) {
+            return [];
+        }
+
+        $plant = self::plant($momentum) ?? [Segments::MAIN => 1.0];
+        $base = max(0.0, $plantBase);
+        $state = [];
+        foreach ($pending as $segment => $amount) {
+            $placed = $amount * max(0.0, min(1.0, $completedShare));
+            $placed = $amount - $placed < CapExEngine::CIP_SNAP_AMOUNT ? $amount : $placed;
+            $plant = self::acquireInto($plant, $segment, $base, $placed);
+            $base += $placed;
+            $state[self::STATE_PENDING . $segment] = $amount - $placed;
+        }
+        foreach ($plant as $segment => $share) {
+            $state[self::STATE_PLANT . $segment] = $share;
+        }
+
+        return $state;
+    }
+
+    /**
+     * The state that lets each segment built into a new industry learn its trade for dt years (SegmentEntry).
+     *
+     * @param array<string, mixed> $momentum
+     * @return array<string, float> Carried state.
+     */
+    public static function learn(array $momentum, float $dt): array
+    {
+        $state = [];
+        foreach (self::filed($momentum, self::STATE_LEARNING) as $segment => $gap) {
+            $state[self::STATE_LEARNING . $segment] = SegmentEntry::learningLeft($gap, $dt);
+        }
+
+        return $state;
+    }
+
+    /**
+     * What the segments still learning their trade cost the company, over its revenue at the balanced price: each
+     * one's share of the sales times the margin it will earn once learned times how far it still falls short of it.
+     *
+     * @param array<string, mixed> $momentum
+     * @param array<string, float> $sales Segment => its share of the company's revenue at the balanced price.
+     */
+    public static function learningDrag(array $momentum, array $sales): float
+    {
+        $margins = self::filed($momentum, self::STATE_MARGIN);
+        $drag = 0.0;
+        foreach (self::filed($momentum, self::STATE_LEARNING) as $segment => $gap) {
+            $drag += ($sales[$segment] ?? 0.0) * ($margins[$segment] ?? 0.0) * max(0.0, $gap);
+        }
+
+        return $drag;
+    }
+
+    /**
+     * A report's lines with each segment entered in play given its own: the model, which has no line for it, earned the
+     * whole quarter, so the segment takes its share of the quarter's revenue (its target) as one line under its key and
+     * the model's lines give that up in proportion. The revenue is counted once.
+     *
+     * @param array<string, mixed>            $momentum
+     * @param array<string, float|int|string> $streamRevenue
+     * @return array<string, float>
+     */
+    public static function carveEnteredLines(array $momentum, array $streamRevenue): array
+    {
+        $lines = array_map(static fn(float|int|string $amount): float => (float) $amount, $streamRevenue);
+        $entered = array_filter(
+            self::filed($momentum, self::STATE_TARGET),
+            static fn(float $target, string $segment): bool => $target > 0.0 && Segments::enteredIndustry($segment) !== null,
+            ARRAY_FILTER_USE_BOTH,
+        );
+        $carved = array_sum($entered);
+        if ($carved <= 0.0) {
+            return $lines;
+        }
+
+        $revenue = array_sum($lines);
+        $lines = array_map(static fn(float $amount): float => $amount * (1.0 - $carved), $lines);
+        foreach ($entered as $segment => $target) {
+            $lines[$segment] = $revenue * $target;
+        }
+
+        return $lines;
     }
 
     /**

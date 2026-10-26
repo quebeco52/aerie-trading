@@ -243,6 +243,7 @@ final class CapitalBudgetEngine
         $industries = SegmentBooks::industries($stock);
         $joint = SegmentBooks::jointSegments($stock);
         $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $pending = SegmentBooks::pending($momentum);
         $inflation = max(0.0, $ctx->macroState->inflationEma);
         $ctx->segmentPlantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
 
@@ -257,7 +258,12 @@ final class CapitalBudgetEngine
             $gaps[$segment] = $books['gap'] ?? 0.0;
             $plant = $ctx->segmentPlantBase * $books['plant'];
 
-            if (!($books['builds'] ?? true)) {
+            if (($pending[$segment] ?? 0.0) > 0.0) {
+                // A segment still building into a new industry finishes the plant it started before it plans more, and
+                // the plant it is short of until then is the plant it is building.
+                $gaps[$segment] = 0.0;
+                $budgets[$segment] = 0.0;
+            } elseif (!($books['builds'] ?? true)) {
                 // As for the company on one plant: no shortfall is closed by building, and none is priced.
                 $gaps[$segment] = min(0.0, $gaps[$segment]);
                 $budgets[$segment] = 0.0;

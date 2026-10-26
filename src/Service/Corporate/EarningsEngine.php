@@ -671,6 +671,8 @@ class EarningsEngine
         }
         $ctx->actualRevenue = $actuals->actualRevenue;
         $ctx->actualVariableCosts = $actuals->actualVariableCosts;
+        // A segment entered in play earns its share of the quarter as a line of its own, carved from the model's.
+        $streamRevenue = SegmentBooks::carveEnteredLines($ctx->stock->getEarningsMomentumZ() ?? [], $actuals->streamRevenue);
 
         // What this firm just took from (or ceded to) the industry: the part of the surprise that is its
         // OWN. Macro and rival effects were already inside expected revenue; the sector factor was not, and
@@ -680,19 +682,27 @@ class EarningsEngine
         if ($this->industryShareLedger !== null && $ctx->expectedRevenue > 0.0) {
             $firmSurprise = (($revenueWithoutSector ?? $ctx->actualRevenue) - $ctx->expectedRevenue) / $ctx->expectedRevenue;
             if ($ctx->segments === []) {
-                $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount);
+                $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount, [
+                    'margin' => $ctx->stableMargin,
+                    'turnover' => $ctx->assetTurnover * self::TTM_QUARTERS,
+                    'price' => $ctx->industryPriceLevel,
+                ]);
             } else {
                 // Plant kept by segment: each segment's industry books that segment's sales alone, so the company's
                 // revenue is counted once across its industries, and the gain it took there, its own lines' sales over
                 // its share of the plan, less the sector's draw every peer took too.
-                $segmentShares = SegmentOutlook::shares($ctx->stock->getTicker(), $actuals->streamRevenue);
+                $segmentShares = SegmentOutlook::shares($ctx->stock->getTicker(), $streamRevenue, true);
                 $sectorDraw = ($ctx->actualRevenue - ($revenueWithoutSector ?? $ctx->actualRevenue)) / $ctx->expectedRevenue;
                 $momentum = $ctx->stock->getEarningsMomentumZ() ?? [];
                 foreach ($ctx->segments as $segment => $books) {
                     $segmentRevenue = $ctx->actualRevenue * ($segmentShares[$segment] ?? 0.0);
                     $planned = $ctx->expectedRevenue * (float) ($momentum[SegmentBooks::STATE_TARGET . $segment] ?? 0.0);
                     $gain = $planned > 0.0 ? ($segmentRevenue / $planned) - 1.0 - $sectorDraw : $firmSurprise;
-                    $this->industryShareLedger->recordSegmentGain($ctx->stock, $segment, $segmentRevenue * 4.0, $gain, $books['market'], $ctx->tickCount);
+                    $this->industryShareLedger->recordSegmentGain($ctx->stock, $segment, $segmentRevenue * 4.0, $gain, $books['market'], $ctx->tickCount, [
+                        'margin' => $books['margin'],
+                        'turnover' => $books['turnover'],
+                        'price' => $books['price'],
+                    ]);
                 }
             }
         }
@@ -750,7 +760,7 @@ class EarningsEngine
         $streamState[OperatingCapacityEngine::STATE_PRICE_LEVEL_SURPRISE] = $ctx->priceLevelSurprise;
         // A company in several markets files each segment's share of the quarter's revenue, which its next report
         // blends their outlooks at.
-        foreach (SegmentOutlook::shares($ctx->stock->getTicker(), $actuals->streamRevenue) as $segment => $share) {
+        foreach (SegmentOutlook::shares($ctx->stock->getTicker(), $streamRevenue, SegmentBooks::plant($ctx->stock->getEarningsMomentumZ() ?? []) !== null) as $segment => $share) {
             $streamState[SegmentOutlook::STATE_SHARE . $segment] = $share;
         }
         // State the physics does not own (the fixed-asset ledger's capital-goods vintage, rolled forward after the cash
@@ -762,7 +772,7 @@ class EarningsEngine
             }
         }
         $ctx->stock->setEarningsMomentumZ($streamState);
-        $ctx->streamRevenue = $actuals->streamRevenue;
+        $ctx->streamRevenue = $streamRevenue;
         $ctx->scheduledCapex = max(0.0, $actuals->scheduledCapex);
         $ctx->kpis = $actuals->kpis;
         $ctx->kpis['rival_share_drain'] = $ctx->rivalShareDrain;

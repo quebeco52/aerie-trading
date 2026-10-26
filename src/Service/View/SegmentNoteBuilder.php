@@ -16,7 +16,8 @@ use App\Service\Corporate\Segment\SegmentBooks;
  * revenue in the last quarterly report, its operating margin and its share of the company's assets, main segment first.
  * The segments' margins are their own, scaled to the margin the company reported, so at the mix its plant sells their
  * profits add up to its operating profit. Every revenue line lands in exactly one segment, so the segments add up to
- * the lines; a segment sold is gone from the note. Null for a company that sells into a single market.
+ * the lines; a segment sold is gone from the note, and one the company is still building into a new industry shows
+ * with no revenue yet. Null for a company that sells into a single market.
  *
  * @phpstan-type SegmentRow array{label: string, industry: string, outlook: float|null, revenue: float|null, share: float|null, margin: float|null, assets: float|null}
  */
@@ -30,13 +31,12 @@ class SegmentNoteBuilder
     /** @return array{segments: list<SegmentRow>|null} */
     public function build(Stock $stock): array
     {
-        $plan = Segments::forTicker($stock->getTicker());
-        if ($plan === null) {
+        if (!SegmentBooks::keepsBooks($stock)) {
             return ['segments' => null];
         }
 
         $outlooks = [];
-        foreach ([(string) $stock->getIndustry(), ...array_column($plan['segments'], 'industry')] as $industry) {
+        foreach (SegmentBooks::industries($stock) as $industry) {
             $outlooks[$industry] = $this->ledger->describeOutlook($industry)['level'] ?? null;
         }
 
@@ -52,22 +52,24 @@ class SegmentNoteBuilder
      */
     public static function fromReport(Stock $stock, ?CorporateReport $report, array $outlooks = []): ?array
     {
-        $plan = Segments::forTicker($stock->getTicker());
-        if ($plan === null) {
+        if (!SegmentBooks::keepsBooks($stock)) {
             return null;
         }
 
         // A segment the company has sold holds no plant and is no longer reported; nor is a main business that holds
         // none (a conglomerate whose own business is its cash, which earns below the operating line).
-        $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []);
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $plant = SegmentBooks::plant($momentum);
+        $pending = SegmentBooks::pending($momentum);
         $segments = [];
-        if ($plant === null || ($plant[Segments::MAIN] ?? 0.0) > 0.0) {
-            $segments[Segments::MAIN] = ['label' => $plan['main'], 'industry' => (string) $stock->getIndustry(), 'revenue' => 0.0];
-        }
-        foreach ($plan['segments'] as $key => $segment) {
-            if ($plant === null || ($plant[$key] ?? 0.0) > 0.0) {
-                $segments[$key] = ['label' => $segment['label'], 'industry' => $segment['industry'], 'revenue' => 0.0];
+        foreach (SegmentBooks::industries($stock) as $key => $industry) {
+            if ($plant === null || ($plant[$key] ?? 0.0) > 0.0 || ($pending[$key] ?? 0.0) > 0.0) {
+                $segments[$key] = ['label' => SegmentBooks::label($stock, $key), 'industry' => $industry, 'revenue' => 0.0];
             }
+        }
+        // A company in one market whose books are open only for what it entered, all of which it has sold since.
+        if (count($segments) < 2 && Segments::forTicker($stock->getTicker()) === null) {
+            return null;
         }
         foreach ($report?->getRevenueStreams() ?? [] as $stream => $revenue) {
             $key = Segments::segmentOf($stock->getTicker(), (string) $stream);

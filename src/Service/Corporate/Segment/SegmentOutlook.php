@@ -25,15 +25,16 @@ final class SegmentOutlook
     public const STATE_TILT = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_tilt:';
 
     /**
-     * Each segment's share of a report's revenue, main segment included; empty for a company in one market or a report
-     * with no revenue.
+     * Each segment's share of a report's revenue, main segment included; empty for a company in one market that keeps
+     * no segment books, or a report with no revenue.
      *
      * @param array<string, float|int|string> $streamRevenue
+     * @param bool                            $booksOpen     Whether the company keeps plant by segment.
      * @return array<string, float>
      */
-    public static function shares(string $ticker, array $streamRevenue): array
+    public static function shares(string $ticker, array $streamRevenue, bool $booksOpen = false): array
     {
-        if (Segments::forTicker($ticker) === null) {
+        if (Segments::forTicker($ticker) === null && !$booksOpen) {
             return [];
         }
 

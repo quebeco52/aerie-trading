@@ -492,8 +492,7 @@ class DivestitureEngine
         if ($ctx->taxOnSale !== 0.0) {
             $result .= ' (' . WireFormat::money(abs($ctx->gainOnSale - $ctx->taxOnSale)) . ' after tax)';
         }
-        $segment = $ctx->soldSegment === null ? null : (Segments::forTicker($ctx->seller->getTicker())['segments'][$ctx->soldSegment] ?? null);
-        $division = $segment === null ? PrivateCompany::procedural($this->mathUtility)['name'] . ' division' : lcfirst($segment['label']) . ' business';
+        $division = $ctx->soldSegment === null ? PrivateCompany::procedural($this->mathUtility)['name'] . ' division' : lcfirst(SegmentBooks::label($ctx->seller, $ctx->soldSegment)) . ' business';
         $desc = "{$ctx->seller->getName()} sold its {$division} for {$salePrice} in cash, {$result}.";
 
         // The seller's announcement return is what the sale is worth to its shareholders over their stake. The

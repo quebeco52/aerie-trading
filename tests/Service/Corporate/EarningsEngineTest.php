@@ -13,6 +13,7 @@ use App\DTO\DebtHealthDTO;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
@@ -25,6 +26,7 @@ use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\SegmentBookOpener;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\EarningsReportedEvent;
@@ -466,6 +468,128 @@ class EarningsEngineTest extends TestCase
         $perWearKept = static fn(EarningsSimulationContext $ctx): float => $ctx->maintenanceCapex / ($ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $kept($ctx));
         $this->assertLessThan(0.99 * $control->maintenanceCapex, $shrunk->maintenanceCapex);
         $this->assertEqualsWithDelta($perWearKept($control), $perWearKept($shrunk), 1e-9 * $perWearKept($control), 'upkeep is paid on the plant kept');
+    }
+
+    /**
+     * A company in one market reports the same quarters with its plant books open at all its plant in its main segment,
+     * as it opens them to enter another market, as with them closed: the books change who holds the plant, not what it
+     * sells, earns or builds.
+     */
+    public function testOpeningBooksOnOnePlantChangesNothing(): void
+    {
+        $run = function (bool $open): array {
+            $captured = [];
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured[] = $event->getContext();
+            });
+            $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($dispatcher, $ledger);
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+            $stock = $this->buildMatureIndustrial('BOOK');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02, totalTime: 1.0);
+            $tick = EarningsEngine::resolveReportingTick('BOOK', 252);
+            $engine->calculate($stock, $macro, $tick, 252);
+            // A rival that has overbuilt its share puts the industry in a glut, so the price and the share of the plant
+            // that runs both turn on the company's share of its market.
+            $rival = $this->buildMatureIndustrial('RIVL');
+            $ledger->resolveIndustryCapacityRatio($rival, (float) $stock->getTotalRevenue(), 0.5, 1.0, 0.0, 0.0, 1, 252);
+            $ledger->resolveIndustryCapacityRatio($rival, 3.0 * (float) $stock->getTotalRevenue(), 0.5, 1.0, 0.0, 0.0, 2, 252);
+            if ($open) {
+                (new SegmentBookOpener(new CorporateMetrics(), $ledger))->openForEntry($stock, Sectors::strategyFor((string) $stock->getIndustry()), $macro, $tick, 252);
+            }
+            for ($quarter = 1; $quarter <= 4; $quarter++) {
+                $engine->calculate($stock, $macro, $tick + (63 * $quarter), 252);
+            }
+
+            return [$captured, $stock];
+        };
+
+        [$closed, $closedStock] = $run(false);
+        [$opened, $openedStock] = $run(true);
+
+        $this->assertCount(5, $opened);
+        $this->assertNotNull(SegmentBooks::plant($openedStock->getEarningsMomentumZ() ?? []), 'the books stay open');
+        $this->assertSame([Segments::MAIN], array_keys($opened[4]->segments), 'the opened run prices its plant by segment');
+        $this->assertSame([], $closed[4]->segments);
+        $this->assertLessThan(0.99, $closed[1]->industryPriceLevel, 'the fixture needs a glut');
+        foreach ($closed as $quarter => $ctx) {
+            $other = $opened[$quarter];
+            foreach (['expectedRevenue', 'actualRevenue', 'industryPriceLevel', 'plantLoad', 'rivalShareDrain', 'stableMargin', 'assetTurnover', 'maintenanceCapex', 'operatingCapex', 'ebit', 'actualQuarterlyNetIncome'] as $field) {
+                $this->assertEqualsWithDelta($ctx->{$field}, $other->{$field}, 1e-9 * max(1.0, abs($ctx->{$field})), "quarter {$quarter}: {$field}");
+            }
+            // A lender plans no plant; this firm does, so what its plan leaves for the treasury is a figure in both.
+            $this->assertNotNull($ctx->expansionBudget);
+            $this->assertEqualsWithDelta($ctx->expansionBudget, $other->expansionBudget, 1e-9 * max(1.0, abs($ctx->expansionBudget)), "quarter {$quarter}: expansionBudget");
+        }
+        $this->assertEqualsWithDelta($closedStock->getNetPpe(), $openedStock->getNetPpe(), 1e-6 * $closedStock->getNetPpe());
+    }
+
+    /**
+     * A carmaker builds into machinery: its books open with all its plant in cars, the venture's plant comes on line as
+     * the construction queue completes it, and from then on the venture earns its share of each quarter as a line of
+     * its own, carved from the model's so the quarter adds up to what was earned, and books it in its own industry's
+     * ledger. While it learns the trade it costs the company money, but the return its new plant is judged on is the
+     * one it will earn once learned.
+     */
+    public function testAVentureBuiltIntoANewIndustryComesOnLineAndEarnsItsShare(): void
+    {
+        $segment = Segments::enteredKey('Specialty Industrial Machinery');
+        $run = function (float $learningGap) use ($segment): array {
+            $captured = [];
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured[] = $event->getContext();
+            });
+            $store = new InMemoryIndustryShareStore();
+            $ledger = new IndustryShareLedger($store);
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($dispatcher, $ledger);
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+            $stock = $this->buildMatureIndustrial('VENT');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02, totalTime: 1.0);
+            $tick = EarningsEngine::resolveReportingTick('VENT', 252);
+            $engine->calculate($stock, $macro, $tick, 252);
+
+            (new SegmentBookOpener(new CorporateMetrics(), $ledger))->openForEntry($stock, Sectors::strategyFor((string) $stock->getIndustry()), $macro, $tick, 252);
+            $construction = 0.05 * $stock->getNetPpe();
+            $turnover = (float) $stock->getAssetTurnover();
+            $stock->setEarningsMomentumZ(SegmentBooks::startVenture($segment, $construction, $construction / ($stock->getNetPpe() + $construction), 1.0, 1.0, 0.05, 0.0, (float) $stock->getOperatingMargin(), $turnover, $learningGap) + ($stock->getEarningsMomentumZ() ?? []));
+            (new CapExEngine())->allocateGrowthCapEx($stock, $construction);
+            $ledger->openVentureRecord($stock, $segment, $construction * $turnover, 0.05, $macro, $tick);
+            for ($quarter = 1; $quarter <= 6; $quarter++) {
+                $engine->calculate($stock, $macro, $tick + (63 * $quarter), 252);
+            }
+
+            return [$captured, $stock, $store];
+        };
+
+        [$reports, $stock, $store] = $run(2.5);
+        [$learned] = $run(0.0);
+
+        $plantShares = [];
+        foreach (array_slice($reports, 1) as $quarter => $ctx) {
+            $this->assertEqualsWithDelta($ctx->actualRevenue, array_sum($ctx->streamRevenue), 1e-6 * $ctx->actualRevenue, "quarter {$quarter}: the revenue is counted once");
+            $this->assertArrayHasKey($segment, $ctx->segments, "quarter {$quarter}: its plant is in service");
+            // Its share of the quarter: its sales at its own price, load and drain over the company's
+            // (SegmentBooks::aggregate()).
+            $sold = array_map(static fn(array $books): float => $books['sales'] * $books['load'] * $books['price'] * (1.0 + $books['drain']), $ctx->segments);
+            $this->assertEqualsWithDelta($ctx->actualRevenue * $sold[$segment] / array_sum($sold), $ctx->streamRevenue[$segment] ?? 0.0, 1e-6 * $ctx->actualRevenue, "quarter {$quarter}: its line is its share");
+            $plantShares[] = $ctx->segments[$segment]['plant'];
+        }
+        $this->assertGreaterThan(0.0, end($reports)->streamRevenue[$segment] ?? 0.0, 'it earns a line of its own');
+        $this->assertGreaterThan($plantShares[0], $plantShares[count($plantShares) - 1], 'its plant comes on line as the queue completes');
+        $record = $store->readIndustry('Specialty Industrial Machinery')[SegmentBooks::recordKey('VENT', $segment)] ?? null;
+        $this->assertNotNull($record);
+        $this->assertGreaterThan(0.0, $record['revenue'], 'it books its sales in its own industry');
+        $this->assertArrayHasKey('margin', $record);
+
+        $this->assertEqualsWithDelta($reports[0]->assetTurnover, $reports[1]->assetTurnover, 0.02 * $reports[0]->assetTurnover, 'the venture turns its plant as the company does');
+        $this->assertGreaterThan(0.0, $reports[1]->ventureLearningDrag);
+        $this->assertSame(0.0, $learned[1]->ventureLearningDrag);
+        $this->assertLessThan($learned[1]->ebit, $reports[1]->ebit, 'learning the trade costs money');
+        $this->assertSame($learned[1]->segments[$segment]['return'] ?? null, $reports[1]->segments[$segment]['return'] ?? null, 'new plant is judged at the margin it will earn');
     }
 
     /**
@@ -1685,10 +1809,10 @@ class EarningsEngineTest extends TestCase
                 /** @var list<float> */
                 public array $gains = [];
 
-                public function recordIdiosyncraticGain(Stock $stock, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick): void
+                public function recordIdiosyncraticGain(Stock $stock, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick, ?array $economics = null): void
                 {
                     $this->gains[] = $gainFraction;
-                    parent::recordIdiosyncraticGain($stock, $annualRevenue, $gainFraction, $addressableShare, $tick);
+                    parent::recordIdiosyncraticGain($stock, $annualRevenue, $gainFraction, $addressableShare, $tick, $economics);
                 }
             };
             $captured = null;

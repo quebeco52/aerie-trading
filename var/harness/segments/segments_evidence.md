@@ -369,3 +369,13 @@ gaps in 6 of 8 seeds. Gluts unchanged: 10.98% -> 10.94% of firm-quarters (se 0.0
 mean glut price 0.9455 -> 0.9460. Board: all |t| <= 1.5 (defaults+deaths -0.25, se 0.16; maintenance capex/revenue
 -0.0003, se 0.0003). Reports 7754 vs 7760 per seed (one firm death differs), 97 companies both; identities exact;
 8/8 PHPUnit runs pass in each arm.
+
+## 2026-10-26: div1 (5b-1 entry infrastructure) vs f64f5afa, 4 seeds x 20 years: output-identical
+
+    BASE=<scratchpad>/basetree-f64f5afa bin/harness-batch var/harness/segments/run.sh 1-4 head div1
+    python3 var/harness/segments/same.py 1-4 head div1 > div1_n4.out
+
+All 4 seeds byte-identical: run output (secs dropped), quarter log, listener rows (capex, maintenance capex, net
+PP&E, price level, plant load), segment rows (kappa, targets, records), idle rows, deals, defaults, reorganisations,
+y20 caps. 7,760 reports, 97 companies, 1,343 segmented reports per seed in both arms. No venture momentum key and no
+TICKER/x: record in div1.

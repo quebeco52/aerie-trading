@@ -760,8 +760,7 @@ class AcquisitionEngine
     private function finalizeAcquisitionEvent(AcquisitionContext $ctx): array
     {
         $purchasePrice = WireFormat::money($ctx->purchasePrice);
-        $segment = Segments::forTicker($ctx->acquirer->getTicker())['segments'][$ctx->segment] ?? null;
-        $into = $segment === null ? '' : ' for its ' . lcfirst($segment['label']) . ' business';
+        $into = $ctx->segment === Segments::MAIN ? '' : ' for its ' . lcfirst(SegmentBooks::label($ctx->acquirer, $ctx->segment)) . ' business';
         $desc = "{$ctx->acquirer->getName()} executed a {$purchasePrice} {$ctx->config['type']} of {$ctx->target['name']}{$into}. " . $this->describeDealTerms($ctx);
 
         // The announcement return is the deal's NPV over the acquirer's market value before it (Moeller,
