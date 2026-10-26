@@ -14,6 +14,7 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Segment\SegmentBooks;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
@@ -289,17 +290,24 @@ class DivestitureEngine
      */
     private function chooseSegmentSale(DivestitureContext $ctx): void
     {
+        $ctx->revenueFraction = $ctx->divestedFraction;
+        $ctx->incomeFraction = $ctx->divestedFraction;
+        $momentum = $ctx->seller->getEarningsMomentumZ() ?? [];
         $segment = SegmentBooks::weakestSegment($ctx->seller);
-        $share = $segment === null ? 0.0 : (SegmentBooks::plant($ctx->seller->getEarningsMomentumZ() ?? [])[$segment] ?? 0.0);
+        $share = $segment === null ? 0.0 : (SegmentBooks::plant($momentum)[$segment] ?? 0.0);
         if ($segment !== null && $share >= $ctx->minFraction && $share <= $ctx->maxFraction) {
             $ctx->soldSegment = $segment;
             $ctx->divestedFraction = $share;
+            // What it sells and earns, not its plant, is what the buyer pays for and the seller's sales lose.
+            $earnings = SegmentBooks::earningShares($momentum, $segment);
+            $ctx->revenueFraction = $earnings['revenue'];
+            $ctx->incomeFraction = $earnings['income'];
         }
     }
 
     private function executeDivestitureSale(DivestitureContext $ctx): void
     {
-        $ctx->lostNetIncome = $ctx->normalizedNetIncome * $ctx->divestedFraction;
+        $ctx->lostNetIncome = $ctx->normalizedNetIncome * $ctx->incomeFraction;
         $ctx->currentDebt = (float) $ctx->seller->getWholesaleDebt();
         $ctx->lostDebt = $ctx->currentDebt * $ctx->divestedFraction;
 
@@ -319,7 +327,7 @@ class DivestitureEngine
         $excessCash = CorporateMetrics::excessOperatingCash($ctx->seller);
         $operatingNetAssets = max(1.0, (float) $ctx->seller->getTotalEquity() - $excessCash);
         $operatingShare = max(0.0, min(1.0, 1.0 - ((float) ($ctx->seller->getListedStakesCarrying() ?? 0.0) / $operatingNetAssets)));
-        $ctx->soldValue = $ctx->divestedFraction * max(0.0, ($ctx->price * $ctx->shares) - $excessCash) * $operatingShare;
+        $ctx->soldValue = $ctx->incomeFraction * max(0.0, ($ctx->price * $ctx->shares) - $excessCash) * $operatingShare;
         $fireSaleValue = $ctx->soldValue * (1.0 - self::DIV_FIRE_SALE_DISCOUNT);
 
         $ctx->salePrice = $ctx->normalizedNetIncome > 0
@@ -336,7 +344,7 @@ class DivestitureEngine
         $stock = $ctx->seller;
 
         $currentEps = (float) $stock->getEarningsPerShare();
-        $stock->setEarningsPerShare((string) ($currentEps * (1.0 - $ctx->divestedFraction)));
+        $stock->setEarningsPerShare((string) ($currentEps * (1.0 - $ctx->incomeFraction)));
 
         $stock->setWholesaleDebt((string) max(0.0, $ctx->currentDebt - $ctx->lostDebt));
         // The buyer assumes its share of the debt, and with it that share of any principal already overdue.
@@ -345,20 +353,29 @@ class DivestitureEngine
         $ctx->strategy->shedDivestedLiabilities($stock, $ctx->divestedFraction, $ctx->treasury);
 
         $currentRevenue = (float) $stock->getTotalRevenue();
-        $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->divestedFraction)));
+        $stock->setTotalRevenue((string) max(1.0, $currentRevenue * (1.0 - $ctx->revenueFraction)));
         // ...and a seller as if the business it sold had never been its own.
-        ProForma::restateOperatingHistory($stock, 1.0 - $ctx->divestedFraction, 0.0, 0.0);
+        ProForma::restateOperatingHistory($stock, 1.0 - $ctx->incomeFraction, 0.0, 0.0, 1.0 - $ctx->revenueFraction);
         if ($ctx->soldSegment === null) {
             $this->industryShareLedger?->recordDivestedFraction($stock, $ctx->divestedFraction, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock));
         } else {
             // A segment sold whole leaves its own industry; the company's other businesses keep all their plant.
-            $industry = SegmentBooks::industries($stock)[$ctx->soldSegment] ?? '';
-            $this->industryShareLedger?->recordSoldSegment($stock, $ctx->soldSegment, $ctx->macroState, IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor($industry), $stock));
+            $this->industryShareLedger?->recordSoldSegment($stock, $ctx->soldSegment);
             $momentum = $stock->getEarningsMomentumZ() ?? [];
             foreach (SegmentBooks::sellSegment(SegmentBooks::plant($momentum) ?? [], $ctx->soldSegment) as $segment => $share) {
                 $momentum[SegmentBooks::STATE_PLANT . $segment] = $share;
             }
+            // Its lines sell nothing from now on, its market and its share of the sales are no longer the company's,
+            // and the business kept earns its own segments' margins.
+            $momentum[SegmentBooks::STATE_TARGET . $ctx->soldSegment] = 0.0;
+            $momentum[SegmentBooks::STATE_MARKET . $ctx->soldSegment] = 0.0;
+            $momentum[SegmentOutlook::STATE_SHARE . $ctx->soldSegment] = 0.0;
             $stock->setEarningsMomentumZ($momentum);
+            $economics = SegmentBooks::companyEconomics($momentum);
+            if ($economics !== null) {
+                $stock->setOperatingMargin((string) max(0.01, $economics['margin']));
+                $stock->setAssetTurnover((string) $economics['turnover']);
+            }
         }
 
         $markSold = $stock->hasBalanceSheetLedger() ? $this->retireDivestedLedgers($stock, $ctx->divestedFraction) : 0.0;

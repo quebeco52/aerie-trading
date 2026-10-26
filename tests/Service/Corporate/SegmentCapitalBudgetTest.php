@@ -72,6 +72,27 @@ final class SegmentCapitalBudgetTest extends TestCase
         $this->assertEqualsWithDelta(0.1, SegmentBooks::plant($ctx->stock->getEarningsMomentumZ() ?? [])['air_cargo'] ?? 0.0, 1e-12);
     }
 
+    /**
+     * At the same industry price, the segment whose plant earns more builds and the one that earns less waits: new
+     * plant is judged on the segment's own margin and turnover, not the company's blend of them.
+     */
+    public function testEachSegmentsPlantIsJudgedOnItsOwnReturn(): void
+    {
+        $ctx = $this->context('WEAV', 'Internet Retail', [Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], null);
+        $ctx->segments[Segments::MAIN] = ['margin' => 0.04, 'turnover' => 1.0] + $ctx->segments[Segments::MAIN];
+        $ctx->segments['ads_and_cloud'] = ['margin' => 0.24, 'turnover' => 0.5] + $ctx->segments['ads_and_cloud'];
+        $ctx->assetTurnover = 0.9 / 4.0;
+        $ctx->stableMargin = ((0.8 / 0.9) * 0.04) + ((0.1 / 0.9) * 0.24);
+        // The company as a whole earns exactly its hurdle.
+        $ctx->baselineRoic = $ctx->stock->getManagementProfile()->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), false);
+
+        $growthCapEx = $this->growthCapEx($ctx, null);
+
+        $this->assertGreaterThan(0.0, $growthCapEx);
+        $this->assertSame(0.0, $ctx->segments[Segments::MAIN]['growth'], 'retail earns less than the blend');
+        $this->assertEqualsWithDelta($growthCapEx, $ctx->segments['ads_and_cloud']['growth'], 1e-6);
+    }
+
     /** @param array<string, float> $plant */
     private function context(string $ticker, string $industry, array $plant, ?IndustryShareLedger $ledger): EarningsSimulationContext
     {
@@ -96,8 +117,9 @@ final class SegmentCapitalBudgetTest extends TestCase
         $ctx->assetTurnover = 0.25;
         $ctx->investedCapital = 10_000_000_000.0;
         $ctx->quarterlyDepreciation = 100_000_000.0;
+        $ctx->stableMargin = 0.10;
         foreach ($plant as $segment => $share) {
-            $ctx->segments[$segment] = ['plant' => $share, 'market' => 0.1, 'price' => 1.0, 'load' => 1.0, 'drain' => 0.0, 'growth' => 0.0, 'leftover' => 0.0];
+            $ctx->segments[$segment] = ['plant' => $share, 'sales' => $share, 'margin' => 0.10, 'turnover' => 1.0, 'market' => 0.1, 'price' => 1.0, 'load' => 1.0, 'drain' => 0.0, 'growth' => 0.0, 'leftover' => 0.0];
         }
 
         return $ctx;

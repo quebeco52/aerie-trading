@@ -16,6 +16,7 @@ use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Market\Pricing\MarketConsensusEngine;
@@ -682,10 +683,16 @@ class EarningsEngine
                 $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount);
             } else {
                 // Plant kept by segment: each segment's industry books that segment's sales alone, so the company's
-                // revenue is counted once across its industries.
+                // revenue is counted once across its industries, and the gain it took there, its own lines' sales over
+                // its share of the plan, less the sector's draw every peer took too.
                 $segmentShares = SegmentOutlook::shares($ctx->stock->getTicker(), $actuals->streamRevenue);
+                $sectorDraw = ($ctx->actualRevenue - ($revenueWithoutSector ?? $ctx->actualRevenue)) / $ctx->expectedRevenue;
+                $momentum = $ctx->stock->getEarningsMomentumZ() ?? [];
                 foreach ($ctx->segments as $segment => $books) {
-                    $this->industryShareLedger->recordSegmentGain($ctx->stock, $segment, $ctx->actualRevenue * 4.0 * ($segmentShares[$segment] ?? 0.0), $firmSurprise, $books['market'], $ctx->tickCount);
+                    $segmentRevenue = $ctx->actualRevenue * ($segmentShares[$segment] ?? 0.0);
+                    $planned = $ctx->expectedRevenue * (float) ($momentum[SegmentBooks::STATE_TARGET . $segment] ?? 0.0);
+                    $gain = $planned > 0.0 ? ($segmentRevenue / $planned) - 1.0 - $sectorDraw : $firmSurprise;
+                    $this->industryShareLedger->recordSegmentGain($ctx->stock, $segment, $segmentRevenue * 4.0, $gain, $books['market'], $ctx->tickCount);
                 }
             }
         }

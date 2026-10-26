@@ -252,10 +252,9 @@ class StockModelTuning
         // subsidiaries, not a management fee on third-party assets, so it runs the conglomerate physics
         // alongside BRKW and TRIV rather than the asset-manager fee model.
         'OWLS' => [
-            ModelParam::IndustrialConglomerateWeight->value => 0.45, // Heavy rail and industrial manufacturing
-            ModelParam::DefensiveStaplesWeight->value       => 0.35, // Utility infrastructure and consumer goods
-            // Cash and short-term sovereign paper awaiting a panic
-            ModelParam::ContrarianFloatWeight->value        => 0.20,
+            ModelParam::IndustrialConglomerateWeight->value => 0.56, // Heavy rail and industrial manufacturing
+            // Utility infrastructure and consumer goods; its cash and Exchequer bills earn on the treasury
+            ModelParam::DefensiveStaplesWeight->value       => 0.44,
             // Buys structural moats by mandate, never price takers
             ModelParam::PricingPowerIndex->value            => 0.80,
         ],
@@ -562,9 +561,8 @@ class StockModelTuning
         // --- Three Rivers Manufacturing (TRIV) ---
         // Unsinkable, diversified industrial conglomerate with ubiquitous products.
         'TRIV' => [
-            ModelParam::IndustrialConglomerateWeight->value => 0.60, // Ubiquitous multi-industrial manufacturing
-            ModelParam::DefensiveStaplesWeight->value       => 0.30, // Household & adhesive consumer staples
-            ModelParam::ContrarianFloatWeight->value        => 0.10, // Operating cash float
+            ModelParam::IndustrialConglomerateWeight->value => 0.67, // Ubiquitous multi-industrial manufacturing
+            ModelParam::DefensiveStaplesWeight->value       => 0.33, // Household & adhesive consumer staples
             ModelParam::PricingPowerIndex->value            => 0.60,
         ],
 
@@ -581,7 +579,6 @@ class StockModelTuning
         'HARR' => [
             ModelParam::DefensiveStaplesWeight->value       => 0.70,
             ModelParam::IndustrialConglomerateWeight->value => 0.30,
-            ModelParam::ContrarianFloatWeight->value        => 0.00,
             ModelParam::PricingPowerIndex->value            => 0.85,
             ModelParam::OperatingCyclicality->value         => 0.60,
         ],

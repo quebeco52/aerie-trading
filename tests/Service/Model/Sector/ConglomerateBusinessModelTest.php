@@ -9,7 +9,6 @@ use App\Entity\Stock;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
-use App\Tests\Support\FloatBookCreditDrivers;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -63,40 +62,25 @@ class ConglomerateBusinessModelTest extends TestCase
         return $stock;
     }
 
-    public function testTriStreamEmissionAndSumConsistency(): void
+    /**
+     * The plant's revenue is its operating subsidiaries': the float earns on the treasury, below the operating line,
+     * not as a share of what the plant sells.
+     */
+    public function testThePlantSellsOnlyTheOperatingStreams(): void
     {
-        $stock = $this->stock('GEN_CONGLOMERATE', '0.8');
-
-        $macro = new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0);
-
         $result = $this->model->computeActualFinancials(
-            $stock,
+            $this->stock('GEN_CONGLOMERATE', '0.8'),
             expectedRevenue: 100_000_000.0,
             realizedVariableMargin: 0.20,
             fixedCosts: 15_000_000.0,
             baselineVol: 0.08,
-            macroState: $macro,
+            macroState: new MacroStateDTO(outputGapEma: 0.0, inflationEma: 0.02, energyPriceIndexEma: 100.0),
             mathUtility: $this->mathUtility,
         );
 
-        $this->assertArrayHasKey('industrial_manufacturing', $result->streamRevenue);
-        $this->assertArrayHasKey('defensive_staples', $result->streamRevenue);
-        $this->assertArrayHasKey('financial_investments', $result->streamRevenue);
-
-        $this->assertArrayHasKey('industrial_manufacturing', $result->streamZ);
-        $this->assertArrayHasKey('defensive_staples', $result->streamZ);
-        $this->assertArrayHasKey('financial_investments', $result->streamZ);
-        $this->assertArrayHasKey('event', $result->streamZ);
-
-        $this->assertGreaterThan(0.0, $result->streamRevenue['industrial_manufacturing']);
-        $this->assertGreaterThan(0.0, $result->streamRevenue['defensive_staples']);
-        $this->assertGreaterThan(0.0, $result->streamRevenue['financial_investments']);
-
-        $sumStreams = $result->streamRevenue['industrial_manufacturing']
-            + $result->streamRevenue['defensive_staples']
-            + $result->streamRevenue['financial_investments'];
-
-        $this->assertEqualsWithDelta($result->actualRevenue, $sumStreams, 1.0);
+        $this->assertSame(['industrial_manufacturing', 'defensive_staples'], array_keys($result->streamRevenue));
+        $this->assertArrayNotHasKey('financial_investments', $result->streamZ);
+        $this->assertEqualsWithDelta($result->actualRevenue, array_sum($result->streamRevenue), 1.0);
     }
 
     /**
@@ -136,118 +120,65 @@ class ConglomerateBusinessModelTest extends TestCase
         $this->assertArrayHasKey('defensive_staples', $harr->streamRevenue);
     }
 
-    public function testSustainedCreditBlowoutSurgesContrarianFloat(): void
+    /**
+     * The float earns on the cash the company holds above its operating needs: the money market on all of it and,
+     * on the share held in credit, the book's spread less the losses that spread pays for. A company with no spare
+     * cash earns nothing on it, whatever its plant sells.
+     */
+    public function testTheFloatEarnsOnTheCashItHolds(): void
     {
-        $stock = $this->stock('BRKW', '0.4');
+        $macro = $this->neutralMacro();
+        $hoard = $this->holder(40_000_000_000.0);
+        $standard = $this->standardIncome($hoard, $macro);
+        $book = $this->model->calculateInterestIncome($hoard, $macro) - $standard;
 
-        // Spot and trend spreads agree: the blowout has plateaued, so carry is earned with no further repricing.
-        $calmMacro = $this->neutralMacro();
-        $blowoutMacro = new MacroStateDTO(
-            outputGapEma: -0.04,
-            macroCreditSpread: 0.045,
-            macroCreditSpreadEma: 0.045,
-            policyRateEma: self::NEUTRAL_POLICY_RATE,
-        );
-
-        $calm = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $calmMacro, $this->mathUtility);
-        $blowout = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $blowoutMacro, $this->mathUtility);
-
-        $this->assertGreaterThan(
-            $calm->streamRevenue['financial_investments'],
-            $blowout->streamRevenue['financial_investments'],
-        );
-    }
-
-    public function testSpreadWideningImpulseMarksFloatBookDown(): void
-    {
-        $stock = $this->stock('BRKW', '0.4');
-
-        $calmMacro = $this->neutralMacro();
-        // Spot spread gaps 320bps above trend: the held credit book reprices downward before any carry is earned.
-        $wideningMacro = new MacroStateDTO(
-            outputGapEma: 0.0,
-            macroCreditSpread: 0.045,
-            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
-            policyRateEma: self::NEUTRAL_POLICY_RATE,
-        );
-
-        $calm = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $calmMacro, $this->mathUtility);
-        $widening = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $wideningMacro, $this->mathUtility);
-
-        $this->assertLessThan(
-            $calm->streamRevenue['financial_investments'],
-            $widening->streamRevenue['financial_investments'],
-        );
-    }
-
-    public function testCorporateDefaultsErodeContrarianFloatCarry(): void
-    {
-        $stock = $this->stock('BRKW', '0.4');
-
-        $cleanBlowout = new MacroStateDTO(
-            outputGapEma: -0.04,
-            macroCreditSpread: 0.045,
-            macroCreditSpreadEma: 0.045,
-            policyRateEma: self::NEUTRAL_POLICY_RATE,
-        );
-        // Same spread level, but the spread is now compensating for a genuine default wave.
-        $defaultWave = new MacroStateDTO(
-            outputGapEma: -0.04,
-            macroCreditSpread: 0.045,
-            macroCreditSpreadEma: 0.045,
-            policyRateEma: self::NEUTRAL_POLICY_RATE,
-            corporateDefaultRate: 0.090,
-            corporateDefaultRateEma: 0.090,
-        );
-
-        $clean = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $cleanBlowout, $this->mathUtility);
-        $losses = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $defaultWave, $this->mathUtility);
-
-        $this->assertLessThan(
-            $clean->streamRevenue['financial_investments'],
-            $losses->streamRevenue['financial_investments'],
-        );
-    }
-
-    public function testBaselineCreditSpreadYieldsNoContrarianAlpha(): void
-    {
-        $stock = $this->stock('TRIV', '0.6');
-
-        $result = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.20, 10_000_000.0, 0.0, $this->neutralMacro(), $this->mathUtility);
-
-        // TRIV holds 10% float; a calm economy at a neutral short rate must not book a standing bonus on it.
-        $this->assertEqualsWithDelta(10_000_000.0, $result->streamRevenue['financial_investments'], 1.0);
+        $riskMultiple = ConglomerateBusinessModel::CREDIT_BOOK_SPREAD / MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN;
+        $net = ConglomerateBusinessModel::CREDIT_BOOK_SPREAD - ($riskMultiple * ConglomerateBusinessModel::CREDIT_BOOK_LOSS_GIVEN_DEFAULT * MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN);
+        $excess = $standard / $macro->moneyMarketYield();
+        $this->assertEqualsWithDelta($excess * ConglomerateBusinessModel::CREDIT_BOOK_STANDING_SHARE * $net, $book, 1.0);
+        $this->assertSame(0.0, $this->model->calculateInterestIncome($this->holder(0.0), $macro), 'no spare cash, no float');
     }
 
     /**
-     * Dry powder is not free money. A treasury float is cash and short sovereign paper, so it earns the
-     * front rate: an asset when policy is restrictive and an idle drag through a zero-rate decade. The model
-     * used to produce identical float revenue at 0% and at 6%, which made a holding company's hoard
-     * costless to carry and its patience free.
+     * As spreads blow out and the economy turns down, more of the float is put to work in credit, up to the most it
+     * deploys; at the market's own trend it holds its standing share.
      */
-    public function testFloatCarryTracksThePolicyRateGapFromNeutral(): void
+    public function testDistressPutsMoreOfTheFloatToWork(): void
     {
-        $stock = $this->stock('BRKW', '0.4');
+        $hoard = $this->holder(40_000_000_000.0);
+        $calm = $this->neutralMacro();
+        $blowout = new MacroStateDTO(outputGapEma: -0.04, macroCreditSpread: 0.045, macroCreditSpreadEma: 0.045, policyRateEma: self::NEUTRAL_POLICY_RATE);
 
-        $zirp = new MacroStateDTO(
-            outputGapEma: 0.0,
-            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
-            policyRateEma: 0.0,
-        );
-        $restrictive = new MacroStateDTO(
-            outputGapEma: 0.0,
-            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
-            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
-            policyRateEma: 0.055,
-        );
+        $calmBook = $this->model->calculateInterestIncome($hoard, $calm) - $this->standardIncome($hoard, $calm);
+        $blowoutBook = $this->model->calculateInterestIncome($hoard, $blowout) - $this->standardIncome($hoard, $blowout);
 
-        $neutral = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath());
-        $atZero = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $zirp, $this->deterministicMath());
-        $tight = $this->model->computeActualFinancials($stock, 100_000_000.0, 0.25, 15_000_000.0, 0.0, $restrictive, $this->deterministicMath());
+        $this->assertGreaterThan($calmBook, $blowoutBook);
+        $this->assertLessThan($calmBook * ConglomerateBusinessModel::CREDIT_BOOK_MAX_SHARE / ConglomerateBusinessModel::CREDIT_BOOK_STANDING_SHARE, $blowoutBook + 1.0);
+    }
 
-        $this->assertLessThan($neutral->streamRevenue['financial_investments'], $atZero->streamRevenue['financial_investments']);
-        $this->assertGreaterThan($neutral->streamRevenue['financial_investments'], $tight->streamRevenue['financial_investments']);
+    /**
+     * Defaults over their measured trend eat the book's carry and a quiet year gives it back; a default rate that has
+     * settled at its trend is no news, wherever the trend sits.
+     */
+    public function testDefaultsOverTheirTrendEatTheCarry(): void
+    {
+        $hoard = $this->holder(40_000_000_000.0);
+        $book = fn(float $rate, float $trend): float => $this->model->calculateInterestIncome($hoard, $this->defaults($rate, $trend))
+            - $this->standardIncome($hoard, $this->defaults($rate, $trend));
+        $usual = $book(0.0143, 0.0143);
+
+        $this->assertLessThan($usual, $book(0.03, 0.0143));
+        $this->assertGreaterThan($usual, $book(0.01, 0.0143));
+        $this->assertEqualsWithDelta($usual, $book(0.03, 0.03), 1.0, 'settled at its trend');
+    }
+
+    /** A merchant house's float is trade credit in its working capital: its cash runs no credit book. */
+    public function testAMerchantHouseRunsNoCreditBookOnItsCash(): void
+    {
+        $ravn = $this->holder(40_000_000_000.0);
+        $merchant = new \App\Service\Model\Sector\MerchantHouseBusinessModel();
+
+        $this->assertSame($this->standardIncome($ravn, $this->neutralMacro()), $merchant->calculateInterestIncome($ravn, $this->neutralMacro()));
     }
 
     public function testInflationPassesThroughToNominalRevenueBase(): void
@@ -273,9 +204,9 @@ class ConglomerateBusinessModelTest extends TestCase
         // dormant stream leaves no hole in the segment table. BRKW is deliberately absent: it moved to
         // InvestmentCompanyBusinessModel, which reports its own streams and reads none of these weights.
         $expected = [
-            // TRIV: 60% Industrial, 30% Defensive, 10% Float
-            'TRIV' => ['industrial_manufacturing' => 60.0, 'defensive_staples' => 30.0, 'financial_investments' => 10.0],
-            // HARR: 30% Industrial hardware, 70% Niche instrumentation — and no float, by policy
+            // TRIV: two thirds industrial, a third defensive; its float earns on its cash
+            'TRIV' => ['industrial_manufacturing' => 67.0, 'defensive_staples' => 33.0],
+            // HARR: 30% Industrial hardware, 70% Niche instrumentation
             'HARR' => ['industrial_manufacturing' => 30.0, 'defensive_staples' => 70.0],
         ];
 
@@ -297,28 +228,40 @@ class ConglomerateBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Industrial 0.40 x (-0.03 x 1.2 x 0.90) + staples 0.40 x (-0.03 x 0.15); the 0.20 float is a yield, not
-        // activity.
-        $expected = (0.40 * (-0.03 * 1.2 * 0.90)) + (0.40 * (-0.03 * 0.15));
+        // Industrial 0.50 x (-0.03 x 1.2 x 0.90) + staples 0.50 x (-0.03 x 0.15).
+        $expected = (0.50 * (-0.03 * 1.2 * 0.90)) + (0.50 * (-0.03 * 0.15));
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
 
-        // A PMI of 47 adds 0.40 x (-0.06 x 0.40) x 0.90 to the industrial leg.
+        // A PMI of 47 adds 0.50 x (-0.06 x 0.40) x 0.90 to the industrial leg.
         $pmiSlump = new MacroStateDTO(outputGapEma: -0.03, manufacturingPmiEma: 47.0, exchangeRateIndexEma: 100.0);
-        $this->assertEqualsWithDelta($expected + (0.40 * -0.06 * 0.40 * 0.90), $this->model->resolveSectorActivityShift($stock, $pmiSlump), 1e-9);
+        $this->assertEqualsWithDelta($expected + (0.50 * -0.06 * 0.40 * 0.90), $this->model->resolveSectorActivityShift($stock, $pmiSlump), 1e-9);
     }
 
-    /**
-     * The drivers panel reads the float book's own arithmetic on the IG spread: the line for its level over trend is
-     * the deployment premium alone and the line for its move the mark alone, so the two add up to what the spread did,
-     * up to the product of the two.
-     */
-    public function testTheCreditSpreadDriversReadTheFloatBooksOwnArithmetic(): void
+    private function holder(float $treasury): Stock
     {
-        $drivers = FloatBookCreditDrivers::measure($this->model, $this->stock('TRIV', '0.6'));
+        $stock = $this->stock('HOLD', '0.6');
+        $stock->setTotalRevenue('20000000000');
+        $stock->setTotalEquity('60000000000');
+        $stock->setWholesaleDebt('5000000000');
+        $stock->setCorporateTreasury((string) $treasury);
 
-        // Each line is measured against the quarter with the other effect still in it.
-        $this->assertEqualsWithDelta($drivers['deployment'] / (1.0 + $drivers['mark']), $drivers['level'], 1e-12);
-        $this->assertEqualsWithDelta($drivers['mark'] / (1.0 + $drivers['deployment']), $drivers['move'], 1e-12);
-        $this->assertEqualsWithDelta($drivers['deployment'] + $drivers['mark'], $drivers['level'] + $drivers['move'], 2.0 * abs($drivers['deployment'] * $drivers['mark']));
+        return $stock;
+    }
+
+    /** What an operating company's treasury earns: the money market on its cash above operating needs. */
+    private function standardIncome(Stock $stock, MacroStateDTO $macro): float
+    {
+        return (new \App\Service\Model\Sector\StandardCorporateBusinessModel())->calculateInterestIncome($stock, $macro);
+    }
+
+    private function defaults(float $rate, float $trend): MacroStateDTO
+    {
+        return new MacroStateDTO(
+            macroCreditSpread: MacroConstants::BASE_CREDIT_SPREAD,
+            macroCreditSpreadEma: MacroConstants::BASE_CREDIT_SPREAD,
+            policyRateEma: self::NEUTRAL_POLICY_RATE,
+            corporateDefaultRateEma: $rate,
+            corporateDefaultRateTrend: $trend,
+        );
     }
 }

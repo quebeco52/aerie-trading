@@ -53,6 +53,10 @@ class SegmentLedgerTest extends TestCase
 
         $ledger->resolveIndustryCapacityRatio($tern, 990.0, 0.4, 1.0, 0.0, 0.0, 136, 252);
         $this->assertArrayNotHasKey('segment_outlook_gap', $store->readIndustry('Airlines')['TERN'], 'and the main record does not file it again');
+
+        // A report replayed after its tick rolled back opens the books again; the main record is split once.
+        $ledger->openSegmentBooks($tern, 0.9);
+        $this->assertEqualsWithDelta(0.9 * $before['anchor_capacity_share'], $store->readIndustry('Airlines')['TERN']['anchor_capacity_share'], 1e-15);
     }
 
     /**
@@ -142,7 +146,8 @@ class SegmentLedgerTest extends TestCase
 
     /**
      * A deal into a segment is reviewed in that segment's market, among that industry's firms, and its plant joins that
-     * segment's record; a segment sold whole leaves its industry while the main record keeps its plant.
+     * segment's record; a segment sold whole stops selling for the company, its plant run by the buyer until the record
+     * ages out, while the main record keeps its plant.
      */
     public function testDealsReachTheSegmentTheyAreIn(): void
     {
@@ -165,9 +170,11 @@ class SegmentLedgerTest extends TestCase
         $this->assertEqualsWithDelta(150.0, $store->readIndustry(self::FREIGHT)['TERN/air_cargo']['capacity'], 1e-9);
         $this->assertEqualsWithDelta(900.0, $store->readIndustry('Airlines')['TERN']['capacity'], 1e-9);
 
-        $ledger->recordSoldSegment($tern, 'air_cargo', $macro, 0.0);
-        $this->assertSame(0.0, $store->readIndustry(self::FREIGHT)['TERN/air_cargo']['capacity']);
-        $this->assertEqualsWithDelta(0.0, $store->readIndustry(self::FREIGHT)['TERN/air_cargo']['anchor_capacity_share'], 1e-12, 'its plant now the fringe\'s');
+        $ledger->recordSoldSegment($tern, 'air_cargo');
+        $sold = $store->readIndustry(self::FREIGHT)['TERN/air_cargo'];
+        $this->assertSame(0.0, $sold['revenue'], 'it sells nothing for the company');
+        $this->assertEqualsWithDelta(150.0, $sold['capacity'], 1e-9, 'the buyer runs its plant until the record ages out');
+        $this->assertSame(10, $sold['tick']);
         $this->assertEqualsWithDelta(900.0, $store->readIndustry('Airlines')['TERN']['capacity'], 1e-9);
     }
 

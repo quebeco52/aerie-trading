@@ -123,6 +123,15 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
     public const SEASONALITY_FACTORS = [0.95, 0.99, 1.03, 1.03];
 
     /**
+     * The house's float is trade credit inside its working capital, booked as a revenue line, and its cash sits on
+     * deposit: it runs no credit book on its treasury.
+     */
+    protected function resolveCreditBookIncome(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return 0.0;
+    }
+
+    /**
      * The tonnage the wharves and desks are staffed to, plus terminal throughput, at the class's fixed mix.
      * The cargo's price is invoice inflation, not tonnage, and the trade-credit float is a yield on the
      * treasury book; neither moves the cost base.

@@ -209,7 +209,7 @@ class StockModelTuningTest extends TestCase
             'medical_facility' => [ModelParam::InpatientCareWeight, ModelParam::ElectiveOutpatientWeight, ModelParam::InsuranceArbitrageWeight],
             'consumer_staples' => [ModelParam::BrandedStaplesWeight, ModelParam::VolumeCommodityWeight, ModelParam::CommodityTradingWeight],
             'mining' => [ModelParam::BaseMetalsWeight, ModelParam::PreciousMetalsWeight, ModelParam::EnergyMineralsWeight, ModelParam::FertilizerMineralsWeight],
-            'conglomerate' => [ModelParam::IndustrialConglomerateWeight, ModelParam::DefensiveStaplesWeight, ModelParam::ContrarianFloatWeight],
+            'conglomerate' => [ModelParam::IndustrialConglomerateWeight, ModelParam::DefensiveStaplesWeight],
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
             'consulting' => [ModelParam::StrategyAdvisoryWeight, ModelParam::TechnologyProgrammeWeight, ModelParam::RiskRestructuringWeight, ModelParam::AuditTaxWeight],
             'grocery' => [ModelParam::GroceriesWeight, ModelParam::FuelForecourtsWeight],
@@ -259,9 +259,10 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.20, StockModelTuning::get('SWAN', ModelParam::HfQuantAlphaWeight, 0.0));
 
         // Three Rivers Manufacturing (TRIV)
-        $this->assertSame(0.60, StockModelTuning::get('TRIV', ModelParam::IndustrialConglomerateWeight, 0.0));
-        $this->assertSame(0.30, StockModelTuning::get('TRIV', ModelParam::DefensiveStaplesWeight, 0.0));
-        $this->assertSame(0.10, StockModelTuning::get('TRIV', ModelParam::ContrarianFloatWeight, 0.0));
+        $this->assertSame(0.67, StockModelTuning::get('TRIV', ModelParam::IndustrialConglomerateWeight, 0.0));
+        $this->assertSame(0.33, StockModelTuning::get('TRIV', ModelParam::DefensiveStaplesWeight, 0.0));
+        // Its float earns on its cash, not as a share of what its plant sells (ConglomerateBusinessModel).
+        $this->assertSame(-1.0, StockModelTuning::get('TRIV', 'contrarian_float_weight', -1.0));
 
         // Breakwater Trust (BRKW)
         // BRKW runs the investment trust, which splits on control rather than on trade. The conglomerate's
@@ -276,7 +277,6 @@ class StockModelTuningTest extends TestCase
         $this->assertSame(0.45, StockModelTuning::get('BRKW', ModelParam::OperatingCyclicality, 0.0));
         $this->assertSame(-1.0, StockModelTuning::get('BRKW', ModelParam::IndustrialConglomerateWeight, -1.0));
         $this->assertSame(-1.0, StockModelTuning::get('BRKW', ModelParam::DefensiveStaplesWeight, -1.0));
-        $this->assertSame(-1.0, StockModelTuning::get('BRKW', ModelParam::ContrarianFloatWeight, -1.0));
 
         // Clear Rivers Law / Claw & Talons Law (CLAW)
         $this->assertSame(0.40, StockModelTuning::get('CLAW', ModelParam::CorporateRetainerWeight, 0.0));

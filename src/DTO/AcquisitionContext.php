@@ -89,6 +89,11 @@ class AcquisitionContext
     public float $targetRoic = 0.0;
     /** The target's operating margin; turns its operating income into the revenue it brings. */
     public float $targetMargin = 0.01;
+    /**
+     * The capital turnover of the segment a company that keeps plant by segment buys into, which sizes the target's
+     * identifiable assets; null for any other deal.
+     */
+    public ?float $targetTurnover = null;
     public float $synergyValueCreation = 0.0;
     /** Goodwill recognized on this deal (purchase price above the fair value of net identifiable assets). */
     public float $goodwillRecorded = 0.0;

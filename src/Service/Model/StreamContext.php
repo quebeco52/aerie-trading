@@ -411,6 +411,13 @@ class StreamContext
             $activeWeights = ResponseCurves::normalizeWeightsSimplex($activeWeights) ?: $activeWeights;
         }
 
+        // The mix drifts toward its targets within a segment, but a company that keeps plant by segment sells each
+        // segment's share of the quarter as its plant does: smoothing it too would leave a segment's sales lagging its
+        // plant.
+        if ($split !== null) {
+            $activeWeights = SegmentBooks::splitToTargets($this->ticker, $this->previousMomentum, $activeWeights) ?? $activeWeights;
+        }
+
         foreach ($activeWeights as $key => $weight) {
             $this->registerZ("weight:{$key}", $weight);
         }

@@ -208,7 +208,7 @@ class EarningsSimulationContext
      * its own market, the price its industry pays it, the share of its plant that runs, the growth capex it was
      * allotted and what its plan still allows after it. Empty for any other.
      *
-     * @var array<string, array{plant: float, market: float, price: float, load: float, drain: float, growth: float, leftover: float}>
+     * @var array<string, array{plant: float, sales: float, margin: float, turnover: float, market: float, price: float, load: float, drain: float, growth: float, leftover: float}>
      */
     public array $segments = [];
     /** The plant base a company that keeps plant by segment planned its segments' growth on (net PP&E). */

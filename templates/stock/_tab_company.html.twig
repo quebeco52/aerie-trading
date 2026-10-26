@@ -16,7 +16,7 @@
 {% if segments|default(null) %}
 	<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" id="segments-card">
 		<h3 class="text-sm font-semibold text-on-surface">Segments</h3>
-		<p class="text-xs text-on-surface-variant mt-1">Each segment sells to its own customers against its own rivals, and the company plans more of its sales in the segments whose industry outlook runs ahead. Revenue in the last quarterly report.</p>
+		<p class="text-xs text-on-surface-variant mt-1">Each segment sells to its own customers against its own rivals, builds toward its own market and earns its own margin. Revenue and operating margin in the last quarterly report; assets as each segment's share of the company's plant.</p>
 		<div class="overflow-x-auto mt-4">
 			<table class="w-full text-left border-collapse">
 				<thead>
@@ -26,6 +26,8 @@
 						<th class="py-2 text-right">Outlook</th>
 						<th class="py-2 text-right">Revenue</th>
 						<th class="py-2 text-right">Share</th>
+						<th class="py-2 text-right">Operating margin</th>
+						<th class="py-2 text-right">Assets</th>
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-outline-variant/10 text-xs">
@@ -36,6 +38,8 @@
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.outlook is null ? 'text-on-surface-faint' : (segment.outlook - 1)|signed_class }}">{{ segment.outlook|figure('index', 2) }}</td>
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.revenue is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.revenue|format_large('$') }}</td>
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.share|pct(1) }}</td>
+							<td class="py-2 text-right font-mono tabular-nums {{ segment.margin is null ? 'text-on-surface-faint' : segment.margin|signed_class }}">{{ segment.margin|pct(1) }}</td>
+							<td class="py-2 text-right font-mono tabular-nums {{ segment.assets is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.assets|pct(1) }}</td>
 						</tr>
 					{% endfor %}
 				</tbody>

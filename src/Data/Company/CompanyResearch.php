@@ -243,7 +243,7 @@ final class CompanyResearch
                 ],
                 [
                     'heading' => 'How it earns',
-                    'body' => "About 60% of revenue comes from industrial products sold to manufacturers, contractors and hospitals, and about 30% from household goods such as tapes, adhesives and cleaning pads. The Works Ministry is a large customer for road signs, reflective film and safety equipment.\n\nEach division runs its own plants and sales force and sends its cash to head office, which decides where it goes next. The operating margin is about 16%, and the company pays out about half its earnings as dividends.",
+                    'body' => "About two thirds of revenue comes from industrial products sold to manufacturers, contractors and hospitals, and about a third from household goods such as tapes, adhesives and cleaning pads. The Works Ministry is a large customer for road signs, reflective film and safety equipment.\n\nEach division runs its own plants and sales force and sends its cash to head office, which decides where it goes next. The operating margin is about 16%, and the company pays out about half its earnings as dividends.",
                 ],
                 [
                     'heading' => 'Signs and film',

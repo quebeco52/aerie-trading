@@ -15,6 +15,10 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
   (seeds 1-32 only). Outputs `runs/<arm>-<seed>.{jsonl,log,idle.json,seg.json}`.
   - `head`: `BASE=<tree>` = `git archive <commit>` + `vendor` symlink, kept in the scratchpad (outside the repo);
     delete it and `var/harness/cache-<basename>` afterwards.
+  - `p4c` (BASE b77f19c5) vs `econ` (working tree, segment economics); `econlive` = econ on the live macro.
+  - `econ2`: working tree + `ovr_pl/` (SegmentBooks copy logging aggregate()'s segment prices/loads into the probe
+    `pl`; behaviour-neutral, checked). `econ2nj`: `ovr_nj/` = same copy, avoidableCostRatio = company ratio.
+    Refresh both copies from src before reuse (they are copies of the working tree of 2026-10-26).
   - `p3`: BASE tree (phase 3 committed, 803d2ade). `p4`: working tree (phase 4, deals by segment).
   - `seg`: working tree (phase-3 first round). `seg2`: working tree after the entry-sizing fix (same as seg in
     run.sh; a separate name keeps the seg runs). `segplain`: working tree without the probe. `gapfix`: phase-2 store override (obsolete).
@@ -34,7 +38,14 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
     after opening, kappa <= 0); kappa paths and corr of d4 log kappa / d4 log record revenue with own vs main
     industry outlook; glut test (d log kappa ratio when the segment industry's peer price < 1); opening a_s,
     addressable share and penalty before/after; nine segment-industry peers; the eight. `YEARS=2` for short runs.
-  - `deals.py <seeds> A B` (phase 4): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events
+  - `long.py <seeds> [arm] [years]` (one arm, long game; `p4live` = live macro for YEARS > 20): kappa and a_s by
+    decade, firm KPIs and segment sales/plant, segment vs peer growth, deals per decade, identities in the last year.
+  - `econ.py <seeds> A B` (segment economics): firm stable margin/turnover, segment margins/turnovers, revenue
+    identity on every report, revenue-share lag behind targets, rev/cap per segment, sale price vs segment EBIT.
+  - `econ3`: working tree after the takeover-asset fix (probe adds `gw` goodwill, `tax` effective rate).
+  - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
+    TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
+  - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events
     with kappa after): whole-segment sales, slices, acquisitions by segment, sold-record checks, capacity mismatch
     split by whether a deal fell between reports.
   - `analyse.py` (phase 2), `mix_response.py` (phase 2 tilt pass-through).

@@ -371,11 +371,11 @@ class AcquisitionEngine
 
         $ctx->config = $config;
         $ctx->target = PrivateCompany::procedural($this->mathUtility);
-        $this->drawTargetEconomics($ctx);
         // A company that keeps plant by segment buys into one of its markets, drawn in proportion to its plant.
         if (SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null) {
             $ctx->segment = SegmentBooks::acquiringSegment($stock, $this->mathUtility->generateUniform());
         }
+        $this->drawTargetEconomics($ctx);
 
         // The target is a private firm in the market the acquirer buys into, so the deal is sized to the largest
         // one there is to buy and that clears merger review.
@@ -405,7 +405,12 @@ class AcquisitionEngine
         $targetRoicDraw = $this->mathUtility->calculateLogNormalSynergy(self::MA_TARGET_ROIC_MU, self::MA_TARGET_ROIC_SIGMA);
         $ctx->targetRoic = max(self::MA_TARGET_ROIC_FLOOR, min(self::MA_TARGET_ROIC_CEILING, $targetRoicDraw));
 
-        $ctx->targetMargin = max(0.01, (float) $ctx->acquirer->getOperatingMargin() * $this->mathUtility->generateUniformBetween(self::MA_TARGET_MARGIN_SHARE_MIN, self::MA_TARGET_MARGIN_SHARE_MAX));
+        // A target earns like the business it joins: the segment bought into, for a company that keeps plant by
+        // segment.
+        $economics = SegmentBooks::companyEconomics($ctx->acquirer->getEarningsMomentumZ() ?? []);
+        $joinedMargin = $economics['margins'][$ctx->segment] ?? (float) $ctx->acquirer->getOperatingMargin();
+        $ctx->targetMargin = max(0.01, $joinedMargin * $this->mathUtility->generateUniformBetween(self::MA_TARGET_MARGIN_SHARE_MIN, self::MA_TARGET_MARGIN_SHARE_MAX));
+        $ctx->targetTurnover = $economics['turnovers'][$ctx->segment] ?? null;
     }
 
     /**
@@ -420,7 +425,7 @@ class AcquisitionEngine
         $market = $this->industryShareLedger?->describeMergerMarket(
             $ctx->acquirer,
             $ctx->macroState,
-            IndustryShareLedger::secularExcessGrowth($this->segmentStrategy($ctx), $ctx->acquirer),
+            IndustryShareLedger::secularExcessGrowth($this->segmentStrategy($ctx->acquirer, $ctx->segment), $ctx->acquirer),
             $ctx->tickCount,
             $ctx->ticksPerYear,
             $ctx->segment,
@@ -515,14 +520,19 @@ class AcquisitionEngine
         // target's return is grossed up to operating income before it is split into revenue and cost.
         $operatingIncome = $nopat / max(0.01, 1.0 - $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate));
 
+        $revenue = $operatingIncome / max(0.01, $ctx->targetMargin);
+
         return [
             'economic_value' => $economicValue,
             'nopat' => $nopat,
             'operating_income' => $operatingIncome,
-            'revenue' => $operatingIncome / max(0.01, $ctx->targetMargin),
-            // Goodwill allocation (ASC 805): the target's assets are worth what they earn at the acquirer's
-            // hurdle; a return above the hurdle is franchise value the premium pays for.
-            'net_assets' => $economicValue * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $ctx->targetRoic * $ctx->synergyMultiplier)),
+            'revenue' => $revenue,
+            // Goodwill allocation (ASC 805): the target's assets are worth what they earn at the acquirer's hurdle; a
+            // return above the hurdle is franchise value the premium pays for. A target in one of the buyer's segments
+            // runs that segment's plant for its sales, and what is paid beyond it is the franchise.
+            'net_assets' => $ctx->targetTurnover !== null && $ctx->targetTurnover > 0.0
+                ? min($economicValue, $revenue / $ctx->targetTurnover)
+                : $economicValue * min(1.0, max(0.01, $ctx->hurdleRate) / max(0.01, $ctx->targetRoic * $ctx->synergyMultiplier)),
         ];
     }
 
@@ -607,16 +617,11 @@ class AcquisitionEngine
         $stock->setTotalRevenue((string) ($currentRevenue + $acquiredRevenue));
         // Credit agreements measure a buyer pro forma, as if it had owned the target all year.
         ProForma::restateOperatingHistory($stock, 1.0, $acquiredRevenue, $acquiredOperatingIncome);
-        $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($this->segmentStrategy($ctx), $stock), $ctx->segment);
-        // A buyer that keeps plant by segment adds what it bought to the segment it bought into, the one the ledger
-        // booked it in.
-        $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $plant = SegmentBooks::plant($momentum);
-        if ($plant !== null) {
-            foreach (SegmentBooks::acquireInto($plant, $ctx->segment, $currentRevenue, $acquiredRevenue, SegmentBooks::jointSegments($stock)) as $segment => $share) {
-                $momentum[SegmentBooks::STATE_PLANT . $segment] = $share;
-            }
-            $stock->setEarningsMomentumZ($momentum);
+        // Each segment the deal buys into books its slice in its own industry (an airline bought brings its holds).
+        $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []);
+        $slices = $plant === null ? [$ctx->segment => 1.0] : SegmentBooks::boughtSlices($plant, $ctx->segment, SegmentBooks::jointSegments($stock));
+        foreach ($slices as $segment => $slice) {
+            $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue * $slice, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($this->segmentStrategy($stock, $segment), $stock), $segment);
         }
 
         // Operating income adds across the two businesses, so the combined margin is revenue-weighted.
@@ -630,6 +635,20 @@ class AcquisitionEngine
             $blendedTurnover = (($oldRevenueCapital * (float) $acquirerTurnover) + $acquiredRevenue)
                 / max(1.0, $oldRevenueCapital + $netAssetsAcquired);
             $stock->setAssetTurnover((string) max(0.01, $blendedTurnover));
+        }
+
+        // A buyer that keeps plant by segment adds what it bought to the segment it bought into, the one the ledger
+        // booked it in: its plant, and its revenue and income into that segment's turnover and margin. The company's
+        // own are then its segments' blend again.
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        if (SegmentBooks::plant($momentum) !== null) {
+            $momentum = SegmentBooks::acquireIntoBooks($momentum, $ctx->segment, $oldRevenueCapital, $netAssetsAcquired, $acquiredRevenue, $acquiredOperatingIncome, SegmentBooks::jointSegments($stock)) + $momentum;
+            $stock->setEarningsMomentumZ($momentum);
+            $economics = SegmentBooks::companyEconomics($momentum);
+            if ($economics !== null && $acquirerTurnover !== null) {
+                $stock->setOperatingMargin((string) max(0.01, $economics['margin']));
+                $stock->setAssetTurnover((string) max(0.01, $economics['turnover']));
+            }
         }
 
         $newInterestExpense = 0.0;
@@ -733,11 +752,9 @@ class AcquisitionEngine
     }
 
     /** The model of the market a deal buys into: the acquirer's own, or its segment's industry's. */
-    private function segmentStrategy(AcquisitionContext $ctx): BusinessModelInterface
+    private function segmentStrategy(Stock $acquirer, string $segment): BusinessModelInterface
     {
-        return $ctx->segment === Segments::MAIN
-            ? $ctx->strategy
-            : \App\Data\Company\Sectors::strategyFor(SegmentBooks::industries($ctx->acquirer)[$ctx->segment] ?? '');
+        return \App\Data\Company\Sectors::strategyFor(SegmentBooks::industries($acquirer)[$segment] ?? (string) $acquirer->getIndustry());
     }
 
     private function finalizeAcquisitionEvent(AcquisitionContext $ctx): array

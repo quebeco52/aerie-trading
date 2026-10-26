@@ -10,6 +10,7 @@ use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\CreditRisk;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -92,14 +93,11 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_ERROR = 0.05;
 
     // --- Portfolio Composition (Three-Stream Architecture) ---
-    /** Baseline fraction of revenue derived from cyclical industrial manufacturing subsidiaries. */
-    public const INDUSTRIAL_CONGLOMERATE_WEIGHT = 0.40;
+    /** Baseline fraction of the plant's revenue from cyclical industrial manufacturing subsidiaries. */
+    public const INDUSTRIAL_CONGLOMERATE_WEIGHT = 0.50;
 
-    /** Baseline fraction of revenue derived from defensive consumer staples & infrastructure tollbooths. */
-    public const DEFENSIVE_STAPLES_WEIGHT = 0.40;
-
-    /** Baseline fraction of revenue derived from financial float, investments, and contrarian dry powder. */
-    public const CONTRARIAN_FLOAT_WEIGHT = 0.20;
+    /** Baseline fraction of the plant's revenue from defensive consumer staples & infrastructure tollbooths. */
+    public const DEFENSIVE_STAPLES_WEIGHT = 0.50;
 
     /** Baseline pricing power and monopoly leverage across conglomerate product lines. */
     public const PRICING_POWER_INDEX = 0.70;
@@ -156,6 +154,19 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
      * both ways.
      */
     public const FLOAT_CREDIT_LOSS_SCALAR = 0.08;
+
+    // --- Treasury Credit Book ---
+    /**
+     * Share of the cash above operating needs the float holds in credit (corporates, preferreds, catastrophe paper) in
+     * calm markets (20%): a value holder sits mostly in bills until spreads blow out.
+     */
+    public const CREDIT_BOOK_STANDING_SHARE = 0.20;
+    /** Share it holds there at the height of a distress episode (60%), as dry powder is put to work. */
+    public const CREDIT_BOOK_MAX_SHARE = 0.60;
+    /** Spread the credit book earns over the money market (3.5pp), on paper riskier than the market's average. */
+    public const CREDIT_BOOK_SPREAD = 0.035;
+    /** Loss given default on the book's senior and convertible paper (45%). */
+    public const CREDIT_BOOK_LOSS_GIVEN_DEFAULT = 0.45;
 
     // --- Tail Risk & Shock Events ---
     /** Negative Z-score threshold indicating an operational bottleneck or subsidiary restructuring drag. */
@@ -217,15 +228,14 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * The volume the operating subsidiaries are staffed to: industrial throughput and staples/tollbooth
-     * traffic at their target weights. The float earns a yield and a mark on the treasury book, which no
-     * plant or payroll is sized to, so it counts in the mix but carries no activity.
+     * traffic at their target weights. The float earns on the treasury, which no plant or payroll is sized to.
      */
     public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $params = $this->resolvePortfolioParameters($stock);
         $industrialWeight = $params[ModelParam::IndustrialConglomerateWeight];
         $defensiveWeight = $params[ModelParam::DefensiveStaplesWeight];
-        $totalWeight = $industrialWeight + $defensiveWeight + $params[ModelParam::ContrarianFloatWeight];
+        $totalWeight = $industrialWeight + $defensiveWeight;
         if ($totalWeight <= 0.0) {
             return 0.0;
         }
@@ -239,7 +249,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         return $this->resolveModelParameters($stock, [
             ModelParam::IndustrialConglomerateWeight->value => self::INDUSTRIAL_CONGLOMERATE_WEIGHT,
             ModelParam::DefensiveStaplesWeight->value       => self::DEFENSIVE_STAPLES_WEIGHT,
-            ModelParam::ContrarianFloatWeight->value        => self::CONTRARIAN_FLOAT_WEIGHT,
         ]);
     }
 
@@ -284,38 +293,25 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
         // A stream the firm does not own stays at exactly zero through the simplex, so the portfolio a
         // conglomerate declares is the portfolio it is priced on.
+        // The plant earns the operating subsidiaries' sales; the float is the treasury's, earned on the cash itself
+        // (calculateInterestIncome()).
         $activeWeights = $streams->resolveActiveStreamWeights([
             'industrial_manufacturing' => $params[ModelParam::IndustrialConglomerateWeight],
             'defensive_staples'        => $params[ModelParam::DefensiveStaplesWeight],
-            'financial_investments'    => $params[ModelParam::ContrarianFloatWeight],
         ]);
 
         $industrialWeight = $activeWeights['industrial_manufacturing'];
         $defensiveWeight  = $activeWeights['defensive_staples'];
-        $floatWeight      = $activeWeights['financial_investments'];
 
         // Independent stream Z-scores with persistent AR(1) momentum. A dormant stream is never drawn, so
         // adding one to the architecture leaves every firm that does not run it bit-for-bit unchanged.
         $industrialZ = $industrialWeight > 0.0 ? $streams->generateZ('industrial_manufacturing', 0.25) : 0.0;
         $defensiveZ  = $defensiveWeight > 0.0 ? $streams->generateZ('defensive_staples', 0.45) : 0.0;
-        $floatZ      = $floatWeight > 0.0 ? $streams->generateZ('financial_investments', 0.15) : 0.0;
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
-        $outputGap = $macroState->outputGapEma;
-
-        // The sustained spread level drives carry; the gap between spot and trend is the widening impulse.
-        $spreadLevel   = $macroState->macroCreditSpreadEma;
-        $spreadImpulse = $macroState->macroCreditSpread - $macroState->macroCreditSpreadEma;
-
         $industrialMacroBoost = $this->resolveIndustrialVolumeShift($stock, $macroState);
         $defensiveMacroBoost = $this->resolveDefensiveVolumeShift($macroState);
-
-        // Capital markets deal activity expands strategic acquisition & divestiture opportunities
-        $dealActivityShift = $macroState->dealActivityDeviation();
-        $divestitureAlpha = max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR;
-
-        $contrarianSurge = $this->resolveContrarianFloatSurge($macroState, $outputGap, $spreadLevel, $spreadImpulse, $divestitureAlpha);
 
         // --- Tail Risk & Event Physics ---
         $eventType = null;
@@ -329,7 +325,6 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         // --- Three-Stream Revenue Calculation ---
         $industrialShock = $industrialZ * ($baselineVol * self::INDUSTRIAL_VARIANCE_SCALAR);
         $defensiveShock  = $defensiveZ  * ($baselineVol * self::DEFENSIVE_VARIANCE_SCALAR);
-        $floatShock      = $floatZ      * ($baselineVol * self::FLOAT_VARIANCE_SCALAR);
 
         $streamRevenues = [];
         if ($industrialWeight > 0.0) {
@@ -338,21 +333,13 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         if ($defensiveWeight > 0.0) {
             $streamRevenues['defensive_staples'] = max(0.0, $expectedRevenue * $defensiveWeight * (1.0 + $defensiveShock + $defensiveMacroBoost));
         }
-        if ($floatWeight > 0.0) {
-            $streamRevenues['financial_investments'] = max(0.0, $expectedRevenue * $floatWeight * (1.0 + $floatShock + $contrarianSurge));
-        }
 
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
-        // Realized shares, not target weights: the group's cost base is the revenue-weighted blend of its
-        // segments' cost bases, so a desk having a spectacular quarter also dilutes the group's margin.
-        $floatShare = $actualRevenue > 0.0 ? ($streamRevenues['financial_investments'] ?? 0.0) / $actualRevenue : 0.0;
-
         // Input costs across the operating subsidiaries, recovered in list prices and escalators at the
-        // group's pricing power. The float stream buys no inputs.
-        $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin)
-            * max(0.0, 1.0 - $floatShare);
+        // group's pricing power.
+        $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
 
         // Realized variable margin scaling
         $rawMargin = $realizedVariableMargin
@@ -373,6 +360,44 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
+     * The float is the treasury's: the cash above operating needs earns the money market, and the share of it held in
+     * credit earns that book's spread less its losses on top. Earned on the cash the company holds, not on its plant.
+     */
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
+    {
+        return parent::calculateInterestIncome($stock, $macroState, $realizedWholesaleRate) + $this->resolveCreditBookIncome($stock, $macroState);
+    }
+
+    /**
+     * The credit book's annual income over the money market: the cash above operating needs, the share of it held in
+     * credit, which rises from the standing share toward the most it deploys as spreads blow out, the economy turns
+     * down and sellers line up (the contrarian signal), times the book's spread less its losses. Its paper is as much
+     * riskier than the market's as its spread is wider, so it loses that multiple of the market's defaults, at its loss
+     * given default.
+     */
+    protected function resolveCreditBookIncome(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $operatingBase = max((float) $stock->getTotalRevenue(), (float) $stock->getTotalEquity(), FinancialConstants::MIN_OPERATING_BASE_CASH);
+        $excessCash = max(0.0, (float) $stock->getCorporateTreasury() - $this->calculateTargetOperatingCash($operatingBase, 0.0, (float) $stock->getWholesaleDebt()));
+        if ($excessCash <= 0.0) {
+            return 0.0;
+        }
+
+        $signal = (max(0.0, $macroState->macroCreditSpreadEma - $macroState->macroCreditSpreadTrend) * self::FLOAT_SPREAD_BLOWOUT_SCALAR)
+            + (max(0.0, -$macroState->outputGapEma) * self::FLOAT_RECESSION_ALPHA_SCALAR)
+            + (max(0.0, $macroState->dealActivityDeviation()) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR);
+        $deployed = self::CREDIT_BOOK_STANDING_SHARE + ((self::CREDIT_BOOK_MAX_SHARE - self::CREDIT_BOOK_STANDING_SHARE)
+            * CreditRisk::calculateDiminishingDistressMultiplier($signal, 1.0, self::CONTRARIAN_HALF_SATURATION_POINT));
+        // The spread pays for the losses at the long-run default rate; defaults above or below their measured trend
+        // are the news, and hit this riskier book harder than the market's.
+        $riskMultiple = self::CREDIT_BOOK_SPREAD / MacroConstants::CREDIT_SPREAD_LONG_RUN_MEAN;
+        $loss = $riskMultiple * self::CREDIT_BOOK_LOSS_GIVEN_DEFAULT
+            * (MacroConstants::CORPORATE_DEFAULT_LONG_RUN_MEAN + $macroState->corporateDefaultRateEma - $macroState->corporateDefaultRateTrend);
+
+        return $excessCash * $deployed * (self::CREDIT_BOOK_SPREAD - $loss);
+    }
+
+    /**
      * Contrarian Float: risk-free carry, mark-to-market, deployment alpha and credit losses.
      *
      * The four are separate effects on one book and they do not arrive together. The cash leg earns the
@@ -381,8 +406,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
      * spread was compensating for defaults all along, so the losses land last. Widening hurts now; the
      * plateau pays later; and none of it happens at all if the policy rate is on the floor.
      *
-     * Protected because a sub-model with a different operating portfolio still runs the same treasury book:
-     * a merchant house's trade-credit ledger is this stream, not a variant of it.
+     * Protected because the sub-models book it as a revenue line on a balance of their own: a merchant house's trade
+     * credit inside its working capital, a trust's treasury sized from its balance sheet.
      */
     protected function resolveContrarianFloatSurge(
         MacroStateDTO $macroState,
@@ -434,12 +459,9 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
             'exchange_rate_index_ema',
             'import_price_level',
             'industrial_metals_index_ema',
-            'macro_credit_spread',
             'macro_credit_spread_ema',
             'manufacturing_pmi_ema',
             'output_gap_ema',
-            'perceived_neutral_rate',
-            'policy_rate_ema',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];

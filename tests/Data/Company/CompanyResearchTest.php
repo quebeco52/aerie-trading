@@ -140,8 +140,8 @@ class CompanyResearchTest extends TestCase
         yield 'WATCH retainers' => ['WATCH', 'private retainers about half', $tuning('WATCH', ModelParam::RetainerWeight), 0.50];
         yield 'WATCH margin' => ['WATCH', 'operating margin is about 17%', self::seed('WATCH')['operating_margin'], 0.17];
         yield 'WATCH beta' => ['WATCH', 'beta of about 0.6', self::beta('WATCH'), 0.60, self::BETA_ROUNDING];
-        yield 'TRIV industrial' => ['TRIV', 'About 60% of revenue comes from industrial products', $tuning('TRIV', ModelParam::IndustrialConglomerateWeight), 0.60];
-        yield 'TRIV household' => ['TRIV', 'about 30% from household goods', $tuning('TRIV', ModelParam::DefensiveStaplesWeight), 0.30];
+        yield 'TRIV industrial' => ['TRIV', 'About two thirds of revenue comes from industrial products', $tuning('TRIV', ModelParam::IndustrialConglomerateWeight), 0.67];
+        yield 'TRIV household' => ['TRIV', 'about a third from household goods', $tuning('TRIV', ModelParam::DefensiveStaplesWeight), 0.33];
         yield 'TRIV margin' => ['TRIV', 'operating margin is about 16%', self::seed('TRIV')['operating_margin'], 0.16];
         yield 'TRIV payout' => ['TRIV', 'pays out about half its earnings', self::seed('TRIV')['target_payout_ratio'], 0.50];
         yield 'TRIV beta' => ['TRIV', 'beta of about 0.6', self::beta('TRIV'), 0.60, self::BETA_ROUNDING];

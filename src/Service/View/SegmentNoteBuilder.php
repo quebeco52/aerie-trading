@@ -12,12 +12,13 @@ use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Segment\SegmentBooks;
 
 /**
- * A company's segment note, as an annual report gives it: each segment's industry, that industry's demand outlook (the
- * company's lines lean toward the segments whose outlook runs ahead), and its revenue in the last quarterly report,
- * main segment first. Every revenue line lands in exactly one segment, so the segments add up to the lines; a segment
- * sold is gone from the note. Null for a company that sells into a single market.
+ * A company's segment note, as an annual report gives it: each segment's industry, that industry's demand outlook, its
+ * revenue in the last quarterly report, its operating margin and its share of the company's assets, main segment first.
+ * The segments' margins are their own, scaled to the margin the company reported, so at the mix its plant sells their
+ * profits add up to its operating profit. Every revenue line lands in exactly one segment, so the segments add up to
+ * the lines; a segment sold is gone from the note. Null for a company that sells into a single market.
  *
- * @phpstan-type SegmentRow array{label: string, industry: string, outlook: float|null, revenue: float|null, share: float|null}
+ * @phpstan-type SegmentRow array{label: string, industry: string, outlook: float|null, revenue: float|null, share: float|null, margin: float|null, assets: float|null}
  */
 class SegmentNoteBuilder
 {
@@ -56,9 +57,13 @@ class SegmentNoteBuilder
             return null;
         }
 
-        // A segment the company has sold holds no plant and is no longer reported.
+        // A segment the company has sold holds no plant and is no longer reported; nor is a main business that holds
+        // none (a conglomerate whose own business is its cash, which earns below the operating line).
         $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []);
-        $segments = [Segments::MAIN => ['label' => $plan['main'], 'industry' => (string) $stock->getIndustry(), 'revenue' => 0.0]];
+        $segments = [];
+        if ($plant === null || ($plant[Segments::MAIN] ?? 0.0) > 0.0) {
+            $segments[Segments::MAIN] = ['label' => $plan['main'], 'industry' => (string) $stock->getIndustry(), 'revenue' => 0.0];
+        }
         foreach ($plan['segments'] as $key => $segment) {
             if ($plant === null || ($plant[$key] ?? 0.0) > 0.0) {
                 $segments[$key] = ['label' => $segment['label'], 'industry' => $segment['industry'], 'revenue' => 0.0];
@@ -72,14 +77,20 @@ class SegmentNoteBuilder
         }
 
         $total = array_sum(array_column($segments, 'revenue'));
+        // Margins and assets are known once the company keeps its plant by segment with economics of its own.
+        $economics = SegmentBooks::companyEconomics($stock->getEarningsMomentumZ() ?? []);
+        $reported = $report?->getOperatingMargin();
+        $scale = $economics !== null && $reported !== null && $economics['margin'] > 0.0 ? (float) $reported / $economics['margin'] : null;
         $rows = [];
-        foreach ($segments as $segment) {
+        foreach ($segments as $key => $segment) {
             $rows[] = [
                 'label' => $segment['label'],
                 'industry' => $segment['industry'],
                 'outlook' => $outlooks[$segment['industry']] ?? null,
                 'revenue' => $segment['revenue'] > 0.0 ? $segment['revenue'] : null,
                 'share' => $total > 0.0 && $segment['revenue'] > 0.0 ? $segment['revenue'] / $total : null,
+                'margin' => $scale !== null && isset($economics['margins'][$key]) ? $economics['margins'][$key] * $scale : null,
+                'assets' => $plant[$key] ?? null,
             ];
         }
 

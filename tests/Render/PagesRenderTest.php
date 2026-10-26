@@ -525,9 +525,9 @@ final class PagesRenderTest extends KernelTestCase
                 'mergerReview' => ['herfindahl' => 0.3266, 'highlyConcentrated' => true, 'acquirerShare' => 0.38, 'fringeShare' => 0.12, 'clearedShare' => 0.003, 'reviewBinds' => true, 'screens' => ['delta' => 0.02, 'concentrated' => 0.25, 'shareCeiling' => 0.35]],
             ],
             'segments' => [
-                ['label' => 'Gold and copper mining', 'industry' => 'Gold', 'outlook' => null, 'revenue' => 5.8e9, 'share' => 0.86],
-                ['label' => 'Ore terminals', 'industry' => 'Marine Ports & Services', 'outlook' => 1.04, 'revenue' => 9.4e8, 'share' => 0.14],
-                ['label' => 'Royalty streams', 'industry' => 'Investment Companies', 'outlook' => null, 'revenue' => null, 'share' => null],
+                ['label' => 'Gold and copper mining', 'industry' => 'Gold', 'outlook' => null, 'revenue' => 5.8e9, 'share' => 0.86, 'margin' => 0.142, 'assets' => 0.78],
+                ['label' => 'Ore terminals', 'industry' => 'Marine Ports & Services', 'outlook' => 1.04, 'revenue' => 9.4e8, 'share' => 0.14, 'margin' => 0.318, 'assets' => 0.22],
+                ['label' => 'Royalty streams', 'industry' => 'Investment Companies', 'outlook' => null, 'revenue' => null, 'share' => null, 'margin' => null, 'assets' => null],
             ],
             'management' => ['style' => 'empire_builder', 'label' => 'Empire Builder', 'mandate' => 'mandated to grow, and will fund projects a stricter board would refuse', 'conviction' => 'pronounced', 'tone' => 'warn', 'tenureYears' => 3.2],
             'peers' => [

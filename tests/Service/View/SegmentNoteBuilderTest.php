@@ -65,6 +65,30 @@ class SegmentNoteBuilderTest extends TestCase
         $this->assertSame(['Cash and investments', 'Household and medical products'], array_column($rows, 'label'));
     }
 
+    /**
+     * Each segment shows its own margin, scaled to the margin the company reported so the segments' operating profits
+     * add up to its own, and its share of the company's assets.
+     */
+    public function testEachSegmentShowsItsMarginAndAssets(): void
+    {
+        $stock = self::stock('WEAV', 'Internet Retail');
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []);
+        $stock->setEarningsMomentumZ(SegmentBooks::openEconomics('WEAV', $momentum, 2.0, 0.06) + $momentum);
+        $report = (new CorporateReport())->setRevenueStreams(['first_party_retail' => 600.0, 'third_party_services' => 200.0, 'digital_ads_cloud' => 200.0]);
+        $report->setOperatingMargin('0.0500');
+
+        $rows = SegmentNoteBuilder::fromReport($stock, $report) ?? [];
+
+        $profit = 0.0;
+        foreach ($rows as $row) {
+            $profit += (float) $row['revenue'] * (float) $row['margin'];
+        }
+        $this->assertEqualsWithDelta(0.05 * 1_000.0, $profit, 1e-9);
+        $this->assertEqualsWithDelta(6.0, (float) $rows[1]['margin'] / (float) $rows[0]['margin'], 1e-9);
+        $this->assertEqualsWithDelta(1.0, (float) $rows[0]['assets'] + (float) $rows[1]['assets'], 1e-12);
+        $this->assertNull(SegmentNoteBuilder::fromReport(self::stock('SKYL', 'Space Systems'), $report)[0]['margin'] ?? null, 'a company on one plant shows none');
+    }
+
     public function testACompanyWithOneMarketHasNoSegmentNote(): void
     {
         $this->assertNull(SegmentNoteBuilder::fromReport(self::stock('LOON', 'Telecom Services'), new CorporateReport()));

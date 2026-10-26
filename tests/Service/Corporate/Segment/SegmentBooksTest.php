@@ -200,6 +200,16 @@ class SegmentBooksTest extends TestCase
 
         $streams = (new StreamContext($momentum, new MathUtility(), ticker: 'TERN'))->resolveActiveStreamWeights($weights);
         $this->assertEqualsWithDelta(0.2, $streams['air_cargo'], 1e-12, 'the models\' stream mix reads the same split');
+
+        // A mix still drifting from an old one moves within each segment, but each segment sells its share now.
+        $drifting = $momentum;
+        foreach (['leisure_passengers' => 0.40, 'business_passengers' => 0.40, 'air_cargo' => 0.05, 'loyalty_miles' => 0.15] as $line => $old) {
+            $drifting["weight:{$line}"] = $old;
+            $drifting["share:{$line}"] = $old;
+        }
+        $streams = (new StreamContext($drifting, new MathUtility(), ticker: 'TERN'))->resolveActiveStreamWeights($weights);
+        $this->assertEqualsWithDelta(0.2, $streams['air_cargo'], 1e-12);
+        $this->assertNotEqualsWithDelta($split['leisure_passengers'], $streams['leisure_passengers'], 1e-6, 'within the segment the mix still drifts');
     }
 
     /**
@@ -303,6 +313,82 @@ class SegmentBooksTest extends TestCase
         $this->assertFalse(SegmentBooks::keepsBooks((new Stock())->setTicker('LOON')->setIndustry('Telecom Services')));
         $this->assertSame('TERN', SegmentBooks::ownerOf(SegmentBooks::recordKey('TERN', 'air_cargo')));
         $this->assertSame('TERN', SegmentBooks::recordKey('TERN', Segments::MAIN));
+    }
+
+    /**
+     * Each segment gets its own margin and turnover, struck so the company's own stay what they were and each segment
+     * keeps its share of the revenue: the ads arm earns six times retail's margin on half its turnover, so it holds
+     * twice the plant per dollar of sales, and its market, measured in plant, with it.
+     */
+    public function testSegmentEconomicsOpenAtTheCompanysOwn(): void
+    {
+        $weav = (new Stock())->setTicker('WEAV')->setIndustry('Internet Retail');
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []);
+        $shareBefore = SegmentBooks::addressableShares($weav->setEarningsMomentumZ($momentum), 0.3, 0.0);
+
+        $weav->setEarningsMomentumZ(SegmentBooks::openEconomics('WEAV', $momentum, 2.0, 0.06) + $momentum);
+        $economics = SegmentBooks::companyEconomics($weav->getEarningsMomentumZ() ?? []);
+
+        $this->assertNotNull($economics);
+        $this->assertEqualsWithDelta(2.0, $economics['turnover'], 1e-12);
+        $this->assertEqualsWithDelta(0.06, $economics['margin'], 1e-12);
+        $this->assertEqualsWithDelta(0.2, $economics['sales']['ads_and_cloud'], 1e-12, 'its share of the revenue');
+        $this->assertEqualsWithDelta(0.4 / 1.2, SegmentBooks::plant($weav->getEarningsMomentumZ() ?? [])['ads_and_cloud'] ?? 0.0, 1e-12);
+        $this->assertEqualsWithDelta(6.0, $economics['margins']['ads_and_cloud'] / $economics['margins'][Segments::MAIN], 1e-12);
+        $this->assertEqualsWithDelta(0.5, $economics['turnovers']['ads_and_cloud'] / $economics['turnovers'][Segments::MAIN], 1e-12);
+        $this->assertEqualsWithDelta($shareBefore['ads_and_cloud'], SegmentBooks::addressableShares($weav, 0.3, 0.0)['ads_and_cloud'], 1e-12, 'nor its share of its market');
+
+        $this->assertSame(0.0, SegmentBooks::avoidableCostRatio($this->tern(), 'air_cargo', 0.7), 'a by-product sells at any price');
+        $this->assertSame(0.7, SegmentBooks::avoidableCostRatio($weav, 'ads_and_cloud', 0.7));
+    }
+
+    /**
+     * What a takeover buys joins its segment's turnover and margin; the company's own are their blend again. A sold
+     * segment's market is no longer the company's.
+     */
+    public function testATakeoverBlendsIntoItsSegmentsEconomics(): void
+    {
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []);
+        $momentum = SegmentBooks::openEconomics('WEAV', $momentum, 2.0, 0.06) + $momentum;
+        $before = SegmentBooks::companyEconomics($momentum);
+        $this->assertNotNull($before);
+        $adsCapital = (SegmentBooks::plant($momentum)['ads_and_cloud'] ?? 0.0) * 1_000.0;
+
+        $after = SegmentBooks::acquireIntoBooks($momentum, 'ads_and_cloud', 1_000.0, 100.0, 300.0, 30.0) + $momentum;
+        $economics = SegmentBooks::companyEconomics($after);
+        $this->assertNotNull($economics);
+
+        $adsRevenue = $adsCapital * $before['turnovers']['ads_and_cloud'];
+        $this->assertEqualsWithDelta(($adsRevenue + 300.0) / ($adsCapital + 100.0), $economics['turnovers']['ads_and_cloud'], 1e-9);
+        $this->assertEqualsWithDelta((($adsRevenue * $before['margins']['ads_and_cloud']) + 30.0) / ($adsRevenue + 300.0), $economics['margins']['ads_and_cloud'], 1e-9);
+        $this->assertSame($before['margins'][Segments::MAIN], $economics['margins'][Segments::MAIN]);
+
+        $stock = (new Stock())->setTicker('WEAV')->setIndustry('Internet Retail');
+        $stock->setEarningsMomentumZ([SegmentBooks::STATE_PLANT . 'ads_and_cloud' => 0.0, SegmentBooks::STATE_PLANT . Segments::MAIN => 1.0] + $momentum);
+        $this->assertEqualsWithDelta((float) $momentum[SegmentBooks::STATE_MARKET . Segments::MAIN], SegmentBooks::firmMarketGrowth($stock, 0.0), 1e-12, 'only the market it still sells into');
+    }
+
+    /**
+     * A segment sold whole gives up its share of the sales and of the income it earns at its own margin; the weakest is
+     * the one whose plant earns least, not the one that turns it slowest.
+     */
+    public function testASaleGivesUpWhatTheSegmentEarns(): void
+    {
+        // The consumer arm sells least per unit of plant, but at four times the margin it earns more on it.
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.5, 'industrial' => 0.3, 'consumer' => 0.2], 1.0, []) + [
+            SegmentBooks::STATE_TARGET . Segments::MAIN => 0.55,
+            SegmentBooks::STATE_TARGET . 'industrial' => 0.3,
+            SegmentBooks::STATE_TARGET . 'consumer' => 0.15,
+            SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.10,
+            SegmentBooks::STATE_MARGIN . 'industrial' => 0.05,
+            SegmentBooks::STATE_MARGIN . 'consumer' => 0.20,
+        ];
+
+        $shares = SegmentBooks::earningShares($momentum, 'industrial');
+        $this->assertSame(0.3, $shares['revenue']);
+        $this->assertEqualsWithDelta(0.015 / (0.055 + 0.015 + 0.03), $shares['income'], 1e-12);
+        $triv = (new Stock())->setTicker('TRIV')->setIndustry('Conglomerates');
+        $this->assertSame('industrial', SegmentBooks::weakestSegment($triv->setEarningsMomentumZ($momentum)));
     }
 
     private function tern(): Stock

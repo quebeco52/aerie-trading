@@ -192,7 +192,7 @@ class IndustryShareLedger
      * share; zero for a firm the ledger has not seen them from yet.
      *
      * @param array<string, mixed>|null $record
-     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, segment_outlook_gap?: float}
+     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, segment_outlook_gap?: float, books_main_share?: float}
      */
     private static function carriedFields(?array $record): array
     {
@@ -202,19 +202,21 @@ class IndustryShareLedger
             'anchor_time'           => (float) ($record['anchor_time'] ?? 0.0),
             'anchor_outlook'        => (float) ($record['anchor_outlook'] ?? 0.0),
             'addressable_share'     => (float) ($record['addressable_share'] ?? 0.0),
-        ] + self::carriedSegmentGap($record);
+        ] + self::carriedMarks($record);
     }
 
     /**
-     * A company in several markets carries how far its blended outlook sits from its industry's; a company in one
-     * market carries nothing, so its record is unchanged.
+     * What a record carries for a company in several markets: on one plant, how far its blended outlook sits from its
+     * industry's; with plant by segment, the main record's share of the plant its books opened at, so the opening is
+     * applied once. A company in one market carries nothing, so its record is unchanged.
      *
      * @param array<string, mixed>|null $record
-     * @return array{segment_outlook_gap?: float}
+     * @return array{segment_outlook_gap?: float, books_main_share?: float}
      */
-    private static function carriedSegmentGap(?array $record): array
+    private static function carriedMarks(?array $record): array
     {
-        return isset($record['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $record['segment_outlook_gap']] : [];
+        return (isset($record['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $record['segment_outlook_gap']] : [])
+            + (isset($record['books_main_share']) ? ['books_main_share' => (float) $record['books_main_share']] : []);
     }
 
     /**
@@ -387,7 +389,7 @@ class IndustryShareLedger
             'addressable_share'     => min(1.0, $addressableShare),
             'tick'                  => $tick,
             'consumed_tick'         => (int) ($own['consumed_tick'] ?? $tick),
-        ] + $segmentGap;
+        ] + $segmentGap + (isset($own['books_main_share']) ? ['books_main_share' => (float) $own['books_main_share']] : []);
         $this->store->writeRecord($industry, $ticker, $record);
         $records[$ticker] = $record;
 
@@ -910,7 +912,7 @@ class IndustryShareLedger
             'addressable_share'     => (float) ($own['addressable_share'] ?? 0.0),
             'tick'                  => (int) $own['tick'],
             'consumed_tick'         => (int) $own['consumed_tick'],
-        ] + self::carriedSegmentGap($own));
+        ] + self::carriedMarks($own));
     }
 
     /**
@@ -927,10 +929,12 @@ class IndustryShareLedger
     }
 
     /**
-     * A segment sold whole to an off-board buyer keeps supplying its market, now from the fringe: its record's plant
-     * and trend plant leave together, as recordDivestedFraction() moves a slice, and the company's other records stay.
+     * A segment sold whole to an off-board buyer keeps supplying its market: its record keeps its plant and its anchor
+     * but sells nothing for the company and is no longer refreshed, so for the year it stays on the roster the buyer's
+     * plant weighs on the price as it did, and once it ages out the fringe supplies the market at trend. The company's
+     * other records are untouched.
      */
-    public function recordSoldSegment(Stock $stock, string $segment, MacroStateDTO $macroState, float $secularExcessGrowth): void
+    public function recordSoldSegment(Stock $stock, string $segment): void
     {
         $address = self::segmentAddress($stock, $segment);
         $own = $address === null ? null : ($this->store->readIndustry($address[0])[$address[1]] ?? null);
@@ -938,11 +942,9 @@ class IndustryShareLedger
             return;
         }
 
-        if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0) {
-            $this->transferRevenue($address[0], $address[1], $own, -(float) ($own['revenue'] ?? 0.0));
-        } else {
-            $this->transferCapacity($address[0], $address[1], -max(0.0, (float) $own['capacity']), $macroState, $secularExcessGrowth);
-        }
+        $own['revenue'] = 0.0;
+        $own['gain'] = 0.0;
+        $this->store->writeRecord($address[0], $address[1], $own);
     }
 
     /**
@@ -979,7 +981,8 @@ class IndustryShareLedger
     public function openSegmentBooks(Stock $stock, float $mainPlantShare): void
     {
         $own = $this->readOwnRecord($stock);
-        if ($own === null) {
+        // Opened once: a report replayed after its tick rolled back finds the main record already split.
+        if ($own === null || isset($own['books_main_share'])) {
             return;
         }
 
@@ -988,6 +991,7 @@ class IndustryShareLedger
             $own[$field] = (float) ($own[$field] ?? 0.0) * $share;
         }
         $own['anchor_outlook'] = (float) ($own['anchor_outlook'] ?? 0.0) - (float) ($own['segment_outlook_gap'] ?? 0.0);
+        $own['books_main_share'] = $share;
         unset($own['segment_outlook_gap']);
 
         $this->store->writeRecord((string) $stock->getIndustry(), $stock->getTicker(), $own);

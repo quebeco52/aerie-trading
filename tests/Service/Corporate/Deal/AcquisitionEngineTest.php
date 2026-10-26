@@ -973,7 +973,11 @@ class AcquisitionEngineTest extends TestCase
         $stock->setIndustry('Internet Retail');
         $stock->setManagementStyle(ManagementStyle::Steward);
         $ledger->resolveIndustryCapacityRatio($stock, 16_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
-        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []));
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []);
+        // The ads arm turns its plant fast enough that the target's plant is worth less than its price.
+        $stock->setEarningsMomentumZ(SegmentBooks::openEconomics('WEAV', $momentum, 3.0, 0.09) + $momentum);
+        $adsMargin = SegmentBooks::companyEconomics($stock->getEarningsMomentumZ() ?? [])['margins']['ads_and_cloud'] ?? 0.0;
+        $adsTurnover = SegmentBooks::companyEconomics($stock->getEarningsMomentumZ() ?? [])['turnovers']['ads_and_cloud'] ?? 0.0;
         $ledger->resolveSegmentSupply($stock, 'ads_and_cloud', 4_000_000_000.0, 4_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
 
         $deal = $engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
@@ -983,8 +987,44 @@ class AcquisitionEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $acquired);
         $this->assertEqualsWithDelta(4_000_000_000.0 + $acquired, $store->readIndustry('Internet Content & Information')['WEAV/ads_and_cloud']['capacity'], 1.0);
         $this->assertEqualsWithDelta(16_000_000_000.0, $store->readIndustry('Internet Retail')['WEAV']['capacity'], 1.0);
-        $this->assertEqualsWithDelta((4_000_000_000.0 + $acquired) / (20_000_000_000.0 + $acquired), SegmentBooks::plant($stock->getEarningsMomentumZ() ?? [])['ads_and_cloud'] ?? 0.0, 1e-9);
+        $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) ?? [];
+        $this->assertGreaterThan(0.2, $plant['ads_and_cloud'] ?? 0.0, 'the plant bought joins the ads arm');
+        $this->assertEqualsWithDelta(1.0, array_sum($plant), 1e-12);
         $this->assertStringContainsString('for its advertising and cloud business', $deal['event']['description']);
+        // The target earns like the ads arm it joins (at the drawn 80% of its margin), not like the whole company, and
+        // runs its plant: what was paid beyond that plant is goodwill, so the arm's turnover holds.
+        $after = SegmentBooks::companyEconomics($stock->getEarningsMomentumZ() ?? []);
+        $this->assertNotNull($after);
+        $this->assertGreaterThan(0.8 * $adsMargin, $after['margins']['ads_and_cloud']);
+        $this->assertEqualsWithDelta($adsTurnover, $after['turnovers']['ads_and_cloud'], 1e-9 * $adsTurnover);
+    }
+
+    /**
+     * An airline bought comes with its holds: a deal into passenger flying books the belly-cargo share of what it
+     * bought in freight's ledger, as the plant splits, so neither record reads a shortfall or a glut that is not there.
+     */
+    public function testAnAirlineBoughtBooksItsHoldsInFreight(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+        $this->mathUtilityMock->script(generateUniform: [0.0, 0.0]);
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $engine = new AcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+        $stock = $this->buildLedgeredAcquirer('TERN', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $stock->setIndustry('Airlines');
+        $stock->setManagementStyle(ManagementStyle::Steward);
+        $ledger->resolveIndustryCapacityRatio($stock, 18_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
+        $stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []));
+        $ledger->resolveSegmentSupply($stock, 'air_cargo', 2_000_000_000.0, 2_000_000_000.0, 0.02, 1.0, 0.0, 0.0, 10, 252);
+
+        $this->assertIsArray($engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0));
+
+        $acquired = (float) $stock->getTotalRevenue() - 20_000_000_000.0;
+        $this->assertGreaterThan(0.0, $acquired);
+        $this->assertEqualsWithDelta(18_000_000_000.0 + (0.9 * $acquired), $store->readIndustry('Airlines')['TERN']['capacity'], 1.0);
+        $this->assertEqualsWithDelta(2_000_000_000.0 + (0.1 * $acquired), $store->readIndustry('Integrated Freight & Logistics')['TERN/air_cargo']['capacity'], 1.0);
+        $this->assertEqualsWithDelta(0.1, SegmentBooks::plant($stock->getEarningsMomentumZ() ?? [])['air_cargo'] ?? 0.0, 1e-12);
     }
 
     /**

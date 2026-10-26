@@ -243,7 +243,6 @@ enum ModelParam: string
     // --- Conglomerates ---
     case IndustrialConglomerateWeight = 'industrial_conglomerate_weight';
     case DefensiveStaplesWeight = 'defensive_staples_weight';
-    case ContrarianFloatWeight = 'contrarian_float_weight';
 
     // --- Investment Companies ---
     // A sphere declares NO portfolio composition: treasury off the balance sheet, stakes off the board via

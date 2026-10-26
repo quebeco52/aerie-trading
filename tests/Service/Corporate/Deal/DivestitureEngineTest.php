@@ -14,6 +14,7 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Corporate\Segment\SegmentBooks;
+use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\News\MarketEventPublisher;
 use App\Service\News\WireFormat;
 use App\Tests\Support\DebtHealthBuilder;
@@ -392,8 +393,8 @@ class DivestitureEngineTest extends TestCase
 
     /**
      * A company that keeps plant by segment sells a whole business when one is the size this kind of sale takes: the
-     * one whose plant earns least, here by a dying business. Its plant and its share of every ledger leave, its record
-     * leaves its industry, and the company's other businesses keep all theirs.
+     * one whose plant earns least, here by a dying business. Its plant and that share of every ledger leave, its share
+     * of the sales goes, its record stops selling in its industry, and the company's other businesses keep all theirs.
      */
     public function testADistressedCompanySellsItsWeakestSegmentWhole(): void
     {
@@ -407,6 +408,10 @@ class DivestitureEngineTest extends TestCase
             SegmentBooks::STATE_TARGET . Segments::MAIN => 0.58,
             SegmentBooks::STATE_TARGET . 'industrial' => 0.31,
             SegmentBooks::STATE_TARGET . 'consumer' => 0.11,
+            SegmentBooks::STATE_MARGIN . Segments::MAIN => 0.10,
+            SegmentBooks::STATE_MARGIN . 'industrial' => 0.05,
+            SegmentBooks::STATE_MARGIN . 'consumer' => 0.15,
+            SegmentOutlook::STATE_SHARE . 'industrial' => 0.31,
         ]);
         $store = new InMemoryIndustryShareStore();
         $ledger = new IndustryShareLedger($store);
@@ -426,10 +431,16 @@ class DivestitureEngineTest extends TestCase
         $this->assertIsArray($engine->evaluateCorporateDivestiture($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0), 1.0));
 
         $this->assertEqualsWithDelta(0.65 * $grossPpe, (float) $stock->getGrossPpe(), 1.0, 'its share of the plant, not the drawn slice');
+        $this->assertEqualsWithDelta(20_000_000_000.0 * (1.0 - 0.31), (float) $stock->getTotalRevenue(), 1.0, 'its share of the sales, not of the plant');
         $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) ?? [];
         $this->assertSame(0.0, $plant['industrial']);
         $this->assertEqualsWithDelta(0.10 / 0.65, $plant['consumer'], 1e-12);
-        $this->assertSame(0.0, $store->readIndustry('Specialty Industrial Machinery')['TRIV/industrial']['capacity']);
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $this->assertSame(0.0, $momentum[SegmentBooks::STATE_TARGET . 'industrial'], 'its lines sell nothing');
+        $this->assertSame(0.0, $momentum[SegmentBooks::STATE_MARKET . 'industrial'], 'its market is no longer the company\'s');
+        $this->assertSame(0.0, $momentum[SegmentOutlook::STATE_SHARE . 'industrial'], 'nor its industry\'s outlook');
+        $this->assertSame(0.0, $store->readIndustry('Specialty Industrial Machinery')['TRIV/industrial']['revenue'], 'it sells nothing for the company');
+        $this->assertSame(5_000.0, $store->readIndustry('Specialty Industrial Machinery')['TRIV/industrial']['capacity'], 'the buyer runs its plant');
         $this->assertSame(4_000.0, $store->readIndustry('Household & Personal Products')['TRIV/consumer']['capacity']);
         $this->assertStringContainsString('sold its industrial products business', (string) $published);
     }

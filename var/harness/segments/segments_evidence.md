@@ -161,3 +161,137 @@ quarters at P < 1: WEAV ads 41% vs 48%, TRIV industrial 55% vs 62%, TRIV consume
 
 The eight p4 - p3: TRIV revenue +28% (t 8.9), margin -0.56 pt (t -7.3); WEAV +6.9% (t 2.0), margin -0.50 pt (t -2.1);
 OWLS +3.8% (t 1.9); others |t| < 1.5. TERN distress seeds 7 -> 6. No distress for the others.
+
+## 2026-10-26: long game, phase 4 working tree, 8 seeds x 40 years (one arm, live macro)
+
+The recorded macro paths hold 20 years (7,200 ticks), so arm `p4live` runs the live macro engine (no MACRO_REPLAY); no
+pairing. Outlook salt 1000+SEED as before.
+
+    YEARS=40 bin/harness-batch var/harness/segments/run.sh 1-8 p4live
+    python3 var/harness/segments/long.py 1-8 p4live 40 > var/harness/segments/long40_n8.out
+
+kappa median [p10, p90] y1 -> y40: WEAV ads 0.249 -> 0.160 [0.000, 0.498] (sold in 2 seeds, y12.5 at 0.293 and y31.8
+at 0.170); ERNE devices 0.100 -> 0.070 [0.000, 0.083] (sold s3 y21.2 at 0.067); JDAW ads 0.200 -> 0.162 [0.092,
+0.281]; OWLS industrial 0.449 -> 0.346, consumer 0.351 -> 0.405; TRIV industrial 0.599 -> 0.508, consumer 0.300 ->
+0.402; RAVN terminals 0.300 -> 0.289; BIRD merchant 0.201 -> 0.189; TERN cargo 0.103 -> 0.101. No live segment below
+0.03; ERNE and WEAV become all main (kappa 1) after a whole sale.
+a_s y40: WEAV main 0.346 -> 0.636 [0.310, 0.884] (> 0.5 in 6 of 8 seeds); WEAV ads up to 0.906 (s2 y36.6, kappa
+0.143); JDAW main p90 0.925 (> 0.5 in 3 seeds); all others < 0.5 (BIRD main p90 0.465).
+Prices: P_s and L_s are not filed. Firm price level median / p5: WEAV 1.024 / 0.919, JDAW 1.024 / 0.934, ERNE 1.008 /
+0.933, others 0.98-1.03 / >= 0.946; idle-plant quarters WEAV 3%, JDAW 6%, others 0. Segment record revenue/capacity
+medians 0.94-1.12.
+Growth: segment record revenue growth tracks its industry's listed peers within about 1 pt/yr per decade after
+y10 (e.g. OWLS industrial 3.5-3.9% vs 3.4-3.6%, RAVN terminals 4.5-5.4% vs 4.4-4.6%); y0-10 TRIV industrial 5.3% vs
+3.3%, TERN cargo 2.2% vs 4.8%.
+Deals: whole sales 3 in 40 years x 8 seeds; acquisitions per decade TRIV 49/13/15/13, WEAV main 27/25/26/26.
+
+DEFECT (measured): after a whole-segment sale the sold segment's streams keep producing revenue at the old share
+(WEAV s1: ads streams 24-29% of revenue for 27 years after the y12.5 sale; ERNE s3 5-8%; WEAV s7 14-18%) while its
+kappa is 0 and no ledger record books it: sum of live record revenue misses 4 x report revenue by up to 29% at y40.
+The phase-4 n=32 revenue identity silently skipped these reports (the frozen sold record failed the one-tick filter:
+19,981 of 20,120 checked = the 139 post-sale reads), so "exact" there was wrong for post-sale reports.
+Cause (measured on WEAV s1): `carry:segment_target:ads_and_cloud` stays at its pre-sale 0.319 for the rest of the game
+while main's target is 1; SegmentBooks::splitToTargets (called from StreamContext.php:351) gives the sold lines
+0.319 / 1.319 = 24% of revenue. Kappa-0 segments are skipped when targets are filed, so the stale key is merged back.
+Fix: drop the sold segment's target (and market/outlook keys) at the sale, or skip kappa-0 segments in splitToTargets.
+
+## 2026-10-26: segment economics + eight review fixes (econ) against b77f19c5 (p4c); econ 40 years
+
+Probe adds per report `smar`/`stur` (carry:segment_margin/turnover) and the stock's stable margin `fmar` and asset
+turnover `ftur`; `econ.py` reads them. Arms `p4c` (BASE = git archive b77f19c5) and `econ` (working tree), seeds 1-16
+then 17-32 (TERN distress 2 -> 6 seeds at n 16); `econlive` 8 seeds x 40 years on the live macro.
+
+    BASE=<scratchpad>/basetree-b77f19c5 bin/harness-batch var/harness/segments/run.sh 1-32 p4c econ
+    python3 var/harness/segments/analyse3.py 1-32 p4c econ > econ_vs_p4c_n32.out
+    python3 var/harness/segments/econ.py 1-32 p4c econ > econ_econ_n32.out
+    python3 var/harness/segments/deals.py 1-32 p4c econ > econ_deals_n32.out
+    YEARS=40 bin/harness-batch var/harness/segments/run.sh 1-8 econlive && python3 var/harness/segments/long.py 1-8 econlive 40 > econ_long40_n8.out
+
+Board econ - p4c (n 32): cap -0.14 tn (se 0.30), P/E 0.00 (0.05), vol +0.0003 (0.0013), defaults+deaths 0.00 (0.21),
+B-or-worse -0.12 pt (0.08), ND/EBITDA -0.023 (0.020), real revenue growth 0.00 (0.02).
+
+Economics (econ, medians y1/y10/y20): WEAV ads margin 0.240/0.176/0.147, main 0.040/0.043/0.046; firm stable margin
+0.090/0.089/0.087 (p4c 0.090/0.087/0.085; y20 +0.0037, t 2.1). Every change in WEAV's ads margin falls on a report
+after an acquisition into ads (seed 9, no ads deal, stays 0.240): AcquisitionEngine.php:408 sets the target's margin
+from the acquirer's company margin x U, and SegmentBooks::acquireIntoBooks blends it into the segment, so ads and main
+margins converge and the firm margin does not rise. Other segment margins hold (JDAW ads 0.273 vs main 0.182; RAVN
+terminals 0.224 vs 0.090; BIRD merchant 0.091 vs 0.227; ERNE devices 0.051 vs 0.128; TERN cargo 0.073 vs 0.092).
+Realised op margin econ - p4c: WEAV +0.83 pt (t 3.1), JDAW +0.53 pt (t 3.3), ERNE +0.21 pt (t 1.8).
+
+kappa y1/y5/y10/y20 (econ): WEAV ads 0.400/0.455/0.519/0.520 (p4c 0.250 -> 0.336); JDAW ads 0.333 -> 0.318; RAVN
+terminals 0.632 flat; ERNE devices 0.069 -> 0.055; BIRD merchant 0.123 -> 0.117 (kappa re-split at opening by 1 /
+turnover).
+
+Identities: sum of all record revenue = 4 x revenue in every report including post-sale, 4.7e-15 (p4c 9.4e-2); no live
+record stale. |segment revenue share - filed target| median 0.0111, p95 0.041 (p4c 0.017, 0.072). Record rev/cap over
+the company's within 0.92-1.01 medians, p10-p90 0.74-1.12. Sold record: revenue 0, capacity kept, tick frozen (deals.py
+"violations" count capacity != 0 and is now by design).
+
+Whole-segment sales: econ 1 (ERNE devices s12 y5.2, kappa 0.064, $4.1bn = 12.3x segment EBIT of $0.33bn); p4c 3 (ERNE
+devices, 10.8-21.7x EBIT at the firm's margin).
+
+The eight econ - p4c: revenue ERNE -7.4% (t -2.5), others |t| < 1; TERN distress seeds 6 -> 10 (seeds 1, 3, 7, 13 new,
+none lost); phase-3/4 runs had 5-7.
+
+40 years (econlive, 8 seeds): kappa y40 WEAV ads 0.543 [0.216, 0.656], ERNE devices 0.040 [0.014, 0.059] (< 0.03 in 2
+seeds, no sale), JDAW ads 0.291, RAVN terminals 0.642, BIRD merchant 0.111; WEAV main a_s 0.532 [0.419, 0.971] (> 0.5 in
+6 seeds), WEAV ads a_s p90 0.598, JDAW main a_s p90 0.828; no whole sales in 40 years; identities exact at y40 (9e-16);
+TERN 4 defaults/reorgs, WEAV 1; WEAV firm margin 0.090 -> 0.085 by y20.
+
+## 2026-10-26: econ2 (segment-margin targets, conglomerate float fix, OWLS reseed) vs b77f19c5 (p4c); TERN trace
+
+Arms `p4c` (BASE = git archive b77f19c5), `econ2` (working tree + `ovr_pl/` SegmentBooks copy that only logs the
+segment prices/loads/running of each aggregate() call into the probe's `pl`; checked: econ2 OUT == segplain OUT on seed
+1, 2 years), `econ2nj` (`ovr_nj/`: same copy with avoidableCostRatio returning the company ratio for every segment,
+undoing review fix 8). Seeds 1-16, 20 years, 360 ticks/year. Stopped at 16: the TERN question is answered exactly
+(below) and the board is inside noise; OWLS differs by its reseed, so its rows are not a paired effect.
+
+    BASE=<scratchpad>/basetree-b77f19c5 bin/harness-batch var/harness/segments/run.sh 1-16 p4c econ2 econ2nj
+    python3 var/harness/segments/analyse3.py 1-16 p4c econ2 > econ2_vs_p4c_n16.out
+    python3 var/harness/segments/econ.py 1-16 p4c econ2 > econ2_econ_n16.out
+    python3 var/harness/segments/round.py 1-16 p4c econ2 econ2nj > round_n16.out
+
+Board econ2 - p4c: cap +0.10 tn (se 0.45), P/E +0.06 (0.06), vol +0.0025 (0.0016), defaults+deaths 0.00 (0.27),
+B-or-worse -0.10 pt (0.07), ND/EBITDA -0.013 (0.023), real revenue growth -0.02 pt/yr (0.03).
+
+OWLS (median, p4c -> econ2): opening revenue 43.0 -> 63.7 bn, EBIT margin 0.400 -> 0.271, interest income 1.4 -> 1.7
+bn, NI 15.0 -> 15.4 bn, ROE 0.171 -> 0.141; y20 revenue 102 -> 146 bn, margin 0.399 -> 0.258, interest income 0.1 ->
+0.1 bn, NI 31.8 -> 29.0 bn, ROE 0.306 -> 0.241, P/E 17.2 -> 18.2, cap 546 -> 523 bn; no distress. Segments
+industrial/consumer kappa 0.487/0.513 -> 0.436/0.564, margins 0.296 / 0.237; main holds no kappa key.
+TRIV: opening 62.1 bn, margin 0.156 (unchanged); y20 revenue 157.7 -> 150.6 bn, margin 0.141 -> 0.142, NI 15.1 ->
+14.0, ROE 0.167 -> 0.161, P/E 16.9 -> 18.7, cap 249 -> 241; kappa industrial 0.708 -> 0.609, consumer 0.292 -> 0.391;
+margins 0.165/0.161 and 0.149/0.142. Interest income on both is ~0 at y20 in both arms.
+
+WEAV (econ2): company margin 0.090/0.098/0.112 at y1/y10/y20 (p4c 0.090/0.087/0.085; y20 +0.0235, t 7.6); ads margin
+0.240/0.229/0.209, main 0.040/0.039/0.039; ads turnover 1.84/1.25/0.93 and company turnover 1.64 vs 2.07 at y20 (t
+-4.3): bought ads capital carries the segment margin at a lower return, so ads ROIC (margin x turnover) falls 0.44 ->
+0.19.
+
+TERN trace (measured): econ2 and econ2nj are byte-identical in all 16 seeds (OUT equal with `secs` dropped). No segment
+of any firm had a load below 1 in 10,112 logged reports, so the avoidable-cost ratio never enters a segment's clearing
+and fix 8 cannot act. TERN distress seeds: p4c {4, 10}, econ2 {1, 4, 10, 13}, econ2nj the same. In the year before
+the first default the passenger price was 0.948-0.998 (non-failing seeds 1.008-1.036), op margin -0.048 to +0.014
+(others 0.085-0.111), ND/EBITDA 5.7-56 (others ~2); cargo price 0.967-1.006, loads 1.000, cargo revenue share
+0.094-0.119 (others ~0.10). The same windows in p4c are weak too (s10 ND/EBITDA 35.6, s4 margin 0.001): the extra
+seeds are passenger-market downturns on divergent paths, not cargo (inferred).
+
+Identities (econ2): sum kappa 2e-16; sum of all record revenue = 4 x revenue on every report including post-sale
+(5e-15; p4c 4.3e-2). Record capacity now splits on revenue targets, not kappa: |cap share - previous report's target|
+median 0.007, p95 0.031 (vs kappa 0.060 / 0.30), so analyse3's kappa-split check is obsolete for this tree.
+Whole-segment sales econ2: ERNE devices twice (s2 y3.8 kappa 0.064, 16.4x segment EBIT; s7 y16.7 0.060, 14.8x).
+
+## 2026-10-26: econ3 (takeover assets at revenue / the joined segment's turnover) vs econ2, 8 seeds x 20 years
+
+Arm `econ3` = working tree (no ovr); econ2 runs reused. Probe adds `gw` (stock goodwill) and `tax` (effective rate,
+median 0.170). n = 8 is a sense check.
+
+    bin/harness-batch var/harness/segments/run.sh 1-8 econ3
+    python3 var/harness/segments/analyse3.py 1-8 econ2 econ3 > econ3_vs_econ2_n8.out
+    python3 var/harness/segments/econ.py 1-8 econ2 econ3 > econ3_econ_n8.out
+
+WEAV ads (median over seeds, y1/y10/y20): turnover econ2 1.841/1.104/0.970 -> econ3 1.841/1.841/1.841; margin
+0.240/0.223/0.210 -> 0.240/0.229/0.215; ROIC (1 - t) m T 0.367/0.204/0.169 -> 0.367/0.350/0.329. WEAV company y20:
+margin 0.106 -> 0.100 (-0.005, se 0.005), turnover 1.78 -> 2.68 (+0.93, t 8.0), goodwill 94 bn in econ3 (not recorded
+for econ2). Board econ3 - econ2: cap +0.58 tn (se 0.65), P/E -0.04 (0.08), vol -0.0014 (0.0019), defaults+deaths
+-0.13 (0.30), B-or-worse +0.30 pt (0.09, t 3.3: ALBT, FALC, WING, unrelated to segments), ND/EBITDA 0.00, real growth
++0.06 pt/yr (0.04). Eight: JDAW op margin +0.91 pt (t 4.7), WEAV -0.73 pt (t -2.0), others |t| < 1.5.

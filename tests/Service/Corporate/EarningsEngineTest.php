@@ -303,7 +303,8 @@ class EarningsEngineTest extends TestCase
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $shares = SegmentOutlook::filedShares($momentum);
-        $this->assertEqualsCanonicalizing([Segments::MAIN, 'industrial', 'consumer'], array_keys($shares), json_encode($shares) ?: '');
+        // A conglomerate's own business is its cash, which earns on the treasury: its plant is all its segments'.
+        $this->assertEqualsCanonicalizing(['industrial', 'consumer'], array_keys($shares), json_encode($shares) ?: '');
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-9);
         $this->assertGreaterThan(0.0, $shares['industrial']);
         $this->assertSame(0.0, $momentum[SegmentBooks::STATE_OUTLOOK . 'industrial'] ?? null, 'an outlook not yet stepped files as the opening');
@@ -326,12 +327,56 @@ class EarningsEngineTest extends TestCase
 
         $industrial = $store->readIndustry('Specialty Industrial Machinery')['TRIV/industrial'] ?? null;
         $consumer = $store->readIndustry('Household & Personal Products')['TRIV/consumer'] ?? null;
-        $main = $store->readIndustry('Conglomerates')['TRIV'] ?? null;
         $this->assertNotNull($industrial);
         $this->assertNotNull($consumer);
-        $this->assertNotNull($main);
         $this->assertGreaterThan(0.0, $industrial['anchor_capacity_share'], 'a segment anchors in its own industry');
-        $this->assertEqualsWithDelta($captured->actualRevenue * 4.0, $industrial['revenue'] + $consumer['revenue'] + $main['revenue'], 1e-6 * $captured->actualRevenue);
+        $this->assertEqualsWithDelta($captured->actualRevenue * 4.0, $industrial['revenue'] + $consumer['revenue'] + (float) ($store->readIndustry('Conglomerates')['TRIV']['revenue'] ?? 0.0), 1e-6 * $captured->actualRevenue);
+
+        // Sold whole between reports, with the share of the quarter its last report filed left behind: its lines sell
+        // nothing from the next report on, and the industries still book the company's revenue once.
+        foreach (SegmentBooks::sellSegment($plant, 'industrial') as $segment => $share) {
+            $momentum[SegmentBooks::STATE_PLANT . $segment] = $share;
+        }
+        $stock->setEarningsMomentumZ($momentum);
+        $engine->calculate($stock, $macro, $tick + 126, 252);
+
+        $this->assertSame(0.0, ($stock->getEarningsMomentumZ() ?? [])[SegmentBooks::STATE_TARGET . 'industrial'] ?? null);
+        $this->assertSame(0.0, (float) ($captured->streamRevenue['industrial_manufacturing'] ?? 0.0));
+        $consumer = $store->readIndustry('Household & Personal Products')['TRIV/consumer'];
+        $this->assertEqualsWithDelta($captured->actualRevenue * 4.0, $consumer['revenue'] + (float) ($store->readIndustry('Conglomerates')['TRIV']['revenue'] ?? 0.0), 1e-6 * $captured->actualRevenue);
+    }
+
+    /**
+     * When its books open, each segment takes its own margin and turnover, struck so the company's own stay where they
+     * were (the ads arm six times retail's margin on half its turnover), and each segment books its own sales surprise
+     * in its industry, not the company's.
+     */
+    public function testSegmentsOpenWithTheirOwnEconomicsAndBookTheirOwnSurprise(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger($store));
+        mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $stock = $this->buildMatureIndustrial('WEAV');
+        $stock->setIndustry('Internet Retail');
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+        $tick = EarningsEngine::resolveReportingTick('WEAV', 252);
+        $engine->calculate($stock, $macro, $tick, 252);
+        $margin = (float) $stock->getOperatingMargin();
+        $turnover = (float) $stock->getAssetTurnover();
+
+        $engine->calculate($stock, $macro, $tick + 63, 252);
+
+        $economics = SegmentBooks::companyEconomics($stock->getEarningsMomentumZ() ?? []);
+        $this->assertNotNull($economics);
+        $this->assertEqualsWithDelta($margin, (float) $stock->getOperatingMargin(), 1e-6, 'the company earns what it did');
+        $this->assertEqualsWithDelta($turnover, (float) $stock->getAssetTurnover(), 1e-6);
+        $this->assertEqualsWithDelta(6.0, $economics['margins']['ads_and_cloud'] / $economics['margins'][Segments::MAIN], 1e-9);
+
+        $ads = $store->readIndustry('Internet Content & Information')['WEAV/ads_and_cloud'] ?? null;
+        $retail = $store->readIndustry('Internet Retail')['WEAV'] ?? null;
+        $this->assertNotNull($ads);
+        $this->assertNotNull($retail);
+        $this->assertNotEqualsWithDelta($retail['gain'], $ads['gain'], 1e-9, 'each segment\'s own lines, not the company\'s surprise');
     }
 
     /**

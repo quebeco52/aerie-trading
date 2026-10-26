@@ -183,7 +183,7 @@ for tk in EIGHT:
                 for i in range(len(rows) - 1):
                     a, b = rows[i], rows[i + 1]
                     rs, rm = a['recs'][seg], a['recs']['main']
-                    if min(rs['cap'], rm['cap'], rs['rev'], rm['rev'], b['kappa'][seg], b['kappa']['main']) <= 0:
+                    if min(rs['cap'], rm['cap'], rs['rev'], rm['rev'], b['kappa'].get(seg, 0.0), b['kappa'].get('main', 0.0), a['kappa'].get('main', 0.0)) <= 0:  # conglomerates' main holds no plant
                         continue
                     dk = math.log(b['kappa'][seg] / b['kappa']['main']) - math.log(a['kappa'][seg] / a['kappa']['main'])
                     gx.append(math.log((rs['rev'] / rs['cap']) / (rm['rev'] / rm['cap'])))
@@ -207,7 +207,7 @@ for (tk, seg), ind in sorted(SEGIND.items()):
         rows = [row for row in T[B][s].get(tk, []) if row['kappa'] and seg in row['kappa']]
         for i in range(len(rows) - 1):
             a, b = rows[i], rows[i + 1]
-            if min(a['kappa'][seg], a['kappa']['main'], b['kappa'][seg], b['kappa']['main']) <= 0:
+            if min(a['kappa'][seg], a['kappa'].get('main', 0.0), b['kappa'].get(seg, 0.0), b['kappa'].get('main', 0.0)) <= 0:  # conglomerates' main holds no plant
                 continue
             p = ipl.get(int(a['t'] * 4)) or ipl.get(int(a['t'] * 4) - 1)
             if not p:

@@ -250,7 +250,7 @@ final class CapitalBudgetEngine
             $gaps[$segment] = $capitalGap - log(max(OperatingCapacityEngine::MIN_CAPACITY_UTILIZATION, $books['load']));
             $plant = $ctx->segmentPlantBase * $books['plant'];
 
-            if (self::returnOnPlantAt($ctx, $books['price']) < $growthHurdle) {
+            if (self::segmentReturnOnPlant($ctx, $books) < $growthHurdle) {
                 // As for the company on one plant: no shortfall is closed by building, and none is priced.
                 $gaps[$segment] = min(0.0, $gaps[$segment]);
                 $budgets[$segment] = 0.0;
@@ -340,11 +340,26 @@ final class CapitalBudgetEngine
         return self::returnOnPlantAt($ctx, $ctx->industryPriceLevel);
     }
 
-    /** returnOnNewPlant() at a given industry price: one segment's, for a company that keeps plant by segment. */
+    /** returnOnNewPlant() at a given industry price. */
     private static function returnOnPlantAt(EarningsSimulationContext $ctx, float $industryPriceLevel): float
     {
         return $ctx->baselineRoic
             + ((1.0 - $ctx->corporateTaxRate) * $ctx->assetTurnover * EarningsEngine::TTM_QUARTERS * ($industryPriceLevel - 1.0));
+    }
+
+    /**
+     * returnOnNewPlant() for one segment of a company that keeps plant by segment: the company's return scaled by how
+     * much more (or less) the segment earns on each unit of plant, its margin times its turnover over the company's,
+     * plus the after-tax margin its own industry's price adds on the revenue that plant turns over.
+     *
+     * @param array{margin: float, turnover: float, price: float} $books
+     */
+    private static function segmentReturnOnPlant(EarningsSimulationContext $ctx, array $books): float
+    {
+        $companyTurnover = $ctx->assetTurnover * EarningsEngine::TTM_QUARTERS;
+        $relative = $ctx->stableMargin > 0.0 && $companyTurnover > 0.0 ? ($books['margin'] * $books['turnover']) / ($ctx->stableMargin * $companyTurnover) : 1.0;
+
+        return ($ctx->baselineRoic * $relative) + ((1.0 - $ctx->corporateTaxRate) * $books['turnover'] * ($books['price'] - 1.0));
     }
 
     /**

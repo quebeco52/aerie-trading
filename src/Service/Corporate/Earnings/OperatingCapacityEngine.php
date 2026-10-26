@@ -161,6 +161,12 @@ final class OperatingCapacityEngine
             $stock->setEarningsMomentumZ($filed + ($stock->getEarningsMomentumZ() ?? []));
         }
         $this->openSegmentBooks($ctx);
+        // A company that keeps plant by segment earns its segments' margins at their own turnovers: its own margin and
+        // turnover are their blend at the plant it holds in each, and move as that mix does.
+        $economics = $this->resolveSegmentEconomics($ctx, $annualTurnover);
+        if ($economics !== null) {
+            $assetTurnover = min(self::MAX_QUARTERLY_ASSET_TURNOVER, $economics['turnover'] / 4.0);
+        }
 
         // The firm's reach into the market it sells into, on the base the saturation physics uses. The
         // industry ledger weighs both what this firm builds and what it takes from rivals by it.
@@ -175,7 +181,18 @@ final class OperatingCapacityEngine
             );
             // A segment with no plant (a line the company does not run) sells nothing into its industry.
             foreach (array_filter($plant, static fn(float $share): bool => $share > 0.0) as $segment => $plantShare) {
-                $ctx->segments[$segment] = ['plant' => $plantShare, 'market' => $markets[$segment] ?? 0.0, 'price' => 1.0, 'load' => 1.0, 'drain' => 0.0, 'growth' => 0.0, 'leftover' => 0.0];
+                $ctx->segments[$segment] = [
+                    'plant' => $plantShare,
+                    'sales' => $economics['sales'][$segment] ?? $plantShare,
+                    'margin' => $economics['margins'][$segment] ?? $ctx->stableMargin,
+                    'turnover' => $economics['turnovers'][$segment] ?? $annualTurnover,
+                    'market' => $markets[$segment] ?? 0.0,
+                    'price' => 1.0,
+                    'load' => 1.0,
+                    'drain' => 0.0,
+                    'growth' => 0.0,
+                    'leftover' => 0.0,
+                ];
             }
         }
 
@@ -472,6 +489,7 @@ final class OperatingCapacityEngine
     private function resolveSegmentBalances(EarningsSimulationContext $ctx, float $avoidableCostRatio): array
     {
         $industries = SegmentBooks::industries($ctx->stock);
+        $joint = SegmentBooks::jointSegments($ctx->stock);
         $prices = [];
         $loads = [];
         foreach ($ctx->segments as $segment => $books) {
@@ -480,8 +498,8 @@ final class OperatingCapacityEngine
             $supply = $this->industryShareLedger === null || $strategy->isFinancial() || $substitutability <= 0.0 ? null : $this->industryShareLedger->resolveSegmentSupply(
                 $ctx->stock,
                 $segment,
-                $books['plant'] * (float) $ctx->stock->getTotalRevenue(),
-                $books['plant'] * $ctx->structuralRevenue * EarningsEngine::TTM_QUARTERS,
+                $books['sales'] * (float) $ctx->stock->getTotalRevenue(),
+                $books['sales'] * $ctx->structuralRevenue * EarningsEngine::TTM_QUARTERS,
                 $books['market'],
                 IndustryShareLedger::trendNominalGdp($ctx->macroState),
                 $ctx->macroState->totalTime,
@@ -489,14 +507,16 @@ final class OperatingCapacityEngine
                 $ctx->tickCount,
                 $ctx->ticksPerYear,
             );
-            [$prices[$segment], $loads[$segment]] = $supply === null ? [1.0, 1.0] : self::clearAt($supply, $books['market'], $substitutability, $avoidableCostRatio);
+            [$prices[$segment], $loads[$segment]] = $supply === null
+                ? [1.0, 1.0]
+                : self::clearAt($supply, $books['market'], $substitutability, SegmentBooks::avoidableCostRatio($ctx->stock, $segment, $avoidableCostRatio));
             $ctx->segments[$segment]['price'] = $prices[$segment];
             $ctx->segments[$segment]['load'] = $loads[$segment];
         }
 
         // A by-product's plant runs with the main segment's whether or not its own industry buys all its output.
         $running = [];
-        foreach (SegmentBooks::jointSegments($ctx->stock) as $segment) {
+        foreach ($joint as $segment) {
             $running[$segment] = $loads[Segments::MAIN] ?? 1.0;
         }
         $company = SegmentBooks::aggregate(
@@ -505,10 +525,12 @@ final class OperatingCapacityEngine
             $loads,
             array_map(static fn(array $books): float => $books['drain'], $ctx->segments),
             $running,
+            array_map(static fn(array $books): float => $books['sales'], $ctx->segments),
         );
+        // Every segment the books hold is filed, so one with no plant left (sold) gives its lines nothing.
         $filed = [];
-        foreach ($company['targets'] as $segment => $target) {
-            $filed[SegmentBooks::STATE_TARGET . $segment] = $target;
+        foreach (array_keys(SegmentBooks::plant($ctx->stock->getEarningsMomentumZ() ?? []) ?? []) as $segment) {
+            $filed[SegmentBooks::STATE_TARGET . $segment] = $company['targets'][$segment] ?? 0.0;
         }
         $ctx->stock->setEarningsMomentumZ($filed + ($ctx->stock->getEarningsMomentumZ() ?? []));
 
@@ -527,12 +549,40 @@ final class OperatingCapacityEngine
         foreach ($ctx->segments as $segment => $books) {
             $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
             $books['drain'] = $strategy->getIndustrySubstitutability()
-                * $ledger->resolveSegmentRivalDrain($ctx->stock, $segment, $books['plant'] * (float) $ctx->stock->getTotalRevenue(), $ctx->tickCount, $ctx->ticksPerYear);
+                * $ledger->resolveSegmentRivalDrain($ctx->stock, $segment, $books['sales'] * (float) $ctx->stock->getTotalRevenue(), $ctx->tickCount, $ctx->ticksPerYear);
             $ctx->segments[$segment] = $books;
-            $drain += $books['plant'] * $books['drain'];
+            $drain += $books['sales'] * $books['drain'];
         }
 
         return $drain;
+    }
+
+    /**
+     * The economics of a company that keeps plant by segment, giving its segments economics of their own the first
+     * time (SegmentBooks::openEconomics()), and setting the company's margin and turnover to their blend. Null for any
+     * other company.
+     *
+     * @return array{turnover: float, margin: float, sales: array<string, float>, margins: array<string, float>, turnovers: array<string, float>}|null
+     */
+    private function resolveSegmentEconomics(EarningsSimulationContext $ctx, float $annualTurnover): ?array
+    {
+        $stock = $ctx->stock;
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        if (SegmentBooks::plant($momentum) === null) {
+            return null;
+        }
+        if (SegmentBooks::companyEconomics($momentum) === null) {
+            $stock->setEarningsMomentumZ(SegmentBooks::openEconomics($stock->getTicker(), $momentum, $annualTurnover, $ctx->stableMargin) + $momentum);
+        }
+
+        $economics = SegmentBooks::companyEconomics($stock->getEarningsMomentumZ() ?? []);
+        if ($economics !== null) {
+            $ctx->stableMargin = max(0.01, $economics['margin']);
+            $stock->setOperatingMargin((string) $ctx->stableMargin);
+            $stock->setAssetTurnover((string) $economics['turnover']);
+        }
+
+        return $economics;
     }
 
     /**

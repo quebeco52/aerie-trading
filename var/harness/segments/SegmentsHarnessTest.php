@@ -8,7 +8,8 @@ use App\Entity\CorporateReport;
 
 /**
  * Plain whole-board run plus a read-only log of the idle-capacity KPIs per firm-quarter. IDLE_OUT=<json>: {"rows": [[t,
- * ticker, industry, idle_plant_share|null, industry_price_level|null, cpi, log(need/plant)|null, filed capacity gap|null, catch-up growth|null, x_fv|null, filed log belief|null], ...],
+ * ticker, industry, idle_plant_share|null, industry_price_level|null, cpi, log(need/plant)|null, filed capacity
+ * gap|null, catch-up growth|null, x_fv|null, filed log belief|null], ...],
  *   "opening": {ticker: opening annual revenue}}.
  */
 final class SegmentsHarnessTest extends BoardRun
@@ -30,10 +31,15 @@ final class SegmentsHarnessTest extends BoardRun
         return $store !== null && method_exists($store, 'readOutlooks') ? $store : null;
     }
 
-    /** @var array<string, array{float, int, float, float}> ticker => [sum of squared tick log returns, n, configured vol, last price] */
+    /**
+     * @var array<string, array{float, int, float, float}> ticker => [sum of squared tick log returns, n, configured
+     *                                                     vol, last price]
+     */
     private array $realisedVol = [];
 
-    /** @var array<string, array{list<array{float, array<string, mixed>}>, float, float, float, float}> KPI_TICKERS: ticker => [kpi rows, opening cap, opening eps, running peak, max drawdown] */
+    /**
+     * @var array<string, array{list<array{float, array<string, mixed>}>, float, float, float, float}> KPI_TICKERS: ticker => [kpi rows, opening cap, opening eps, running peak, max drawdown]
+     */
     private array $kpiLog = [];
 
     /** @var array<string, float> Each name's share count at the last tick, to tell a split from a price move. */
@@ -109,7 +115,7 @@ final class SegmentsHarnessTest extends BoardRun
             $this->trendCapacityGap($stock),
             $gap = (($stock->getEarningsMomentumZ() ?? [])['carry:capacity_gap'] ?? null),
             ($gap !== null && isset($row['x_coe']) && $this->currentMacro !== null && method_exists('App\\Service\\Math\\Valuation', 'capacityCatchUpGrowth'))
-                ? \App\Service\Math\Valuation::capacityCatchUpGrowth((float) $gap, 0.062, $row['x_coe'] - $this->currentMacro->tipsBreakeven) : null,
+                ? App\Service\Math\Valuation::capacityCatchUpGrowth((float) $gap, 0.062, $row['x_coe'] - $this->currentMacro->tipsBreakeven) : null,
             $row['x_fv'] ?? null,
             (($stock->getEarningsMomentumZ() ?? [])['carry:industry_outlook'] ?? null),
             ...$this->gapProbe($stock),
@@ -125,11 +131,11 @@ final class SegmentsHarnessTest extends BoardRun
     private array $segDeals = [];
 
     /** Deal events (divestiture "sold its", acquisition "executed a") of the segmented tickers, with kappa after. */
-    protected function onEvent(\App\Entity\StockEvent $event): void
+    protected function onEvent(App\Entity\StockEvent $event): void
     {
         $stock = $event->getStock();
         $desc = (string) $event->getDescription();
-        if (!getenv('SEG_OUT') || \App\Data\Company\Segments::forTicker($stock->getTicker()) === null
+        if (!getenv('SEG_OUT') || App\Data\Company\Segments::forTicker($stock->getTicker()) === null
             || !preg_match('/ sold its | executed a /', $desc)) {
             return;
         }
@@ -142,6 +148,21 @@ final class SegmentsHarnessTest extends BoardRun
         $this->segDeals[] = ['t' => round($this->currentTime, 3), 'tk' => $stock->getTicker(), 'd' => substr($desc, 0, 200), 'kappa' => $kappa];
     }
 
+    /**
+     * The segment prices and loads an ovr_* SegmentBooks copy logged for the last aggregate() call, if its segments are
+     * this company's (otherwise null); cleared once read.
+     *
+     * @param array<string, float> $kappa
+     * @return array<string, mixed>|null
+     */
+    private function takeSegmentPl(array $kappa): ?array
+    {
+        $pl = $GLOBALS['SEG_PL_LAST'] ?? null;
+        unset($GLOBALS['SEG_PL_LAST']);
+
+        return is_array($pl) && array_keys($pl['plant']) == array_keys(array_filter($kappa, static fn(float $v): bool => $v > 0.0)) ? $pl : null;
+    }
+
     /** @var list<array<string, mixed>> SEG_OUT rows for the segmented tickers. */
     private array $segRows = [];
     /** @var array<string, int> SEG_OUT identity violations: unsegmented firm with a segment key or a ledger gap. */
@@ -152,13 +173,13 @@ final class SegmentsHarnessTest extends BoardRun
      * outlook store, so it works on a tree without resolveSegmentBeliefs), segment revenue grouped by
      * Segments::segmentOf, report revenue. Unsegmented firms: counts of segment keys in momentum or ledger record.
      */
-    private function segmentProbe(\App\Entity\Stock $stock, CorporateReport $report): void
+    private function segmentProbe(App\Entity\Stock $stock, CorporateReport $report): void
     {
         $ticker = $stock->getTicker();
         $z = $stock->getEarningsMomentumZ() ?? [];
         $storeId = 'App\\Service\\Corporate\\Industry\\IndustryShareStoreInterface';
         $store = static::getContainer()->get($storeId);
-        $plan = \App\Data\Company\Segments::forTicker($ticker);
+        $plan = App\Data\Company\Segments::forTicker($ticker);
         if ($plan === null) {
             ++$this->segLeaks['checked'];
             foreach (array_keys($z) as $k) {
@@ -177,7 +198,7 @@ final class SegmentsHarnessTest extends BoardRun
         $belief = static function (string $industry) use ($store): float {
             $r = $store->readOutlook($industry);
 
-            return $r === null ? 0.0 : \App\Service\Corporate\Industry\IndustryOutlook::belief($r);
+            return $r === null ? 0.0 : App\Service\Corporate\Industry\IndustryOutlook::belief($r);
         };
         $beliefs = ['main' => $belief((string) $stock->getIndustry())];
         foreach ($plan['segments'] as $key => $segment) {
@@ -194,7 +215,7 @@ final class SegmentsHarnessTest extends BoardRun
         }
         $segRev = [];
         foreach ($report->getStreamDetails() ?? [] as $stream => $d) {
-            $key = \App\Data\Company\Segments::segmentOf($ticker, (string) $stream);
+            $key = App\Data\Company\Segments::segmentOf($ticker, (string) $stream);
             $segRev[$key] = ($segRev[$key] ?? 0.0) + (float) ($d['revenue'] ?? 0.0);
         }
         $rec = $store->readIndustry((string) $stock->getIndustry())[$ticker] ?? null;
@@ -202,8 +223,10 @@ final class SegmentsHarnessTest extends BoardRun
         $kappa = [];
         $targets = [];
         $segOutlook = [];
+        $segMargin = [];
+        $segTurnover = [];
         foreach ($z as $k => $v) {
-            foreach (['carry:segment_plant:' => 'kappa', 'carry:segment_target:' => 'targets', 'carry:segment_outlook:' => 'segOutlook'] as $p => $var) {
+            foreach (['carry:segment_plant:' => 'kappa', 'carry:segment_target:' => 'targets', 'carry:segment_outlook:' => 'segOutlook', 'carry:segment_margin:' => 'segMargin', 'carry:segment_turnover:' => 'segTurnover'] as $p => $var) {
                 if (str_starts_with((string) $k, $p)) {
                     ${$var}[substr((string) $k, strlen($p))] = (float) $v;
                 }
@@ -229,7 +252,7 @@ final class SegmentsHarnessTest extends BoardRun
         $cmId = 'App\\Service\\Corporate\\CorporateMetrics';
         if ($this->currentMacro !== null && static::getContainer()->has($cmId)) {
             $cm = static::getContainer()->get($cmId);
-            $cap = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
+            $cap = App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital());
             $pen = $cm->calculateMarketSaturationPenalty($stock, $cap, $this->currentMacro);
             $addr = $cm->calculateAddressableShare($stock, $cap, $this->currentMacro);
         }
@@ -240,6 +263,11 @@ final class SegmentsHarnessTest extends BoardRun
             'ipl' => isset($kpis['industry_price_level']) ? (float) $kpis['industry_price_level'] : null,
             'idle' => isset($kpis['idle_plant_share']) ? (float) $kpis['idle_plant_share'] : null,
             'pen' => $pen, 'addr' => $addr, 'tick' => $this->tick,
+            'pl' => $this->takeSegmentPl($kappa), 'ni' => (float) $report->getNetIncome(), 'ii' => (float) $report->getInterestIncome(),
+            'ie' => (float) $report->getInterestExpense(), 'ebit' => (float) $report->getEbit(), 'eq' => (float) $report->getEquity(),
+            'nd' => (float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury(), 'ebitda' => (float) $report->getEbitda(),
+            'gw' => (float) $stock->getGoodwill(), 'tax' => $this->currentMacro === null ? null : \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getEffectiveTaxRate($this->currentMacro->corporateTaxRate),
+            'smar' => $segMargin, 'stur' => $segTurnover, 'fmar' => (float) $stock->getOperatingMargin(), 'ftur' => (float) $stock->getAssetTurnover(),
             't' => round($this->currentTime, 3), 'tk' => $ticker, 'rev' => (float) $report->getRevenue(),
             'om' => (float) $report->getOperatingMargin(), 'shares' => $shares, 'tilts' => $tilts,
             'blend' => isset($z['carry:industry_outlook']) ? (float) $z['carry:industry_outlook'] : null,
@@ -254,7 +282,7 @@ final class SegmentsHarnessTest extends BoardRun
      *
      * @return list<?float>
      */
-    private function gapProbe(\App\Entity\Stock $stock): array
+    private function gapProbe(App\Entity\Stock $stock): array
     {
         $z = $stock->getEarningsMomentumZ() ?? [];
         if (!getenv('GAPPROBE') || !isset($z['carry:capacity_gap']) || $this->debtEngine === null || $this->currentMacro === null || $this->tracker === null) {
@@ -264,9 +292,9 @@ final class SegmentsHarnessTest extends BoardRun
         foreach ([0.0, (float) $z['carry:capacity_gap'] + 0.1] as $gap) {
             $stock->setEarningsMomentumZ(['carry:capacity_gap' => $gap] + $z);
             $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $this->currentMacro);
-            $ledger = (new ReflectionProperty(\App\Service\Market\Pricing\StockTracker::class, 'anchorStakes'))->getValue($this->tracker);
-            $ctx = \App\DTO\MarketPricingContext::forStock($stock, $this->currentMacro, $h, $ledger);
-            $out[] = (float) \App\Service\Market\Pricing\FairValue::fundamentalStateFor($ctx)['perceived_fair_value'];
+            $ledger = (new ReflectionProperty(App\Service\Market\Pricing\StockTracker::class, 'anchorStakes'))->getValue($this->tracker);
+            $ctx = App\DTO\MarketPricingContext::forStock($stock, $this->currentMacro, $h, $ledger);
+            $out[] = (float) App\Service\Market\Pricing\FairValue::fundamentalStateFor($ctx)['perceived_fair_value'];
         }
         $stock->setEarningsMomentumZ($z);
         // PGR: every perpetualGrowthRate call while striking fair value at the filed gap (ovr_pgr logs them);
@@ -274,8 +302,8 @@ final class SegmentsHarnessTest extends BoardRun
         if (getenv('PGR')) {
             $GLOBALS['PGR_LOG'] = [];
             $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $this->currentMacro);
-            $ledger = (new ReflectionProperty(\App\Service\Market\Pricing\StockTracker::class, 'anchorStakes'))->getValue($this->tracker);
-            \App\Service\Market\Pricing\FairValue::fundamentalStateFor(\App\DTO\MarketPricingContext::forStock($stock, $this->currentMacro, $h, $ledger));
+            $ledger = (new ReflectionProperty(App\Service\Market\Pricing\StockTracker::class, 'anchorStakes'))->getValue($this->tracker);
+            App\Service\Market\Pricing\FairValue::fundamentalStateFor(App\DTO\MarketPricingContext::forStock($stock, $this->currentMacro, $h, $ledger));
             $calls = $GLOBALS['PGR_LOG'];
             unset($GLOBALS['PGR_LOG']);
             usort($calls, static fn(array $a, array $b): int => $b[0] <=> $a[0]);
@@ -287,13 +315,13 @@ final class SegmentsHarnessTest extends BoardRun
     }
 
     /** log(need / plant) as the ledger's accelerator reads it (read-only); null where unavailable. */
-    private function trendCapacityGap(\App\Entity\Stock $stock): ?float
+    private function trendCapacityGap(App\Entity\Stock $stock): ?float
     {
         $ledgerId = 'App\\Service\\Corporate\\Industry\\IndustryShareLedger';
         if ($this->currentMacro === null || !method_exists($ledgerId, 'secularExcessGrowth') || !static::getContainer()->has($ledgerId)) {
             return null;
         }
-        $strategy = \App\Data\Company\Sectors::strategyFor((string) $stock->getIndustry());
+        $strategy = App\Data\Company\Sectors::strategyFor((string) $stock->getIndustry());
         if ($strategy->isFinancial()) {
             return null;
         }
@@ -312,7 +340,7 @@ final class SegmentsHarnessTest extends BoardRun
             $inds = [];
             foreach ($this->stocks as $tk => $s) {
                 $inds[(string) $s->getIndustry()] = true;
-                foreach (\App\Data\Company\Segments::forTicker((string) $tk)['segments'] ?? [] as $seg) {
+                foreach (App\Data\Company\Segments::forTicker((string) $tk)['segments'] ?? [] as $seg) {
                     $inds[$seg['industry']] = true;
                 }
             }

@@ -23,7 +23,7 @@ class RedisIndustryShareStoreTest extends TestCase
         $full = [
             'revenue' => 1_000.0, 'gain' => 0.01, 'capacity' => 1_200.0,
             'anchor_capacity_share' => 0.002, 'anchor_demand_share' => 0.005, 'anchor_time' => 1.25, 'anchor_outlook' => 0.03,
-            'addressable_share' => 0.4, 'tick' => 90, 'consumed_tick' => 80, 'segment_outlook_gap' => -0.07,
+            'addressable_share' => 0.4, 'tick' => 90, 'consumed_tick' => 80, 'segment_outlook_gap' => -0.07, 'books_main_share' => 0.9,
         ];
         $plain = [
             'revenue' => 500.0, 'gain' => -0.02, 'capacity' => 600.0,

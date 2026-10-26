@@ -10,7 +10,11 @@ namespace App\Data\Company;
  * rivals, in the industry named. A line not listed stays in the company's main segment, in its own industry: financial
  * books (captive loans, cash float, trade credit) and lines sold at world commodity prices stay there too.
  *
- * @phpstan-type Segment array{label: string, industry: string, streams: list<string>}
+ * A segment's economics are relative to its company's main business (1 when not listed), through the cycle: its
+ * operating margin, and its capital turnover (revenue per unit of operating capital), as segment disclosures report
+ * them. The company's own margin and turnover stay its seeded blend of them.
+ *
+ * @phpstan-type Segment array{label: string, industry: string, streams: list<string>, margin?: float, turnover?: float}
  */
 final class Segments
 {
@@ -22,34 +26,47 @@ final class Segments
      */
     private const BY_TICKER = [
         'SKYL' => ['main' => 'Launches and missions', 'segments' => [
+            // The model's own line costs make a subscriber cheaper than a launch, so the segment adds no margin of its
+            // own.
             'satellite_internet' => ['label' => 'Satellite internet', 'industry' => 'Telecom Services', 'streams' => ['satellite_broadband']],
         ]],
         'TERN' => ['main' => 'Passenger flights', 'segments' => [
-            'air_cargo' => ['label' => 'Air cargo', 'industry' => 'Integrated Freight & Logistics', 'streams' => ['air_cargo']],
+            // Belly space is the passenger fleet's, so it turns the fleet's capital as the cabins do.
+            'air_cargo' => ['label' => 'Air cargo', 'industry' => 'Integrated Freight & Logistics', 'streams' => ['air_cargo'], 'margin' => 0.8, 'turnover' => 1.0],
         ]],
         'ERNE' => ['main' => 'Carrier networks', 'segments' => [
-            'consumer_devices' => ['label' => 'Consumer devices', 'industry' => 'Computer Hardware', 'streams' => ['consumer_terminals']],
+            // Commodity terminals and modules: thin margins on assembled hardware that turns over fast.
+            'consumer_devices' => ['label' => 'Consumer devices', 'industry' => 'Computer Hardware', 'streams' => ['consumer_terminals'], 'margin' => 0.4, 'turnover' => 1.5],
         ]],
         'WEAV' => ['main' => 'Online retail', 'segments' => [
-            'ads_and_cloud' => ['label' => 'Advertising and cloud', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud']],
+            // A first-party retailer earns thinly; its data centres and ad book earn several times as much on heavier
+            // plant.
+            'ads_and_cloud' => ['label' => 'Advertising and cloud', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud'], 'margin' => 6.0, 'turnover' => 0.5],
         ]],
         'JDAW' => ['main' => 'Online retail', 'segments' => [
-            'ads_and_cloud' => ['label' => 'Advertising and cloud', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud']],
+            // A marketplace already earns well on its fees, so its cloud adds less over it.
+            'ads_and_cloud' => ['label' => 'Advertising and cloud', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud'], 'margin' => 1.5, 'turnover' => 0.5],
         ]],
         'BIRD' => ['main' => 'Regulated power', 'segments' => [
-            'merchant_power' => ['label' => 'Merchant generation', 'industry' => 'Utilities - Independent Power Producers', 'streams' => ['unregulated_merchant']],
+            // Merchant plant earns the power-price spread, not an allowed return on a rate base, and turns faster.
+            'merchant_power' => ['label' => 'Merchant generation', 'industry' => 'Utilities - Independent Power Producers', 'streams' => ['unregulated_merchant'], 'margin' => 0.4, 'turnover' => 1.8],
         ]],
         // The merchant house's terminal line carries the conglomerate parent's key.
         'RAVN' => ['main' => 'Trading and trade credit', 'segments' => [
-            'terminals' => ['label' => 'Terminals and storage', 'industry' => 'Marine Ports & Services', 'streams' => ['defensive_staples']],
+            // Tank farms and wharves earn tariffs on heavy plant; the trading desk earns thin margins on little.
+            'terminals' => ['label' => 'Terminals and storage', 'industry' => 'Marine Ports & Services', 'streams' => ['defensive_staples'], 'margin' => 2.5, 'turnover' => 0.25],
         ]],
+        // A conglomerate's main business is its cash, which earns on the treasury and holds no plant, so its operating
+        // segments' economics are struck against the industrial one.
         'OWLS' => ['main' => 'Cash and investments', 'segments' => [
             'industrial' => ['label' => 'Rail and manufacturing', 'industry' => 'Specialty Industrial Machinery', 'streams' => ['industrial_manufacturing']],
-            'consumer' => ['label' => 'Utility infrastructure and consumer goods', 'industry' => 'Household & Personal Products', 'streams' => ['defensive_staples']],
+            // Utility plant and consumer brands turn slower than rail and earn a little less on it.
+            'consumer' => ['label' => 'Utility infrastructure and consumer goods', 'industry' => 'Household & Personal Products', 'streams' => ['defensive_staples'], 'margin' => 0.8, 'turnover' => 0.75],
         ]],
         'TRIV' => ['main' => 'Cash and investments', 'segments' => [
             'industrial' => ['label' => 'Industrial products', 'industry' => 'Specialty Industrial Machinery', 'streams' => ['industrial_manufacturing']],
-            'consumer' => ['label' => 'Household and medical products', 'industry' => 'Household & Personal Products', 'streams' => ['defensive_staples']],
+            // Household goods turn faster at a thinner margin, so the head office earns about the same on each.
+            'consumer' => ['label' => 'Household and medical products', 'industry' => 'Household & Personal Products', 'streams' => ['defensive_staples'], 'margin' => 0.9, 'turnover' => 1.2],
         ]],
     ];
 
@@ -61,6 +78,22 @@ final class Segments
     public static function forTicker(string $ticker): ?array
     {
         return self::BY_TICKER[$ticker] ?? null;
+    }
+
+    /**
+     * Each segment's operating margin and capital turnover against its company's main business, main segment
+     * included at one.
+     *
+     * @return array<string, array{margin: float, turnover: float}>
+     */
+    public static function economicsOf(string $ticker): array
+    {
+        $economics = [self::MAIN => ['margin' => 1.0, 'turnover' => 1.0]];
+        foreach (self::BY_TICKER[$ticker]['segments'] ?? [] as $key => $segment) {
+            $economics[$key] = ['margin' => $segment['margin'] ?? 1.0, 'turnover' => $segment['turnover'] ?? 1.0];
+        }
+
+        return $economics;
     }
 
     /** The segment a revenue line belongs to: the listed one, or the main segment. */

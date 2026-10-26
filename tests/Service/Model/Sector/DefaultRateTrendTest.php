@@ -30,7 +30,6 @@ final class DefaultRateTrendTest extends TestCase
         yield 'reit vacancy' => [Sector\ReitBusinessModel::class, 'TRND', true];
         yield 'mall tenants' => [Sector\ResortsCasinosBusinessModel::class, 'GULL', true];
         yield 'captive auto loans' => [Sector\AutoManufacturerBusinessModel::class, 'TRND', true];
-        yield 'conglomerate float' => [Sector\ConglomerateBusinessModel::class, 'TRND', true];
         yield 'law restructuring' => [Sector\LawFirmBusinessModel::class, 'TRND', true];
         yield 'bank loan book' => [Sector\CommercialBankBusinessModel::class, 'TRND', true];
         yield 'card book' => [Sector\CreditServicesBusinessModel::class, 'TRND', true];

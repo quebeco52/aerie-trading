@@ -34,6 +34,10 @@ final class SegmentBooks
     public const STATE_OUTLOOK = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_outlook:';
     /** Carried stream-state key prefix: a segment's share of the quarter's expected revenue, which its lines split. */
     public const STATE_TARGET = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_target:';
+    /** Carried stream-state key prefix: a segment's operating margin at the balanced price. */
+    public const STATE_MARGIN = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_margin:';
+    /** Carried stream-state key prefix: a segment's capital turnover, its annual revenue per unit of its plant. */
+    public const STATE_TURNOVER = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_turnover:';
     /** Stream-state key prefix of a line's weight in the mix the plan steers to (StreamContext). */
     private const STREAM_WEIGHT_PREFIX = 'weight:';
 
@@ -88,6 +92,81 @@ final class SegmentBooks
         $plant = self::filed($momentum, self::STATE_PLANT);
 
         return $plant === [] ? null : $plant;
+    }
+
+    /**
+     * The state that gives each segment its own economics (Segments::economicsOf()), struck so the company's margin and
+     * turnover stay what they are and every segment keeps its share of the revenue: a segment that turns its capital
+     * slower holds more of the plant than its sales, and its market, measured in plant, grows with it.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array<string, float> Carried state.
+     */
+    public static function openEconomics(string $ticker, array $momentum, float $companyTurnover, float $companyMargin): array
+    {
+        $plant = self::plant($momentum) ?? [];
+        $markets = self::filed($momentum, self::STATE_MARKET);
+        $economics = Segments::economicsOf($ticker);
+
+        // The plant was split at the company's turnover, so its shares are the segments' shares of the revenue.
+        $plantPerSale = 0.0;
+        $marginPerSale = 0.0;
+        foreach ($plant as $segment => $share) {
+            $plantPerSale += $share / ($economics[$segment]['turnover'] ?? 1.0);
+            $marginPerSale += $share * ($economics[$segment]['margin'] ?? 1.0);
+        }
+        if ($plantPerSale <= 0.0 || $marginPerSale <= 0.0) {
+            return [];
+        }
+
+        $state = [];
+        foreach ($plant as $segment => $share) {
+            $turnover = $economics[$segment]['turnover'] ?? 1.0;
+            $resplit = ($share / $turnover) / $plantPerSale;
+            $state[self::STATE_PLANT . $segment] = $resplit;
+            $state[self::STATE_TURNOVER . $segment] = $companyTurnover * $turnover * $plantPerSale;
+            $state[self::STATE_MARGIN . $segment] = $companyMargin * ($economics[$segment]['margin'] ?? 1.0) / $marginPerSale;
+            if ($share > 0.0 && isset($markets[$segment])) {
+                $state[self::STATE_MARKET . $segment] = $markets[$segment] * $resplit / $share;
+            }
+        }
+
+        return $state;
+    }
+
+    /**
+     * The company's economics from its segments': its turnover, the revenue its plant earns at its segments' own, each
+     * segment's share of that revenue, and its margin, its segments' margins over that revenue. Null before the
+     * segments have economics of their own.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array{turnover: float, margin: float, sales: array<string, float>, margins: array<string, float>, turnovers: array<string, float>}|null
+     */
+    public static function companyEconomics(array $momentum): ?array
+    {
+        $plant = self::plant($momentum) ?? [];
+        $margins = self::filed($momentum, self::STATE_MARGIN);
+        $turnovers = self::filed($momentum, self::STATE_TURNOVER);
+        if ($plant === [] || $turnovers === []) {
+            return null;
+        }
+
+        $turnover = 0.0;
+        foreach ($plant as $segment => $share) {
+            $turnover += $share * ($turnovers[$segment] ?? 0.0);
+        }
+        if ($turnover <= 0.0) {
+            return null;
+        }
+
+        $sales = [];
+        $margin = 0.0;
+        foreach ($plant as $segment => $share) {
+            $sales[$segment] = $share * ($turnovers[$segment] ?? 0.0) / $turnover;
+            $margin += $sales[$segment] * ($margins[$segment] ?? 0.0);
+        }
+
+        return ['turnover' => $turnover, 'margin' => $margin, 'sales' => $sales, 'margins' => $margins, 'turnovers' => $turnovers];
     }
 
     /**
@@ -201,10 +280,12 @@ final class SegmentBooks
             return null;
         }
 
+        // A segment sold no longer sells into its market.
+        $plant = self::plant($momentum) ?? [];
         $markets = self::filed($momentum, self::STATE_MARKET);
         $total = 0.0;
         foreach (self::marketGrowths($stock, $totalTime) as $segment => $growth) {
-            $total += ($markets[$segment] ?? 0.0) * $growth;
+            $total += ($plant[$segment] ?? 0.0) > 0.0 ? ($markets[$segment] ?? 0.0) * $growth : 0.0;
         }
 
         return max(1e-9, $total);
@@ -255,8 +336,9 @@ final class SegmentBooks
     }
 
     /**
-     * The company's quarter from its segments': the share of its plant that runs, the price its output fetches, and
-     * each segment's share of the revenue, after what its own industry's rivals took from it.
+     * The company's quarter from its segments': the share of its plant that runs, the price its output fetches (so that
+     * price times load is the revenue its plant earns against the balanced price), and each segment's share of the
+     * revenue, after what its own industry's rivals took from it.
      *
      * @param array<string, float> $plant   Segment => plant share.
      * @param array<string, float> $prices  Segment => its industry's price level for it.
@@ -265,16 +347,18 @@ final class SegmentBooks
      *                                      ceded.
      * @param array<string, float> $running Segment => the share of its plant that runs, where not the share that sells
      *                                      (a by-product flies whether or not its space is sold).
+     * @param array<string, float> $revenue Segment => its share of the revenue the plant earns at the balanced price;
+     *                                      its plant share where the segments turn their plant alike.
      * @return array{load: float, price: float, targets: array<string, float>}
      */
-    public static function aggregate(array $plant, array $prices, array $loads, array $drains = [], array $running = []): array
+    public static function aggregate(array $plant, array $prices, array $loads, array $drains = [], array $running = [], array $revenue = []): array
     {
         $load = 0.0;
         $sales = [];
         $demand = [];
         foreach ($plant as $segment => $share) {
             $load += $share * ($running[$segment] ?? $loads[$segment] ?? 1.0);
-            $sales[$segment] = $share * ($loads[$segment] ?? 1.0) * ($prices[$segment] ?? 1.0);
+            $sales[$segment] = ($revenue[$segment] ?? $share) * ($loads[$segment] ?? 1.0) * ($prices[$segment] ?? 1.0);
             $demand[$segment] = $sales[$segment] * max(0.0, 1.0 + ($drains[$segment] ?? 0.0));
         }
         $revenue = array_sum($sales);
@@ -328,16 +412,75 @@ final class SegmentBooks
             return $plant;
         }
 
-        $plant += [$segment => 0.0];
-        $bought = $segment === Segments::MAIN ? array_intersect_key($plant, array_flip([Segments::MAIN, ...$joint])) : [$segment => 1.0];
-        $boughtTotal = array_sum($bought);
+        $slices = self::boughtSlices($plant, $segment, $joint);
         $shares = [];
-        foreach ($plant as $key => $share) {
-            $added = isset($bought[$key]) ? max(0.0, $acquiredCapacity) * ($boughtTotal > 0.0 ? $bought[$key] / $boughtTotal : (float) ($key === $segment)) : 0.0;
-            $shares[$key] = (($share * $capacity) + $added) / $total;
+        foreach ($plant + [$segment => 0.0] as $key => $share) {
+            $shares[$key] = (($share * $capacity) + (max(0.0, $acquiredCapacity) * ($slices[$key] ?? 0.0))) / $total;
         }
 
         return $shares;
+    }
+
+    /**
+     * The books after a takeover into one segment, as acquireInto() moves the plant at the capital bought: the segment
+     * bought into (with the by-products that ride the main plant, each its share) takes the target's revenue and
+     * operating income into its own turnover and margin, the others keep theirs. Empty before the books open.
+     *
+     * @param array<string, mixed> $momentum
+     * @param list<string>         $joint
+     * @return array<string, float> Carried state.
+     */
+    public static function acquireIntoBooks(array $momentum, string $segment, float $capital, float $acquiredCapital, float $acquiredRevenue, float $acquiredIncome, array $joint = []): array
+    {
+        $plant = self::plant($momentum);
+        if ($plant === null) {
+            return [];
+        }
+
+        $state = [];
+        foreach (self::acquireInto($plant, $segment, $capital, $acquiredCapital, $joint) as $key => $share) {
+            $state[self::STATE_PLANT . $key] = $share;
+        }
+
+        $economics = self::companyEconomics($momentum);
+        if ($economics === null) {
+            return $state;
+        }
+        foreach (self::boughtSlices($plant, $segment, $joint) as $key => $slice) {
+            $share = $plant[$key] ?? 0.0;
+            $ownCapital = $share * $capital;
+            $turnover = $economics['turnovers'][$key] ?? $economics['turnover'];
+            $ownRevenue = $ownCapital * $turnover;
+            $revenue = $ownRevenue + ($slice * max(0.0, $acquiredRevenue));
+            $state[self::STATE_TURNOVER . $key] = ($ownCapital + ($slice * max(0.0, $acquiredCapital))) > 0.0
+                ? $revenue / ($ownCapital + ($slice * max(0.0, $acquiredCapital)))
+                : $turnover;
+            $state[self::STATE_MARGIN . $key] = $revenue > 0.0
+                ? (($ownRevenue * ($economics['margins'][$key] ?? $economics['margin'])) + ($slice * $acquiredIncome)) / $revenue
+                : ($economics['margins'][$key] ?? $economics['margin']);
+        }
+
+        return $state;
+    }
+
+    /**
+     * How what a deal buys into a segment splits across the books: all of it to that segment, or bought into the main
+     * business, between it and the by-products that ride its plant in the proportion it runs them.
+     *
+     * @param array<string, float> $plant Segment => plant share.
+     * @param list<string>         $joint
+     * @return array<string, float> Segment => its slice of the deal.
+     */
+    public static function boughtSlices(array $plant, string $segment, array $joint = []): array
+    {
+        if ($segment !== Segments::MAIN) {
+            return [$segment => 1.0];
+        }
+
+        $group = array_filter(array_intersect_key($plant, array_flip([Segments::MAIN, ...$joint])), static fn(float $share): bool => $share > 0.0);
+        $total = array_sum($group);
+
+        return $total > 0.0 ? array_map(static fn(float $share): float => $share / $total, $group) : [Segments::MAIN => 1.0];
     }
 
     /**
@@ -363,21 +506,52 @@ final class SegmentBooks
     }
 
     /**
+     * What idling a unit of a segment's plant saves, over its revenue: the company's avoidable cost, or nothing for a
+     * by-product, whose plant runs whatever its own industry buys.
+     */
+    public static function avoidableCostRatio(Stock $stock, string $segment, float $companyRatio): float
+    {
+        return in_array($segment, self::jointSegments($stock), true) ? 0.0 : $companyRatio;
+    }
+
+    /**
+     * A segment's shares of what its company sells and earns: its share of the quarter's revenue, and of the operating
+     * income that revenue makes at each segment's margin. What a sale of it gives up, as its share of the plant is the
+     * share of the assets that leave.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array{revenue: float, income: float}
+     */
+    public static function earningShares(array $momentum, string $segment): array
+    {
+        $targets = self::filed($momentum, self::STATE_TARGET);
+        $margins = self::filed($momentum, self::STATE_MARGIN);
+        $income = 0.0;
+        foreach ($targets as $key => $target) {
+            $income += $target * ($margins[$key] ?? 1.0);
+        }
+
+        return [
+            'revenue' => $targets[$segment] ?? 0.0,
+            'income' => $income > 0.0 ? ($targets[$segment] ?? 0.0) * ($margins[$segment] ?? 1.0) / $income : ($targets[$segment] ?? 0.0),
+        ];
+    }
+
+    /**
      * The segment a company that keeps plant by segment would sell whole: of those it can sell apart from its main
-     * business (not one whose output rides the main plant), the one whose plant earns least, its share of the revenue
-     * over its share of the plant. Null when it has none.
+     * business (not one whose output rides the main plant), the one whose plant earns least, its share of the operating
+     * income over its share of the plant. Null when it has none.
      */
     public static function weakestSegment(Stock $stock): ?string
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
-        $targets = self::filed($momentum, self::STATE_TARGET);
         $weakest = null;
         $lowest = INF;
         foreach (self::plant($momentum) ?? [] as $segment => $share) {
             if ($segment === Segments::MAIN || $share <= 0.0 || in_array($segment, self::jointSegments($stock), true)) {
                 continue;
             }
-            $earning = ($targets[$segment] ?? $share) / $share;
+            $earning = self::earningShares($momentum, $segment)['income'] / $share;
             if ($earning < $lowest) {
                 $lowest = $earning;
                 $weakest = $segment;

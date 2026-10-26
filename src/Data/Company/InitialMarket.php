@@ -112,12 +112,12 @@ class InitialMarket
             'beta_tilt' => -0.25, // a contrarian holder that buys when prices fall
             'jump_intensity' => 0.20,
             'jump_vol' => 0.08,
-            'baseline_roic' => 0.22,
+            'baseline_roic' => 0.18, // The operating subsidiaries' own return; the float earns on the treasury
             'capex_ratio' => 0.02,
             'target_payout_ratio' => 0.40,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'fixed_cost_ratio' => 0.35,
-            'operating_margin' => 0.40,
+            'operating_margin' => 0.27, // Rail, manufacturing, utility and consumer businesses, no float in the line
             'public_float' => 0.80,
             'sam_ratio' => 0.375,
             'floating_debt_ratio' => 0.15,
@@ -125,10 +125,10 @@ class InitialMarket
             'credit_spread' => 0.0050,
             'depreciation_rate' => 0.03,
             'corporate_treasury' => 65_000_000_000.00,
-            'total_equity' => 115_000_000_000.00,
+            'total_equity' => 129_000_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 12_500_000_000.00,
-            'retained_earnings' => 25_000_000_000.00,
+            'retained_earnings' => 39_000_000_000.00,
         ],
         [
             'ticker' => 'KING',

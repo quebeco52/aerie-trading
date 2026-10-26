@@ -71,6 +71,12 @@ class DivestitureContext
     public float $maxFraction = 0.0;
     /** The segment sold whole by a company that keeps plant by segment (SegmentBooks); null for a slice of the firm. */
     public ?string $soldSegment = null;
+    /**
+     * Shares of the firm's revenue and of its operating income the sale gives up: the slice's own share for a slice of
+     * the firm; a segment's sales and earnings for one sold whole, as its plant share is the share of the assets.
+     */
+    public float $revenueFraction = 0.0;
+    public float $incomeFraction = 0.0;
 
     // Accounting
     public float $lostNetIncome = 0.0;
