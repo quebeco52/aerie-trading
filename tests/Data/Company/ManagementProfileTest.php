@@ -36,6 +36,7 @@ final class ManagementProfileTest extends TestCase
             $this->assertSame(1.0, $profile->leverageBias());
             $this->assertSame(1.0, $profile->acquisitionBias());
             $this->assertSame(0.0, $profile->hubrisPremium());
+            $this->assertSame(0.0, $profile->weakSegmentSupport());
             $this->assertSame(0.0825, $profile->appliedHurdle(0.0825));
         }
     }
@@ -53,6 +54,7 @@ final class ManagementProfileTest extends TestCase
             $this->assertEqualsWithDelta($style->leverageBias(), $profile->leverageBias(), 1e-12, $style->value);
             $this->assertEqualsWithDelta($style->acquisitionBias(), $profile->acquisitionBias(), 1e-12, $style->value);
             $this->assertEqualsWithDelta($style->hubrisPremium(), $profile->hubrisPremium(), 1e-12, $style->value);
+            $this->assertEqualsWithDelta($style->weakSegmentSupport(), $profile->weakSegmentSupport(), 1e-12, $style->value);
         }
     }
 
@@ -72,6 +74,8 @@ final class ManagementProfileTest extends TestCase
         );
         $this->assertEqualsWithDelta(0.875, $half->hurdleBias(), 1e-12, 'Half of the way from 1.00 down to 0.75.');
         $this->assertEqualsWithDelta(0.5 * $archetype->hubrisPremium(), $half->hubrisPremium(), 1e-12, 'An additive premium scales directly.');
+        $this->assertEqualsWithDelta(0.5 * $archetype->weakSegmentSupport(), $half->weakSegmentSupport(), 1e-12, 'So does the support for weak segments.');
+        $this->assertSame(1.0, (new ManagementProfile(ManagementStyle::EmpireBuilder, 1.8))->weakSegmentSupport(), 'all of it at most');
     }
 
     /** More conviction means the dial sits further from neutral, in whichever direction the style points. */

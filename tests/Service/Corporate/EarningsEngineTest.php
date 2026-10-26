@@ -245,8 +245,9 @@ class EarningsEngineTest extends TestCase
     /**
      * Plant is judged at the firm's true cost of capital whoever runs it. New plant here earns 10% against a cost of
      * capital of about 11%: an empire builder's own hurdle (three quarters of it) would take the project, but the plant
-     * goes unbuilt though demand calls for it. Once the industry's outlook rises 5%, the firm is short of the plant its
-     * market calls for, but it files no shortfall for the market to price a catch-up on, since it will not build it.
+     * goes unbuilt though demand calls for it, and the treasury is left nothing to build it with. Once the industry's
+     * outlook rises 5%, the firm is short of the plant its market calls for, but it files no shortfall for the market
+     * to price a catch-up on, since it will not build it.
      */
     public function testAnEmpireBuilderBuildsNoPlantBelowTheTrueCostOfCapital(): void
     {
@@ -272,7 +273,7 @@ class EarningsEngineTest extends TestCase
         $this->assertLessThan($captured->health->wacc, $returnOnNewPlant, 'the fixture needs plant below the cost of capital');
         $this->assertGreaterThan($stock->getManagementProfile()->appliedHurdle($captured->health->wacc), $returnOnNewPlant, '...and above the empire builder\'s own hurdle');
         $this->assertEqualsWithDelta($captured->maintenanceCapex + $captured->scheduledCapex, $captured->operatingCapex, 1e-6, 'none is built');
-        $this->assertGreaterThan(0.0, $captured->expansionBudget, 'though demand calls for it');
+        $this->assertSame(0.0, $captured->expansionBudget, 'nor left for the treasury to build on its own hurdle');
         $shortfall = $ledger->resolveTrendCapacityGap($stock, $macro, IndustryShareLedger::secularExcessGrowth($captured->strategy, $stock));
         $this->assertNotNull($shortfall);
         $this->assertGreaterThan(0.03, $shortfall, 'the firm is short of the plant its market calls for');
@@ -419,6 +420,52 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($path['level'], $internet['anchor_path'] ?? null, 1e-12);
         $this->assertGreaterThan(0.0, $captured->streamRevenue['satellite_broadband'] ?? 0.0);
         $this->assertEqualsWithDelta($captured->actualRevenue * 4.0, $internet['revenue'] + (float) ($store->readIndustry('Space Systems')['SKYL']['revenue'] ?? 0.0), 1e-6 * $captured->actualRevenue);
+    }
+
+    /**
+     * A segment whose new plant earns below the hurdle and whose market now needs only half the plant it runs keeps up
+     * only that half: the company's upkeep falls by the plant it let go, against a run where its market still needs
+     * all of it. The cash and the plant agree: the share of the plant kept is what upkeep is paid on.
+     */
+    public function testAWeakSegmentsUpkeepIsCutToThePlantItsMarketNeeds(): void
+    {
+        $report = function (float $marketScale): EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            $store = new InMemoryIndustryShareStore();
+            $engine = $this->buildEngine($dispatcher, new IndustryShareLedger($store));
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+            $stock = $this->buildMatureIndustrial('ERNE');
+            $stock->setIndustry('Communication Equipment');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.06, yield5yEma: 0.065, inflationEma: 0.02);
+            $tick = EarningsEngine::resolveReportingTick('ERNE', 252);
+            $engine->calculate($stock, $macro, $tick, 252);
+            $engine->calculate($stock, $macro, $tick + 63, 252);
+            $record = $store->readIndustry('Computer Hardware')['ERNE/consumer_devices'] ?? null;
+            $this->assertNotNull($record);
+            $record['anchor_capacity_share'] *= $marketScale;
+            $record['anchor_demand_share'] *= $marketScale;
+            $store->writeRecord('Computer Hardware', 'ERNE/consumer_devices', $record);
+            $engine->calculate($stock, $macro, $tick + 126, 252);
+            $this->assertInstanceOf(EarningsSimulationContext::class, $captured);
+
+            return $captured;
+        };
+
+        $control = $report(1.0);
+        $shrunk = $report(0.5);
+
+        $this->assertFalse($shrunk->segments['consumer_devices']['builds'] ?? null, 'the fixture needs devices below the hurdle');
+        $this->assertTrue($shrunk->segments[Segments::MAIN]['builds'] ?? null);
+        $this->assertLessThan(0.75, $shrunk->segments['consumer_devices']['replaced'] ?? null);
+        $this->assertSame(1.0, $control->segments['consumer_devices']['replaced'] ?? null);
+        $kept = static fn(EarningsSimulationContext $ctx): float => array_sum(array_map(static fn(array $books): float => $books['plant'] * $books['load'] * ($books['replaced'] ?? 1.0), $ctx->segments));
+        $perWearKept = static fn(EarningsSimulationContext $ctx): float => $ctx->maintenanceCapex / ($ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $kept($ctx));
+        $this->assertLessThan(0.99 * $control->maintenanceCapex, $shrunk->maintenanceCapex);
+        $this->assertEqualsWithDelta($perWearKept($control), $perWearKept($shrunk), 1e-9 * $perWearKept($control), 'upkeep is paid on the plant kept');
     }
 
     /**

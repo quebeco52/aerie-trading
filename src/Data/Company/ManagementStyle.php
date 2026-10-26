@@ -152,6 +152,27 @@ enum ManagementStyle: string
     }
 
     /**
+     * How much of what its weaker segments would lose to the stronger ones headquarters gives them anyway, as a share.
+     * Additive, so zero is neutral: capital follows return.
+     *
+     * Stein (1997): a headquarters that ranks its divisions moves money from the weak to the strong ("winner
+     * picking"). Scharfstein & Stein (2000), "The Dark Side of Internal Capital Markets": one that values size buys off
+     * its division managers with capital instead, keeping weak divisions whole on the strong ones' cash
+     * ("socialism"); Rajan, Servaes & Zingales (2000) find the subsidy in diversified firms' segment investment, and
+     * Ozbas & Scharfstein (2010) find it partial and strongest where agency problems are: the typical empire builder
+     * gives back a little over half.
+     */
+    public function weakSegmentSupport(): float
+    {
+        return match ($this) {
+            self::Operator => 0.00,
+            self::EmpireBuilder => 0.60,
+            self::Steward => 0.00,
+            self::Fortress => 0.00,
+        };
+    }
+
+    /**
      * Premium paid over the target's standalone value, as a fraction of it. Additive, so zero is neutral.
      *
      * Roll's (1986) hubris hypothesis: the bidder that wins is the one that most overestimates the target,

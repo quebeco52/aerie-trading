@@ -334,3 +334,23 @@ Identities over 10,744 reports of 17 companies: sum kappa 2e-16, record revenue 
 TICKER/seg owners. Board (n 8): cap +0.85 tn (se 0.67), defaults+deaths +0.25 (0.25), B-or-worse -0.06 pt (0.12),
 P/E 0.00 (0.07), vol +0.0018 (0.0023); wave-1 caps |t| <= 1.6. IT services segment price (three consultancies):
 1.00-1.036 by year, p5 0.96, loads always 1. HUMM main price drifts to 0.93 by y20 (p5 0.88).
+
+## 2026-10-26: phase 5a, capital follows return (p5a) vs 526ab166, 8 seeds x 20 years
+
+Probe: EarningsReportedEvent listener (`cap` rows: gate = CapitalBudgetEngine::returnOnNewPlant < growthHurdle read
+at report end, allocation organic_capex, capex split, revenue, net PP&E, style) and `builds` per segment.
+
+    BASE=<scratchpad>/basetree-526ab166 bin/harness-batch var/harness/segments/run.sh 1-8 head p5a
+    python3 var/harness/segments/p5a.py 1-8 head p5a > p5a_n8.out
+
+Leak (one-plant, non-financial): gate-failing reports with treasury organic capex > 0: head 7 of 3,715 (0.1 bn per
+seed), p5a 0 of 3,761. Growth capex / revenue 0.0245 -> 0.0248 (+0.0003, se 0.0003).
+Harvest: segments with builds = 0 most often: ERNE devices 57%, TERN main+cargo 32%, WEAV main 33%, TRIV industrial
+31%, HUMM cloud 23%, WEAV ads 20%, BIRD merchant 19%, SKYL main 19%; 13 segments never fail. Kappa drift after a
+failing report median -0.9%/yr (mean -1.3%, n 1,880). Largest mix shifts (head -> p5a): TRIV industrial y20 0.614 ->
+0.650, WEAV ads y20 0.433 -> 0.464 (both empire builder / steward firms). Whole sale: ERNE devices once (s7 y10.6).
+Segmented empire builders: AVCT, ERNE, HUMM, RAVN, STAR, TRIV.
+Gluts (price level < 0.97): 10.94% -> 10.98% of firm-quarters, median spell 3 quarters both, p90 22.
+Board (n 8): cap -0.09 tn (se 0.32), defaults+deaths +0.13 (0.35), B-or-worse -0.04 pt (0.07), P/E +0.00 (0.04),
+vol -0.0003 (0.0021), real growth +0.03 pt/yr (0.06), net PP&E growth -0.03 pt/yr (0.07), capex/revenue +0.0023
+(0.0026). Identities: 10,744 reports, sum kappa 2e-16, record revenue 4e-14.

@@ -50,6 +50,9 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
     outlooks opened from `runs/<arm>-<seed>.outlook.json`, identities over all segmented, board, wave-1 caps,
     segment prices). run.sh now always writes OUTLOOK_OUT. Never edit run.sh while a batch is running (bash reads
     it as it goes; a mid-run edit failed every run).
+  - `p5a` (working tree, capital follows return) vs `head` = BASE 526ab166: `p5a.py <seeds> head p5a`. Probe adds
+    `builds` (carry:segment_builds) and `cap` rows from an EarningsReportedEvent listener (one-plant gate, treasury
+    organic capex, operating/maintenance/scheduled capex, revenue, net PP&E, management style).
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

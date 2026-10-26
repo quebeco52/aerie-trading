@@ -32,6 +32,7 @@ final class ManagementStyleTest extends TestCase
         $this->assertSame(1.0, ManagementStyle::Operator->leverageBias());
         $this->assertSame(1.0, ManagementStyle::Operator->acquisitionBias());
         $this->assertSame(0.0, ManagementStyle::Operator->hubrisPremium());
+        $this->assertSame(0.0, ManagementStyle::Operator->weakSegmentSupport());
 
         // The helpers have to be exact identities on the default, since most of the market is unassigned and
         // a rounding wobble here would move every firm that never opted into the mechanic.
@@ -95,8 +96,10 @@ final class ManagementStyleTest extends TestCase
         $this->assertGreaterThan(0.0, ManagementStyle::EmpireBuilder->hubrisPremium());
         $this->assertGreaterThan(1.0, ManagementStyle::EmpireBuilder->acquisitionBias());
 
+        $this->assertSame(0.6, ManagementStyle::EmpireBuilder->weakSegmentSupport(), 'props up its weak segments, partly');
         foreach ([ManagementStyle::Operator, ManagementStyle::Steward, ManagementStyle::Fortress] as $disciplined) {
             $this->assertSame(0.0, $disciplined->hubrisPremium(), $disciplined->value . ' must not overpay.');
+            $this->assertSame(0.0, $disciplined->weakSegmentSupport(), $disciplined->value . ' lets capital follow return.');
         }
 
         $this->assertLessThan(1.0, ManagementStyle::Steward->acquisitionBias());

@@ -38,6 +38,11 @@ final class SegmentBooks
     public const STATE_MARGIN = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_margin:';
     /** Carried stream-state key prefix: a segment's capital turnover, its annual revenue per unit of its plant. */
     public const STATE_TURNOVER = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_turnover:';
+    /**
+     * Carried stream-state key prefix: 1 when a segment's new plant cleared the hurdle at its industry's price at the
+     * last report, 0 when it did not (CapitalBudgetEngine).
+     */
+    public const STATE_BUILDS = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_builds:';
     /** Stream-state key prefix of a line's weight in the mix the plan steers to (StreamContext). */
     private const STREAM_WEIGHT_PREFIX = 'weight:';
 
@@ -635,9 +640,11 @@ final class SegmentBooks
     }
 
     /**
-     * The segment a deal buys into, drawn in proportion to the plant each holds, so deals keep the mix in expectation;
-     * a by-product's plant is bought only with the plant it rides, and none into a segment on its model's own path. The
-     * main segment before the books open.
+     * The segment a deal buys into, drawn in proportion to the plant each holds, so deals keep the mix in expectation:
+     * a by-product's plant is bought only with the plant it rides, none into a segment on its model's own path, and
+     * one whose new plant did not clear its hurdle at the last report (a glut) only as far as management supports its
+     * weak segments. Where every segment is in a glut, the deal is drawn by plant alone, as a company in one market
+     * buys into its own. The main segment before the books open.
      *
      * @param float $uniform A draw on [0, 1).
      */
@@ -652,6 +659,16 @@ final class SegmentBooks
             }
         }
         $plant = array_filter($plant, static fn(float $share): bool => $share > 0.0);
+        $builds = self::filed($stock->getEarningsMomentumZ() ?? [], self::STATE_BUILDS);
+        $support = $stock->getManagementProfile()->weakSegmentSupport();
+        $eligible = [];
+        foreach ($plant as $segment => $share) {
+            $weight = ($builds[$segment] ?? 1.0) > 0.0 ? $share : $share * $support;
+            if ($weight > 0.0) {
+                $eligible[$segment] = $weight;
+            }
+        }
+        $plant = $eligible === [] ? $plant : $eligible;
         $total = array_sum($plant);
         $cumulative = 0.0;
         foreach ($plant as $segment => $share) {
@@ -662,6 +679,36 @@ final class SegmentBooks
         }
 
         return Segments::MAIN;
+    }
+
+    /**
+     * The growth funds each segment's plan gets: all of it while the funds cover every plan; when they do not, the
+     * plans that earn most are filled first (Stein 1997), blended with a pro-rata split as far as management supports
+     * its weak segments (Scharfstein & Stein 2000). What a plan does not get is left for the treasury.
+     *
+     * @param array<string, float> $plans   Segment => its growth plan.
+     * @param array<string, float> $returns Segment => the return its new plant earns.
+     * @param float                $support The share of a strict ranking management spreads pro rata instead.
+     * @return array<string, float>
+     */
+    public static function allotByReturn(array $plans, array $returns, float $funds, float $support): array
+    {
+        $total = array_sum($plans);
+        if ($total <= 0.0 || $funds >= $total) {
+            return $plans;
+        }
+
+        $order = array_keys($plans);
+        usort($order, static fn(string $a, string $b): int => ($returns[$b] ?? 0.0) <=> ($returns[$a] ?? 0.0));
+        $left = max(0.0, $funds);
+        $allotted = [];
+        foreach ($order as $segment) {
+            $ranked = min($plans[$segment], $left);
+            $left -= $ranked;
+            $allotted[$segment] = ((1.0 - $support) * $ranked) + ($support * $plans[$segment] * max(0.0, $funds) / $total);
+        }
+
+        return $allotted;
     }
 
     /**

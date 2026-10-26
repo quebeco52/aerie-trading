@@ -111,6 +111,15 @@ final readonly class ManagementProfile
         return $this->scale($this->style->acquisitionBias());
     }
 
+    /**
+     * The share of what its weaker segments would lose to the stronger ones that headquarters gives them anyway.
+     * Additive, so it scales directly; a share, so all of it at most.
+     */
+    public function weakSegmentSupport(): float
+    {
+        return min(1.0, $this->intensity * $this->style->weakSegmentSupport());
+    }
+
     /** Premium paid over a target's standalone value. Additive, so it scales directly rather than about 1. */
     public function hubrisPremium(): float
     {

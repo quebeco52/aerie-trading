@@ -86,6 +86,24 @@ final class SegmentsHarnessTest extends BoardRun
 
     protected function onStart(): void
     {
+        // CAP_PROBE: per report, from EarningsReportedEvent's context (read-only): ticker, time, segmented, financial,
+        // the one-plant growth gate failing, treasury organic capex, operating/maintenance/scheduled capex, revenue,
+        // net PP&E.
+        if (getenv('SEG_OUT')) {
+            static::getContainer()->get('event_dispatcher')->addListener(\App\Service\Event\EarningsReportedEvent::class, function (\App\Service\Event\EarningsReportedEvent $e): void {
+                $ctx = $e->getContext();
+                $stock = $ctx->stock;
+                $fails = null;
+                try {
+                    $fails = \App\Service\Corporate\Earnings\CapitalBudgetEngine::returnOnNewPlant($ctx)
+                        < $stock->getManagementProfile()->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), false);
+                } catch (\Throwable) {
+                }
+                $this->capRows[] = [round($this->currentTime, 3), $stock->getTicker(), $ctx->segments !== [], $ctx->strategy->isFinancial(), $fails,
+                    (float) ($ctx->allocation['organic_capex'] ?? 0.0), $ctx->operatingCapex, $ctx->maintenanceCapex, $ctx->scheduledCapex,
+                    $ctx->actualRevenue, $stock->getNetPpe(), $stock->getManagementProfile()->style->value ?? null];
+            });
+        }
         if (getenv('OUTLOOK_SALT') && ($store = $this->outlookStore()) !== null) {
             $store->writeOutlooks(['salt' => 1000 + $this->seed, 'quarter' => -1, 'industries' => []]);
         }
@@ -126,6 +144,9 @@ final class SegmentsHarnessTest extends BoardRun
 
         return $row;
     }
+
+    /** @var list<list<mixed>> CAP_PROBE rows (see onStart). */
+    private array $capRows = [];
 
     /** @var list<array<string, mixed>> SEG_OUT deal events of the segmented tickers: {t, tk, d, kappa after}. */
     private array $segDeals = [];
@@ -244,9 +265,10 @@ final class SegmentsHarnessTest extends BoardRun
         $targets = [];
         $segOutlook = [];
         $segMargin = [];
+        $segBuilds = [];
         $segTurnover = [];
         foreach ($z as $k => $v) {
-            foreach (['carry:segment_plant:' => 'kappa', 'carry:segment_target:' => 'targets', 'carry:segment_outlook:' => 'segOutlook', 'carry:segment_margin:' => 'segMargin', 'carry:segment_turnover:' => 'segTurnover'] as $p => $var) {
+            foreach (['carry:segment_plant:' => 'kappa', 'carry:segment_target:' => 'targets', 'carry:segment_outlook:' => 'segOutlook', 'carry:segment_margin:' => 'segMargin', 'carry:segment_turnover:' => 'segTurnover', 'carry:segment_builds:' => 'segBuilds'] as $p => $var) {
                 if (str_starts_with((string) $k, $p)) {
                     ${$var}[substr((string) $k, strlen($p))] = (float) $v;
                 }
@@ -289,6 +311,7 @@ final class SegmentsHarnessTest extends BoardRun
             'nd' => (float) $stock->getTotalDebt() - (float) $stock->getCorporateTreasury(), 'ebitda' => (float) $report->getEbitda(),
             'gw' => (float) $stock->getGoodwill(), 'tax' => $this->currentMacro === null ? null : \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getEffectiveTaxRate($this->currentMacro->corporateTaxRate),
             'sky' => $ticker === 'SKYL' ? $this->skylPath($stock) : null,
+            'builds' => $segBuilds,
             'smar' => $segMargin, 'stur' => $segTurnover, 'fmar' => (float) $stock->getOperatingMargin(), 'ftur' => (float) $stock->getAssetTurnover(),
             't' => round($this->currentTime, 3), 'tk' => $ticker, 'rev' => (float) $report->getRevenue(),
             'om' => (float) $report->getOperatingMargin(), 'shares' => $shares, 'tilts' => $tilts,
@@ -374,7 +397,7 @@ final class SegmentsHarnessTest extends BoardRun
                     }
                 }
             }
-            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys, 'deals' => $this->segDeals]));
+            file_put_contents((string) getenv('SEG_OUT'), json_encode(['rows' => $this->segRows, 'leaks' => $this->segLeaks, 'slash' => $slashKeys, 'deals' => $this->segDeals, 'cap' => $this->capRows]));
         }
         $out = getenv('IDLE_OUT');
         if ($out) {

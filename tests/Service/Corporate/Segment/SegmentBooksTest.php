@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Segment;
 
+use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
@@ -274,6 +275,40 @@ class SegmentBooksTest extends TestCase
         $this->assertNull(SegmentBooks::weakestSegment($this->skylarkAt(12.0, 0.6)));
         $this->assertTrue(SegmentBooks::holdsPlant($this->skylarkAt(12.0, 0.6), 'satellite_internet'));
         $this->assertFalse(SegmentBooks::holdsPlant($this->skylarkAt(12.0, 1.0), 'satellite_internet'), 'one with no plant');
+    }
+
+    /**
+     * Funds that cover every plan fund every plan; short funds fill the plan that earns most first, spread pro rata as
+     * far as management supports its weak segments.
+     */
+    public function testScarceFundsFillTheBestPlanFirst(): void
+    {
+        $plans = ['a' => 60.0, 'b' => 40.0];
+        $returns = ['a' => 0.08, 'b' => 0.20];
+
+        $this->assertSame($plans, SegmentBooks::allotByReturn($plans, $returns, 100.0, 0.0));
+        $this->assertEqualsWithDelta(['a' => 10.0, 'b' => 40.0], SegmentBooks::allotByReturn($plans, $returns, 50.0, 0.0), 1e-12);
+        $this->assertEqualsWithDelta(['a' => 30.0, 'b' => 20.0], SegmentBooks::allotByReturn($plans, $returns, 50.0, 1.0), 1e-12);
+        $this->assertEqualsWithDelta(['a' => 20.0, 'b' => 30.0], SegmentBooks::allotByReturn($plans, $returns, 50.0, 0.5), 1e-12);
+    }
+
+    /**
+     * A deal does not buy into a segment whose new plant did not clear its hurdle at the last report (a glut), unless
+     * management supports its weak segments; where every segment is in a glut it is drawn by plant alone.
+     */
+    public function testADealAvoidsASegmentInAGlut(): void
+    {
+        $weav = (new Stock())->setTicker('WEAV')->setIndustry('Internet Retail');
+        $weav->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []) + [SegmentBooks::STATE_BUILDS . 'ads_and_cloud' => 0.0]);
+        $this->assertSame(Segments::MAIN, SegmentBooks::acquiringSegment($weav, 0.99));
+
+        $weav->setManagementStyle(ManagementStyle::EmpireBuilder);
+        $this->assertSame('ads_and_cloud', SegmentBooks::acquiringSegment($weav, 0.99), 'an empire builder buys into it anyway');
+
+        $weav->setManagementStyle(null);
+        $weav->setEarningsMomentumZ([SegmentBooks::STATE_BUILDS . Segments::MAIN => 0.0] + ($weav->getEarningsMomentumZ() ?? []));
+        $this->assertSame(Segments::MAIN, SegmentBooks::acquiringSegment($weav, 0.79));
+        $this->assertSame('ads_and_cloud', SegmentBooks::acquiringSegment($weav, 0.81));
     }
 
     /** One segment set to a share, the others scaled to the rest in the proportions they held. */

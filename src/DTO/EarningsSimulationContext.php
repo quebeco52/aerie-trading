@@ -209,7 +209,7 @@ class EarningsSimulationContext
      * allotted and what its plan still allows after it, and the level of its own path where its model plans one.
      * Empty for any other.
      *
-     * @var array<string, array{plant: float, sales: float, margin: float, turnover: float, market: float, price: float, load: float, drain: float, growth: float, leftover: float, path?: float}>
+     * @var array<string, array{plant: float, sales: float, margin: float, turnover: float, market: float, price: float, load: float, drain: float, growth: float, leftover: float, path?: float, capital_gap?: float, gap?: float, return?: float, builds?: bool, replaced?: float}>
      */
     public array $segments = [];
     /** The plant base a company that keeps plant by segment planned its segments' growth on (net PP&E). */
