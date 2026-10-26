@@ -312,6 +312,75 @@ class SegmentBooksTest extends TestCase
         $this->assertSame('ads_and_cloud', SegmentBooks::acquiringSegment($weav, 0.81));
     }
 
+    /**
+     * A company looks outside its businesses for a deal only when none it can buy into earns its cost of capital on its
+     * plant: one not yet filed counts as earning it, a by-product follows the plant it rides, and a venture given up on
+     * counts for nothing. It takes on one new industry at a time.
+     */
+    public function testACompanyLooksOutsideItsBusinessesOnlyWhenNonePays(): void
+    {
+        $shrk = (new Stock())->setTicker('SHRK')->setIndustry('Auto Manufacturers');
+        $this->assertTrue(SegmentBooks::paysAnywhere($shrk), 'nothing filed yet');
+        $shrk->setEarningsMomentumZ([SegmentBooks::STATE_PAYS . Segments::MAIN => 0.0]);
+        $this->assertFalse(SegmentBooks::paysAnywhere($shrk), 'one plant, earning less than its cost');
+        $this->assertFalse(SegmentBooks::isDiversifying($shrk));
+
+        $weav = (new Stock())->setTicker('WEAV')->setIndustry('Internet Retail');
+        $books = SegmentBooks::open([Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], 1.0, []);
+        $weav->setEarningsMomentumZ($books + [SegmentBooks::STATE_PAYS . Segments::MAIN => 0.0]);
+        $this->assertTrue(SegmentBooks::paysAnywhere($weav), 'its ads arm still pays');
+        $weav->setEarningsMomentumZ($books + [SegmentBooks::STATE_PAYS . Segments::MAIN => 0.0, SegmentBooks::STATE_PAYS . 'ads_and_cloud' => 0.0]);
+        $this->assertFalse(SegmentBooks::paysAnywhere($weav), 'no business pays');
+        $this->assertFalse(SegmentBooks::isDiversifying($weav), 'seeded segments are not entries');
+
+        $tern = $this->tern();
+        $tern->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.9, 'air_cargo' => 0.1], 1.0, []) + [SegmentBooks::STATE_PAYS . Segments::MAIN => 0.0, SegmentBooks::STATE_PAYS . 'air_cargo' => 1.0]);
+        $this->assertSame([Segments::MAIN], array_keys(SegmentBooks::dealSegments($tern)), 'the holds are bought with the planes');
+        $this->assertFalse(SegmentBooks::paysAnywhere($tern));
+
+        $venture = Segments::enteredKey('Steel');
+        $entered = SegmentBooks::open([Segments::MAIN => 0.97, $venture => 0.03], 1.0, []) + [
+            SegmentBooks::STATE_PAYS . Segments::MAIN => 0.0,
+            SegmentBooks::STATE_PAYS . $venture => 1.0,
+        ];
+        $shrk->setEarningsMomentumZ($entered);
+        $this->assertTrue(SegmentBooks::paysAnywhere($shrk));
+        $this->assertTrue(SegmentBooks::isDiversifying($shrk), 'it runs a business it entered');
+        $shrk->setEarningsMomentumZ($entered + [SegmentBooks::STATE_VENTURE_ABANDONED . $venture => 3.0]);
+        $this->assertFalse(SegmentBooks::paysAnywhere($shrk), 'a venture given up on');
+        $this->assertFalse(SegmentBooks::isDiversifying($shrk));
+        $shrk->setEarningsMomentumZ([SegmentBooks::STATE_PENDING . $venture => 1.0e8, SegmentBooks::STATE_PAYS . Segments::MAIN => 0.0]);
+        $this->assertTrue(SegmentBooks::isDiversifying($shrk), 'still building one');
+    }
+
+    /**
+     * A business bought between reports takes its share of the sales as its revenue target at once, the others the rest
+     * in the proportions they had; a company whose books just opened splits the sales between its plant.
+     */
+    public function testABusinessBoughtBetweenReportsTakesItsShareOfTheRevenue(): void
+    {
+        $venture = Segments::enteredKey('Steel');
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.6, 'ads_and_cloud' => 0.2, $venture => 0.2], 1.0, []) + [
+            SegmentBooks::STATE_TURNOVER . Segments::MAIN => 1.0,
+            SegmentBooks::STATE_TURNOVER . 'ads_and_cloud' => 1.0,
+            SegmentBooks::STATE_TURNOVER . $venture => 2.0,
+            SegmentBooks::STATE_TARGET . Segments::MAIN => 0.6,
+            SegmentBooks::STATE_TARGET . 'ads_and_cloud' => 0.2,
+        ];
+        $targets = SegmentBooks::boughtTargets($momentum, $venture);
+        // Sales: 0.6, 0.2 and 0.4 of 1.2.
+        $this->assertEqualsWithDelta([
+            SegmentBooks::STATE_TARGET . Segments::MAIN => 0.75 * (2.0 / 3.0),
+            SegmentBooks::STATE_TARGET . 'ads_and_cloud' => 0.25 * (2.0 / 3.0),
+            SegmentBooks::STATE_TARGET . $venture => 1.0 / 3.0,
+        ], $targets, 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($targets), 1e-12);
+
+        $unfiled = array_filter($momentum, static fn(string $key): bool => !str_starts_with($key, SegmentBooks::STATE_TARGET), ARRAY_FILTER_USE_KEY);
+        $this->assertEqualsWithDelta(0.5, SegmentBooks::boughtTargets($unfiled, Segments::MAIN)[SegmentBooks::STATE_TARGET . Segments::MAIN] ?? null, 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum(SegmentBooks::boughtTargets($unfiled, $venture)), 1e-12);
+    }
+
     /** One segment set to a share, the others scaled to the rest in the proportions they held. */
     public function testReshare(): void
     {

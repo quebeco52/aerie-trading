@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Deal;
 
+use App\Data\Company\IndustryAdjacency;
 use App\Data\Company\Segments;
 use App\DTO\AcquisitionContext;
 use App\DTO\MacroStateDTO;
@@ -12,7 +13,11 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\ManagementValuation;
+use App\Service\Corporate\Segment\EntryMarkets;
+use App\Service\Corporate\Segment\SegmentBookOpener;
 use App\Service\Corporate\Segment\SegmentBooks;
+use App\Service\Corporate\Segment\SegmentEntry;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\News\MarketEventPublisher;
@@ -96,6 +101,12 @@ class AcquisitionEngine
     public const MA_CASH_FALLBACK_SPEND = 0.20;
     /** Least of the strategy's spend a deal draws: the share is uniform on [50%, 100%] of it. */
     public const MA_SPEND_DRAW_MIN = 0.50;
+    /**
+     * Largest share of a market one off-board firm holds, and so the most of a new industry a buyer from outside it
+     * takes in one deal: 10%. The fringe is many firms, the largest of them a regional or family-owned leader, not a
+     * third of the market.
+     */
+    public const MA_LARGEST_PRIVATE_SHARE = 0.10;
 
     // --- Deal Sizing Limits (named in the deal announcement) ---
     /** The acquirer's cash, borrowing room or shares times the fraction it chose to spend. */
@@ -104,6 +115,8 @@ class AcquisitionEngine
     public const LIMIT_SPEND_CAP = 'the per-deal spending cap';
     /** The competitive fringe left in the acquirer's market. */
     public const LIMIT_AVAILABLE_MARKET = 'what is left of its market to buy';
+    /** The largest off-board firm in an industry a buyer enters from outside it. */
+    public const LIMIT_LARGEST_TARGET = 'the largest firm there is to buy';
     /** The largest share that clears horizontal merger review. */
     public const LIMIT_MERGER_REVIEW = 'the largest deal merger review clears';
     /** The largest deal that keeps the acquirer's tangible capital ratio well capitalized. */
@@ -371,8 +384,13 @@ class AcquisitionEngine
 
         $ctx->config = $config;
         $ctx->target = PrivateCompany::procedural($this->mathUtility);
-        // A company that keeps plant by segment buys into one of its markets, drawn in proportion to its plant.
-        if (SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null) {
+        // A company none of whose markets wants more plant buys into an industry next to its own where one is worth
+        // it; otherwise a company that keeps plant by segment buys into one of its markets, drawn in proportion to its
+        // plant.
+        $ctx->entry = $this->chooseEntryMarket($ctx);
+        if ($ctx->entry !== null) {
+            $ctx->segment = Segments::enteredKey($ctx->entry['industry']);
+        } elseif (SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null) {
             $ctx->segment = SegmentBooks::acquiringSegment($stock, $this->mathUtility->generateUniform());
         }
         $this->drawTargetEconomics($ctx);
@@ -380,7 +398,7 @@ class AcquisitionEngine
         // The target is a private firm in the market the acquirer buys into, so the deal is sized to the largest
         // one there is to buy and that clears merger review.
         $market = $this->resolveLargestAvailableTarget($ctx);
-        $this->capPurchasePrice($ctx, $market['price'], $market['review_binds'] ? self::LIMIT_MERGER_REVIEW : self::LIMIT_AVAILABLE_MARKET);
+        $this->capPurchasePrice($ctx, $market['price'], $market['limit']);
         $this->capPurchasePrice($ctx, $this->resolveLargestCapitalClearedDeal($ctx), self::LIMIT_CAPITAL_TEST);
         $this->capPurchasePrice($ctx, $this->resolveLargestCovenantClearedDeal($ctx), self::LIMIT_COVENANT);
         if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
@@ -397,6 +415,47 @@ class AcquisitionEngine
         }
     }
 
+    /**
+     * The industry a deal takes its buyer into when none of its own businesses earns its cost of capital on its plant
+     * (SegmentBooks::paysAnywhere()): one next to a business it runs (EntryMarkets), drawn in proportion to what a
+     * business there is worth to it per unit of plant (SegmentEntry::value()). A going concern brings the skills of the
+     * trade with it, so the buyer expects the share of the incumbents' margin a private firm earns wherever it buys,
+     * with nothing to learn, and a builder's distance from home does not weigh on it: firms build next door and buy far
+     * away (Yip 1982; Lee & Lieberman 2010). A holding company, whose business is owning others, looks outside whenever
+     * it deals. Either takes on one new industry at a time (SegmentBooks::isDiversifying()).
+     * Null where no market is worth entering, or for a buyer that keeps no plant ledger, or a financial, or before a
+     * year of reports.
+     *
+     * @return array{industry: string, closeness: float, margin: float, turnover: float, market: float, room: float}|null
+     */
+    private function chooseEntryMarket(AcquisitionContext $ctx): ?array
+    {
+        $stock = $ctx->acquirer;
+        $ledger = $this->industryShareLedger;
+        if ($ledger === null || $ctx->strategy->isFinancial() || $stock->getGrossPpe() === null
+            || $ctx->macroState->totalTime < SegmentEntry::FIRST_ENTRY_YEARS || SegmentBooks::isDiversifying($stock)
+            || (!IndustryAdjacency::isHoldingCompany((string) $stock->getIndustry()) && SegmentBooks::paysAnywhere($stock))) {
+            return null;
+        }
+
+        $hurdle = $stock->getManagementProfile()->appliedHurdle($ctx->hurdleRate);
+        $longRunGrowth = MacroConstants::TREND_REAL_GROWTH + max(0.0, $ctx->macroState->inflationEma);
+        $afterTax = 1.0 - $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate);
+        $expectedShare = (self::MA_TARGET_MARGIN_SHARE_MIN + self::MA_TARGET_MARGIN_SHARE_MAX) / 2.0;
+        $markets = [];
+        $values = [];
+        foreach ((new EntryMarkets($ledger))->survey($stock, $ctx->macroState, $ctx->tickCount, $ctx->ticksPerYear) as $industry => $market) {
+            if ($market['room'] <= 0.0) {
+                continue;
+            }
+            $markets[$industry] = ['industry' => $industry, 'closeness' => $market['closeness'], 'margin' => $market['margin'], 'turnover' => $market['turnover'], 'market' => $market['market'], 'room' => $market['room']];
+            $values[$industry] = SegmentEntry::value($afterTax * $market['turnover'] * $market['margin'] * $expectedShare, $hurdle, $longRunGrowth, $market['excess'], 0.0);
+        }
+        $industry = SegmentEntry::choose($values, MathUtility::hashedUniform($ledger->runSalt(), "entry-deal:{$stock->getTicker()}:{$ctx->tickCount}"));
+
+        return $industry === null ? null : $markets[$industry];
+    }
+
     /** The target's economics: synergy with the acquirer, standalone return and operating margin. */
     private function drawTargetEconomics(AcquisitionContext $ctx): void
     {
@@ -406,22 +465,34 @@ class AcquisitionEngine
         $ctx->targetRoic = max(self::MA_TARGET_ROIC_FLOOR, min(self::MA_TARGET_ROIC_CEILING, $targetRoicDraw));
 
         // A target earns like the business it joins: the segment bought into, for a company that keeps plant by
-        // segment.
+        // segment, or in a new industry its incumbents' margin and turnover.
         $economics = SegmentBooks::companyEconomics($ctx->acquirer->getEarningsMomentumZ() ?? []);
-        $joinedMargin = $economics['margins'][$ctx->segment] ?? (float) $ctx->acquirer->getOperatingMargin();
+        $joinedMargin = $ctx->entry['margin'] ?? $economics['margins'][$ctx->segment] ?? (float) $ctx->acquirer->getOperatingMargin();
         $ctx->targetMargin = max(0.01, $joinedMargin * $this->mathUtility->generateUniformBetween(self::MA_TARGET_MARGIN_SHARE_MIN, self::MA_TARGET_MARGIN_SHARE_MAX));
-        $ctx->targetTurnover = $economics['turnovers'][$ctx->segment] ?? null;
+        $ctx->targetTurnover = $ctx->entry['turnover'] ?? $economics['turnovers'][$ctx->segment] ?? null;
     }
 
     /**
-     * Price of the largest target the acquirer's market holds for it: the fringe still off the board, capped
-     * at the share merger review clears, and whether the review rather than the fringe set it. Unbounded when
-     * the ledger has not priced the firm's market.
+     * Price of the largest target the acquirer's market holds for it, and the limit that set it: the fringe still off
+     * the board, capped at the share merger review clears. A buyer from outside an industry overlaps no firm in it, so
+     * review clears the deal (a conglomerate merger), and it buys the largest firm off the board or what the fringe
+     * leaves, whichever is less. Unbounded when the ledger has not priced the firm's market.
      *
-     * @return array{price: float, review_binds: bool}
+     * @return array{price: float, limit: string}
      */
     private function resolveLargestAvailableTarget(AcquisitionContext $ctx): array
     {
+        $revenuePerDollar = $this->valueTarget($ctx, 1.0)['revenue'];
+        $price = static fn(float $marketRevenue): float => $revenuePerDollar > 0.0 ? $marketRevenue / $revenuePerDollar : INF;
+        if ($ctx->entry !== null) {
+            $fringeBinds = $ctx->entry['room'] < self::MA_LARGEST_PRIVATE_SHARE;
+
+            return [
+                'price' => $price(min($ctx->entry['room'], self::MA_LARGEST_PRIVATE_SHARE) * $ctx->entry['market']),
+                'limit' => $fringeBinds ? self::LIMIT_AVAILABLE_MARKET : self::LIMIT_LARGEST_TARGET,
+            ];
+        }
+
         $market = $this->industryShareLedger?->describeMergerMarket(
             $ctx->acquirer,
             $ctx->macroState,
@@ -431,16 +502,14 @@ class AcquisitionEngine
             $ctx->segment,
         );
         if ($market === null) {
-            return ['price' => INF, 'review_binds' => false];
+            return ['price' => INF, 'limit' => self::LIMIT_AVAILABLE_MARKET];
         }
 
         $reviewShare = MergerReview::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl'], $ctx->macroState->mergerReviewLeniency);
-        $targetShare = min($market['fringe_share'], $reviewShare);
-        $revenuePerDollar = $this->valueTarget($ctx, 1.0)['revenue'];
 
         return [
-            'price' => $revenuePerDollar > 0.0 ? ($targetShare * $market['market_revenue']) / $revenuePerDollar : INF,
-            'review_binds' => $reviewShare < $market['fringe_share'],
+            'price' => $price(min($market['fringe_share'], $reviewShare) * $market['market_revenue']),
+            'limit' => $reviewShare < $market['fringe_share'] ? self::LIMIT_MERGER_REVIEW : self::LIMIT_AVAILABLE_MARKET,
         ];
     }
 
@@ -566,6 +635,11 @@ class AcquisitionEngine
     private function applyAcquisitionSynergies(AcquisitionContext $ctx): void
     {
         $stock = $ctx->acquirer;
+        // A buyer entering a new industry opens books for its plant if it kept none, at its economics before the deal,
+        // as one that builds its way in does.
+        if ($ctx->entry !== null) {
+            (new SegmentBookOpener($this->corporateMetrics, $this->industryShareLedger))->openForEntry($stock, $ctx->strategy, $ctx->macroState, $ctx->tickCount, $ctx->ticksPerYear);
+        }
 
         // Purchase accounting (ASC 805): the deal creates no day-one equity. Cash and debt deals swap cash for
         // net assets plus goodwill; stock deals add the shares issued to equity. Expected synergies only
@@ -644,6 +718,14 @@ class AcquisitionEngine
         if (SegmentBooks::plant($momentum) !== null) {
             $momentum = SegmentBooks::acquireIntoBooks($momentum, $ctx->segment, $oldRevenueCapital, $netAssetsAcquired, $acquiredRevenue, $acquiredOperatingIncome, SegmentBooks::jointSegments($stock)) + $momentum;
             $stock->setEarningsMomentumZ($momentum);
+            // A business bought in a new industry takes its market, its share of the revenue and its ledger record at
+            // the deal, so nothing before the next report finds it missing.
+            if ($ctx->entry !== null) {
+                $momentum = $this->enteredMarket($ctx, $ctx->entry['market'], $acquiredRevenue) + $momentum;
+                $momentum = SegmentBooks::boughtTargets($momentum, $ctx->segment) + $momentum;
+                $stock->setEarningsMomentumZ($momentum);
+                $this->industryShareLedger?->openAcquiredRecord($stock, $ctx->segment, $acquiredRevenue, SegmentBooks::entryMarketShare($acquiredRevenue, $ctx->entry['market'], 0.0), $ctx->macroState, $ctx->tickCount);
+            }
             $economics = SegmentBooks::companyEconomics($momentum);
             if ($economics !== null && $acquirerTurnover !== null) {
                 $stock->setOperatingMargin((string) max(0.01, $economics['margin']));
@@ -746,21 +828,52 @@ class AcquisitionEngine
         ]);
         $terms = 'Funded with ' . implode(' and ', $funding) . '; ' . WireFormat::money($ctx->goodwillRecorded) . ' booked as goodwill.';
 
-        $sizedByRule = in_array($ctx->bindingLimit, [self::LIMIT_SPEND_CAP, self::LIMIT_AVAILABLE_MARKET, self::LIMIT_MERGER_REVIEW, self::LIMIT_CAPITAL_TEST, self::LIMIT_COVENANT], true);
+        $sizedByRule = in_array($ctx->bindingLimit, [self::LIMIT_SPEND_CAP, self::LIMIT_AVAILABLE_MARKET, self::LIMIT_LARGEST_TARGET, self::LIMIT_MERGER_REVIEW, self::LIMIT_CAPITAL_TEST, self::LIMIT_COVENANT], true);
 
         return $sizedByRule ? "{$terms} Sized to {$ctx->bindingLimit}." : $terms;
+    }
+
+    /**
+     * The market of a segment a deal has just bought in a new industry, and the outlook it grows with: one in which its
+     * plant holds the share of the industry's market its revenue does (SegmentBooks::open()). Its first pricing anchors
+     * its record at that plant with no entry offset, since the plant was the fringe's and already supplied the market.
+     *
+     * @return array<string, float> Carried state.
+     */
+    private function enteredMarket(AcquisitionContext $ctx, float $industryMarket, float $acquiredRevenue): array
+    {
+        $stock = $ctx->acquirer;
+        $years = $ctx->macroState->totalTime;
+        $key = SegmentBooks::STATE_MARKET . $ctx->segment;
+        // Its market grows with its industry's outlook, which the next report files, so it is struck with it in.
+        $outlook = [SegmentBooks::STATE_OUTLOOK . $ctx->segment => $this->industryShareLedger?->resolveSegmentBeliefs($stock)[$ctx->segment] ?? 0.0];
+        $stock->setEarningsMomentumZ($outlook + ($stock->getEarningsMomentumZ() ?? []));
+        $firmShare = $this->corporateMetrics->calculateAddressableShare($stock, $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()), $ctx->macroState);
+        $state = SegmentBooks::open(
+            [$ctx->segment => (SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) ?? [])[$ctx->segment] ?? 0.0],
+            CorporateMetrics::secularMarketGrowth($stock, $years),
+            [$ctx->segment => SegmentBooks::marketGrowths($stock, $years)[$ctx->segment] ?? 1.0],
+            $firmShare,
+            [$ctx->segment => SegmentBooks::entryMarketShare($acquiredRevenue, $industryMarket, 0.0)],
+        );
+
+        return $outlook + (isset($state[$key]) ? [$key => $state[$key]] : []);
     }
 
     /** The model of the market a deal buys into: the acquirer's own, or its segment's industry's. */
     private function segmentStrategy(Stock $acquirer, string $segment): BusinessModelInterface
     {
-        return \App\Data\Company\Sectors::strategyFor(SegmentBooks::industries($acquirer)[$segment] ?? (string) $acquirer->getIndustry());
+        return \App\Data\Company\Sectors::strategyFor(Segments::enteredIndustry($segment) ?? SegmentBooks::industries($acquirer)[$segment] ?? (string) $acquirer->getIndustry());
     }
 
     private function finalizeAcquisitionEvent(AcquisitionContext $ctx): array
     {
         $purchasePrice = WireFormat::money($ctx->purchasePrice);
-        $into = $ctx->segment === Segments::MAIN ? '' : ' for its ' . lcfirst(SegmentBooks::label($ctx->acquirer, $ctx->segment)) . ' business';
+        $into = match (true) {
+            $ctx->entry !== null => ', taking it into ' . lcfirst(SegmentBooks::label($ctx->acquirer, $ctx->segment)),
+            $ctx->segment === Segments::MAIN => '',
+            default => ' for its ' . lcfirst(SegmentBooks::label($ctx->acquirer, $ctx->segment)) . ' business',
+        };
         $desc = "{$ctx->acquirer->getName()} executed a {$purchasePrice} {$ctx->config['type']} of {$ctx->target['name']}{$into}. " . $this->describeDealTerms($ctx);
 
         // The announcement return is the deal's NPV over the acquirer's market value before it (Moeller,

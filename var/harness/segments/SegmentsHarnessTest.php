@@ -119,16 +119,33 @@ final class SegmentsHarnessTest extends BoardRun
                     foreach ($ctx->segments as $sk => $b) {
                         $segs[$sk] = ['price' => $b['price'] ?? null, 'load' => $b['load'] ?? null];
                     }
+                    $xrec = [];
+                    $storeX = static::getContainer()->get('App\\Service\\Corporate\\Industry\\IndustryShareStoreInterface');
+                    $xsegs = array_keys($kap);
+                    foreach (array_keys($vk) as $vkey) {
+                        if (($pos = strpos($vkey, ':x:')) !== false) {
+                            $xsegs[] = substr($vkey, $pos + 1);
+                        }
+                    }
+                    foreach (array_unique($xsegs) as $sk) {
+                        if (str_starts_with($sk, 'x:')) {
+                            $rec = $storeX->readIndustry(substr($sk, 2))[$stock->getTicker() . '/' . $sk] ?? null;
+                            $xrec[$sk] = is_array($rec) ? ['rev' => $rec['revenue'] ?? null, 'cap' => $rec['capacity'] ?? null, 'as' => $rec['addressable_share'] ?? null,
+                                'offset' => $rec['entry_offset'] ?? null, 'tick' => $rec['tick'] ?? null,
+                                'ads' => $rec['anchor_demand_share'] ?? null, 'aout' => $rec['anchor_outlook'] ?? null, 'outlook' => $mom['carry:segment_outlook:' . $sk] ?? null] : null;
+                        }
+                    }
                     $this->ventureRows[] = ['t' => round($this->currentTime, 3), 'tk' => $stock->getTicker(), 'entry' => $ctx->marketEntry ?? null, 'exit' => $exit, 'vk' => $vk, 'kappa' => $kap,
                         'segs' => $segs, 'streams' => $ctx->streamRevenue, 'rev' => $ctx->actualRevenue, 'drag' => $ctx->ventureLearningDrag ?? null,
                         'cip' => (float) $stock->getCipBalance(), 'cap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(),
-                        'style' => $stock->getManagementProfile()->style->value ?? null, 'industry' => (string) $stock->getIndustry()];
+                        'style' => $stock->getManagementProfile()->style->value ?? null, 'industry' => (string) $stock->getIndustry(), 'xrec' => $xrec];
                 }
                 $this->capRows[] = [round($this->currentTime, 3), $stock->getTicker(), $ctx->segments !== [], $ctx->strategy->isFinancial(), $fails,
                     (float) ($ctx->allocation['organic_capex'] ?? 0.0), $ctx->operatingCapex, $ctx->maintenanceCapex, $ctx->scheduledCapex,
                     $ctx->actualRevenue, $stock->getNetPpe(), $stock->getManagementProfile()->style->value ?? null,
                     property_exists($ctx, 'plantReplaced') ? $ctx->plantReplaced : null, $ctx->plantLoad, $ctx->industryPriceLevel,
-                    $ctx->macroState->outputGap ?? null, (string) $stock->getIndustry()];
+                    $ctx->macroState->outputGap ?? null, (string) $stock->getIndustry(),
+                    array_filter($stock->getEarningsMomentumZ() ?? [], static fn($k): bool => str_starts_with((string) $k, 'carry:segment_pays:'), ARRAY_FILTER_USE_KEY)];
             });
         }
         if (getenv('OUTLOOK_SALT') && ($store = $this->outlookStore()) !== null) {
@@ -186,17 +203,53 @@ final class SegmentsHarnessTest extends BoardRun
     {
         $stock = $event->getStock();
         $desc = (string) $event->getDescription();
-        if (!getenv('SEG_OUT') || App\Data\Company\Segments::forTicker($stock->getTicker()) === null
-            || !preg_match('/ sold its | executed a /', $desc)) {
+        // Every firm's deals (5b-3: buy entries can come from one-plant firms); splits ("executed a 4-for-1") excluded.
+        if (!getenv('SEG_OUT') || !preg_match('/ sold its | executed a \$/', $desc)) {
             return;
         }
         $kappa = [];
+        $builds = [];
+        $pays = [];
         foreach ($stock->getEarningsMomentumZ() ?? [] as $k => $v) {
             if (str_starts_with((string) $k, 'carry:segment_plant:')) {
                 $kappa[substr((string) $k, 20)] = (float) $v;
+            } elseif (str_starts_with((string) $k, 'carry:segment_builds:')) {
+                $builds[substr((string) $k, 21)] = (float) $v;
+            }
+            if (str_starts_with((string) $k, 'carry:segment_pays:')) {
+                $pays[substr((string) $k, 19)] = (float) $v;
             }
         }
-        $this->segDeals[] = ['t' => round($this->currentTime, 3), 'tk' => $stock->getTicker(), 'd' => substr($desc, 0, 200), 'kappa' => $kappa];
+        $this->segDeals[] = ['t' => round($this->currentTime, 3), 'tk' => $stock->getTicker(), 'd' => substr($desc, 0, 260), 'kappa' => $kappa,
+            'builds' => $builds, 'pays' => $pays, 'chg' => $event->getChangePercent(), 'type' => $event->getEventType(),
+            'cap' => (float) $stock->getPrice() * (float) $stock->getSharesOutstanding(), 'style' => $stock->getManagementProfile()->style->value ?? null,
+            'segmented' => App\Data\Company\Segments::forTicker($stock->getTicker()) !== null, 'industry' => (string) $stock->getIndustry(),
+            'xrec' => str_contains($desc, ', taking it into ') ? $this->dealRecords($stock, array_keys($kappa)) : null];
+    }
+
+    /**
+     * The ledger record of each x: segment at a deal, with the segment's filed outlook and trend nominal GDP (so the
+     * entry market is anchor_demand_share x trend GDP).
+     *
+     * @param list<string> $segments
+     * @return array<string, mixed>
+     */
+    private function dealRecords(App\Entity\Stock $stock, array $segments): array
+    {
+        $store = static::getContainer()->get('App\\Service\\Corporate\\Industry\\IndustryShareStoreInterface');
+        $mom = $stock->getEarningsMomentumZ() ?? [];
+        $gdp = $this->currentMacro === null ? null : App\Service\Corporate\Industry\IndustryShareLedger::trendNominalGdp($this->currentMacro);
+        $out = [];
+        foreach ($segments as $sk) {
+            if (!str_starts_with($sk, 'x:')) {
+                continue;
+            }
+            $rec = $store->readIndustry(substr($sk, 2))[$stock->getTicker() . '/' . $sk] ?? null;
+            $out[$sk] = ['cap' => $rec['capacity'] ?? null, 'as' => $rec['addressable_share'] ?? null, 'ads' => $rec['anchor_demand_share'] ?? null,
+                'aout' => $rec['anchor_outlook'] ?? null, 'outlook' => $mom['carry:segment_outlook:' . $sk] ?? null, 'gdp' => $gdp, 'tick' => $rec['tick'] ?? null];
+        }
+
+        return $out;
     }
 
     /**

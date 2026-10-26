@@ -55,6 +55,12 @@ final class MarketEntryTest extends TestCase
         $this->assertSame(0.0, $record['capacity']);
         $this->assertGreaterThan(0.0, $record['entry_offset'] ?? 0.0, 'the fringe has yet to yield it its share');
         $this->assertEqualsWithDelta($construction * 1.5 / (4_000_000_000.0 / 0.3), $record['addressable_share'], 1e-12, 'its share of its new market, not its parent\'s of its own');
+
+        // Its market grows with its new industry's outlook from the start, as its reports will file it.
+        [$ctx, $ledger, $store] = $this->entrant();
+        $store->writeOutlooks(['salt' => 0, 'quarter' => 1, 'industries' => [self::TARGET => ['x' => log(0.6), 'm' => log(0.6), 'v' => 0.0, 'f' => log(0.6), 'w' => 1.0, 'prior_belief' => log(0.6), 'revised_tick' => -1]]]);
+        $this->assertGreaterThan(0.0, $this->enter($ctx, $ledger));
+        $this->assertEqualsWithDelta(log(0.6), ($ctx->stock->getEarningsMomentumZ() ?? [])[SegmentBooks::STATE_OUTLOOK . $segment] ?? null, 1e-12);
     }
 
     public function testEachConditionStopsAnEntryWhenMissing(): void
@@ -93,16 +99,18 @@ final class MarketEntryTest extends TestCase
     }
 
     /**
-     * A venture that has learned enough to turn a profit, and still earns less than its manager's hurdle on its plant
-     * at the margin its learning has shown, is given up on and the news says so; one still learning, or one that pays,
+     * A venture built into its industry that has learned enough to turn a profit, and still earns less than its
+     * manager's hurdle on its plant at the margin its learning has shown, is given up on and the news says so; one
+     * still learning, one that pays, or one bought as a going concern (left to the gate and the sale of weak segments)
      * is not.
      */
     public function testAVentureThatDoesNotPayIsGivenUpOnceItKnows(): void
     {
         $segment = Segments::enteredKey(self::TARGET);
-        $gate = function (float $margin, float $learning) use ($segment): EarningsSimulationContext {
+        $gate = function (float $margin, float $learning, bool $built = true) use ($segment): EarningsSimulationContext {
             [$ctx, $ledger] = $this->entrant();
-            $ctx->stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.97, $segment => 0.03], 1.0, []) + [SegmentBooks::STATE_LEARNING . $segment => $learning]);
+            $venture = $built ? [SegmentBooks::STATE_LEARNING . $segment => $learning, SegmentBooks::STATE_VENTURE_START . $segment => 1.0] : [];
+            $ctx->stock->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.97, $segment => 0.03], 1.0, []) + $venture);
             foreach ([Segments::MAIN => [0.97, 0.10], $segment => [0.03, $margin]] as $key => [$plant, $segmentMargin]) {
                 $ctx->segments[$key] = ['plant' => $plant, 'sales' => $plant, 'margin' => $segmentMargin, 'turnover' => 1.0, 'market' => 0.1, 'price' => 1.0, 'load' => 1.0, 'drain' => 0.0, 'growth' => 0.0, 'leftover' => 0.0];
             }
@@ -118,6 +126,45 @@ final class MarketEntryTest extends TestCase
         $this->assertTrue(SegmentBooks::isAbandoned($failed->stock->getEarningsMomentumZ() ?? [], $segment));
         $this->assertNull($gate(0.02, 1.5)->marketExit, 'still learning');
         $this->assertNull($gate(0.30, 0.5)->marketExit, 'it pays');
+        $this->assertNull($gate(0.02, 0.0, built: false)->marketExit, 'bought');
+    }
+
+    /**
+     * Each business files whether its plant earns the company's cost of capital at a balanced price, its after-tax
+     * margin times its turnover, whatever its industry's price this quarter: a company on one plant for its main
+     * segment, one that keeps books for each segment.
+     */
+    public function testEachBusinessFilesWhetherItsPlantPaysAtABalancedPrice(): void
+    {
+        $pays = function (EarningsSimulationContext $ctx, IndustryShareLedger $ledger): array {
+            $corporateMetrics = new CorporateMetrics();
+            $budget = new CapitalBudgetEngine(new CapExEngine(), $corporateMetrics, new FixedAssetLedger($corporateMetrics), new WorkingCapitalLedger($corporateMetrics), $ledger);
+            (new ReflectionMethod(CapitalBudgetEngine::class, 'resolveEarningPower'))->invoke($budget, $ctx);
+            $filed = [];
+            foreach ($ctx->stock->getEarningsMomentumZ() ?? [] as $key => $value) {
+                if (str_starts_with((string) $key, SegmentBooks::STATE_PAYS)) {
+                    $filed[substr((string) $key, strlen(SegmentBooks::STATE_PAYS))] = $value;
+                }
+            }
+
+            return $filed;
+        };
+        [$ctx, $ledger] = $this->entrant();
+        $hurdle = $ctx->stock->getManagementProfile()->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), false);
+        // A year's turnover of 1 after tax at 21%: the margin that just earns the hurdle.
+        $breakEven = $hurdle / (1.0 - 0.21);
+        $ctx->industryPriceLevel = 0.8;
+        $ctx->stableMargin = 1.05 * $breakEven;
+        $this->assertSame([Segments::MAIN => 1.0], $pays($ctx, $ledger), 'a glut this quarter does not count');
+        $ctx->stableMargin = 0.95 * $breakEven;
+        $this->assertSame([Segments::MAIN => 0.0], $pays($ctx, $ledger));
+
+        [$ctx, $ledger] = $this->entrant();
+        $segment = Segments::enteredKey(self::TARGET);
+        foreach ([Segments::MAIN => 0.95 * $breakEven, $segment => 1.05 * $breakEven] as $key => $margin) {
+            $ctx->segments[$key] = ['plant' => 0.5, 'sales' => 0.5, 'margin' => $margin, 'turnover' => 1.0, 'market' => 0.1, 'price' => 0.8, 'load' => 1.0, 'drain' => 0.0, 'growth' => 0.0, 'leftover' => 0.0];
+        }
+        $this->assertSame([Segments::MAIN => 0.0, $segment => 1.0], $pays($ctx, $ledger));
     }
 
     /**

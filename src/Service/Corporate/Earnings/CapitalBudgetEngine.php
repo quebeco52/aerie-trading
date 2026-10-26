@@ -12,10 +12,10 @@ use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\EntryMarkets;
 use App\Service\Corporate\Segment\SegmentBookOpener;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentEntry;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -91,6 +91,7 @@ final class CapitalBudgetEngine
             $ctx->replacementCostRatio = $this->plant->resolveReplacementCostRatio($ctx);
             $this->resolvePlantGate($ctx);
             $this->resolveSegmentGates($ctx);
+            $this->resolveEarningPower($ctx);
             $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier * self::plantKept($ctx);
             if ($ctx->strategy->isFinancial()) {
                 // A balance-sheet business keeps no plant ledger: what it spends to stand still (branches,
@@ -354,42 +355,20 @@ final class CapitalBudgetEngine
             return 0.0;
         }
 
-        // A market it is in, or sold out of, is not entered again; it looks next to the businesses it still runs and
-        // has learned, not next to one it has given up on.
-        $held = SegmentBooks::industries($stock);
-        $homes = array_filter($held, static fn(string $segment): bool => SegmentBooks::holdsPlant($stock, $segment) && !SegmentBooks::isAbandoned($momentum, $segment), ARRAY_FILTER_USE_KEY);
         $hurdle = $manager->appliedHurdle($strategy->getHurdleRate($ctx->health));
         $longRunGrowth = MacroConstants::TREND_REAL_GROWTH + max(0.0, $ctx->macroState->inflationEma);
         $plans = [];
-        foreach ($homes as $industry) {
-            foreach (IndustryAdjacency::neighbours($industry) as $target => $closeness) {
-                $targetStrategy = Sectors::strategyFor($target);
-                if (in_array($target, $held, true) || !SegmentEntry::isEnterable($target, $targetStrategy)) {
-                    continue;
-                }
-                $peers = $ledger->resolvePeerEconomics($target, $stock->getTicker(), $ctx->tickCount, $ctx->ticksPerYear);
-                $market = $ledger->describeEntrant($target, $stock->getTicker(), $ctx->macroState, IndustryShareLedger::secularExcessGrowth($targetStrategy, $stock), $ctx->tickCount, $ctx->ticksPerYear);
-                if ($peers === null || $market === null || $market['market'] <= 0.0) {
-                    continue;
-                }
-                $construction = SegmentEntry::ventureConstruction($plantBase, $market['market'], $peers['turnover']);
-                if ($construction <= 0.0 || $construction > $spareFunds || $construction * $peers['turnover'] / $market['market'] > $market['fringe_share']) {
-                    continue;
-                }
-                $margin = SegmentEntry::attainedMargin($peers['margin'], $closeness);
-                $gap = SegmentEntry::learningGap($closeness);
-                $value = Valuation::ventureValue(
-                    (1.0 - $ctx->corporateTaxRate) * $peers['turnover'] * $margin,
-                    $hurdle,
-                    $longRunGrowth,
-                    $targetStrategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) - MacroConstants::TREND_REAL_GROWTH,
-                    FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS / M_LN2,
-                    (1.0 - $ctx->corporateTaxRate) * $peers['turnover'] * $margin * $gap,
-                    SegmentEntry::LEARNING_YEARS,
-                );
-                if ($value > ($plans[$target]['value'] ?? 0.0)) {
-                    $plans[$target] = ['value' => $value, 'closeness' => $closeness, 'construction' => $construction, 'margin' => $margin, 'turnover' => $peers['turnover'], 'gap' => $gap, 'market' => $market['market'], 'room' => $market['fringe_share']];
-                }
+        foreach ((new EntryMarkets($ledger))->survey($stock, $ctx->macroState, $ctx->tickCount, $ctx->ticksPerYear) as $target => $market) {
+            $construction = SegmentEntry::ventureConstruction($plantBase, $market['market'], $market['turnover']);
+            if ($construction <= 0.0 || $construction > $spareFunds || $construction * $market['turnover'] / $market['market'] > $market['room']) {
+                continue;
+            }
+            $margin = SegmentEntry::attainedMargin($market['margin'], $market['closeness']);
+            $gap = SegmentEntry::learningGap($market['closeness']);
+            $learnedReturn = (1.0 - $ctx->corporateTaxRate) * $market['turnover'] * $margin;
+            $value = SegmentEntry::value($learnedReturn, $hurdle, $longRunGrowth, $market['excess'], $learnedReturn * $gap);
+            if ($value > 0.0) {
+                $plans[$target] = ['value' => $value, 'closeness' => $market['closeness'], 'construction' => $construction, 'margin' => $margin, 'turnover' => $market['turnover'], 'gap' => $gap, 'market' => $market['market'], 'room' => $market['room']];
             }
         }
         $target = SegmentEntry::choose(array_map(static fn(array $plan): float => $plan['value'] * $plan['closeness'], $plans), MathUtility::hashedUniform($salt, "entry-market:{$stock->getTicker()}:{$ctx->tickCount}"));
@@ -418,8 +397,10 @@ final class CapitalBudgetEngine
         $segment = Segments::enteredKey($industry);
         $construction = $plan['construction'];
         (new SegmentBookOpener($this->corporateMetrics, $this->industryShareLedger))->openForEntry($stock, $ctx->strategy, $ctx->macroState, $ctx->tickCount, $ctx->ticksPerYear);
-        // Filed first, so the books know the industry it is entering before its market is struck.
-        $momentum = [SegmentBooks::STATE_PENDING . $segment => $construction] + ($stock->getEarningsMomentumZ() ?? []);
+        // Filed first, so the books know the industry it is entering before its market is struck, and its market grows
+        // with that industry's outlook as the next report files it.
+        $stock->setEarningsMomentumZ([SegmentBooks::STATE_PENDING . $segment => $construction] + ($stock->getEarningsMomentumZ() ?? []));
+        $momentum = [SegmentBooks::STATE_OUTLOOK . $segment => $this->industryShareLedger?->resolveSegmentBeliefs($stock)[$segment] ?? 0.0] + ($stock->getEarningsMomentumZ() ?? []);
         $stock->setEarningsMomentumZ($momentum);
 
         $years = $ctx->macroState->totalTime;
@@ -471,9 +452,10 @@ final class CapitalBudgetEngine
      * of the rest (ManagementProfile::weakSegmentSupport()). A by-product follows the main segment. Whether each
      * segment builds is filed for the deals between reports.
      *
-     * A venture that has learned enough to turn a profit and still earns less on its plant at a balanced price than its
-     * manager's hurdle, at the margin its learning has shown, is given up on: its market claim falls away and its plant
-     * withers (SegmentBooks::venturePath()).
+     * A venture built into a new industry that has learned enough to turn a profit and still earns less on its plant at
+     * a balanced price than its manager's hurdle, at the margin its learning has shown, is given up on: its market
+     * claim falls away and its plant withers (SegmentBooks::venturePath()). One bought as a going concern is gated like
+     * any other segment, and sold whole if it is the weakest (DivestitureEngine).
      */
     private function resolveSegmentGates(EarningsSimulationContext $ctx, ?float $growthHurdle = null): void
     {
@@ -519,7 +501,7 @@ final class CapitalBudgetEngine
         $appliedHurdle = $stock->getManagementProfile()->appliedHurdle($ctx->strategy->getHurdleRate($ctx->health));
         foreach ($ctx->segments as $segment => $books) {
             $industry = Segments::enteredIndustry($segment);
-            if ($industry === null || SegmentBooks::isAbandoned($momentum, $segment) || ($learning[$segment] ?? 0.0) >= 1.0
+            if ($industry === null || !SegmentBooks::isBuilt($momentum, $segment) || SegmentBooks::isAbandoned($momentum, $segment) || ($learning[$segment] ?? 0.0) >= 1.0
                 || (1.0 - $ctx->corporateTaxRate) * $books['turnover'] * $books['margin'] >= $appliedHurdle) {
                 continue;
             }
@@ -527,6 +509,29 @@ final class CapitalBudgetEngine
             $ctx->marketExit = ['industry' => $industry, 'segment' => $segment];
         }
         $stock->setEarningsMomentumZ($filed + $momentum);
+    }
+
+    /**
+     * Whether each business the company runs earns its cost of capital on its plant at a balanced price, its after-tax
+     * margin times its turnover, filed for the deals between reports: a company none of whose businesses does buys
+     * outside them (AcquisitionEngine). Read at a balanced price, not today's, as firms diversify on poor prospects at
+     * home (Lang & Stulz 1994; Matsusaka 2001) and meet a glut by consolidating within it (Andrade & Stafford 2004);
+     * and on the plant, not on capital that carries the goodwill of past deals. A company on one plant files its main
+     * segment's.
+     */
+    private function resolveEarningPower(EarningsSimulationContext $ctx): void
+    {
+        if ($ctx->strategy->isFinancial()) {
+            return;
+        }
+
+        $hurdle = $ctx->stock->getManagementProfile()->growthHurdle($ctx->strategy->getHurdleRate($ctx->health), false);
+        $businesses = $ctx->segments !== [] ? $ctx->segments : [Segments::MAIN => ['margin' => $ctx->stableMargin, 'turnover' => $ctx->assetTurnover * EarningsEngine::TTM_QUARTERS]];
+        $filed = [];
+        foreach ($businesses as $segment => $books) {
+            $filed[SegmentBooks::STATE_PAYS . $segment] = (1.0 - $ctx->corporateTaxRate) * $books['turnover'] * $books['margin'] >= $hurdle ? 1.0 : 0.0;
+        }
+        $ctx->stock->setEarningsMomentumZ($filed + ($ctx->stock->getEarningsMomentumZ() ?? []));
     }
 
     /**

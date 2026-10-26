@@ -6,6 +6,8 @@ namespace App\Service\Corporate\Segment;
 
 use App\Data\Company\IndustryOutlooks;
 use App\Service\Math\Distributions;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\Valuation;
 use App\Service\Model\BusinessModelInterface;
 
 /**
@@ -135,6 +137,17 @@ final class SegmentEntry
     {
         return !$strategy->isFinancial() && $strategy->getIndustrySubstitutability() > 0.0 && !$strategy->depreciatesByUnitsOfProduction()
             && $strategy->allowsPhysicalOrganicCapex() && IndustryOutlooks::driftVol($industry) > 0.0;
+    }
+
+    /**
+     * What a business in a new industry is worth over its cost, per unit of its plant (Valuation::ventureValue()): its
+     * return on that plant once learned against its company's hurdle, growing at the economy's long-run rate plus its
+     * industry's secular excess as that fades, less the first year's learning cost as that fades with learning. A
+     * business bought as a going concern has none to learn.
+     */
+    public static function value(float $learnedReturn, float $hurdle, float $longRunGrowth, float $excessGrowth, float $learningCost): float
+    {
+        return Valuation::ventureValue($learnedReturn, $hurdle, $longRunGrowth, $excessGrowth, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS / M_LN2, $learningCost, self::LEARNING_YEARS);
     }
 
     /** The chance a company that could enter goes ahead over dt years, at its manager's appetite for deals. */

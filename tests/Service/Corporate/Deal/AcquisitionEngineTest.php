@@ -29,6 +29,9 @@ class AcquisitionEngineTest extends TestCase
 {
     use DealFixtures;
 
+    private const ENTERED = 'Farm & Heavy Construction Machinery';
+    private const ENTRY_TICK = 300;
+
     private MarketEventPublisher&Stub $marketEventPublisherMock;
     private DebtEngine&Stub $debtEngineMock;
     private ScriptedDraws $mathUtilityMock;
@@ -997,6 +1000,131 @@ class AcquisitionEngineTest extends TestCase
         $this->assertNotNull($after);
         $this->assertGreaterThan(0.8 * $adsMargin, $after['margins']['ads_and_cloud']);
         $this->assertEqualsWithDelta($adsTurnover, $after['turnovers']['ads_and_cloud'], 1e-9 * $adsTurnover);
+    }
+
+    /**
+     * A carmaker whose plant earns less than its cost of capital buys into heavy machinery next door, where an
+     * incumbent has filed what its plant earns: the deal opens its books and adds the business as a segment of its own,
+     * earning the drawn share of the incumbent's margin at the incumbent's turnover, with nothing to learn; it buys the
+     * largest firm off the board, takes its share of the revenue and anchors its record in its new industry at once;
+     * and the announcement says where it went. A carmaker whose plant pays, or one already running a business it
+     * entered, buys at home.
+     */
+    public function testACompanyWhosePlantDoesNotPayBuysIntoTheIndustryNextDoor(): void
+    {
+        $segment = Segments::enteredKey(self::ENTERED);
+        [$engine, $store, $stock] = $this->entrant(pays: false);
+
+        $deal = $engine->evaluatePrivateAcquisition($stock, $this->enteringMacro(), 1.0, self::ENTRY_TICK, 252);
+
+        $this->assertIsArray($deal);
+        $acquired = (float) $stock->getTotalRevenue() - 20_000_000_000.0;
+        $this->assertEqualsWithDelta(AcquisitionEngine::MA_LARGEST_PRIVATE_SHARE * 4_000_000_000.0 / 0.3, $acquired, 1.0, 'the largest firm off the board');
+        $this->assertStringEndsWith('Sized to ' . AcquisitionEngine::LIMIT_LARGEST_TARGET . '.', $deal['event']['description']);
+        $this->assertStringContainsString(', taking it into heavy machinery.', $deal['event']['description']);
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $plant = SegmentBooks::plant($momentum) ?? [];
+        $this->assertGreaterThan(0.0, $plant[$segment] ?? 0.0);
+        $this->assertEqualsWithDelta(1.0, array_sum($plant), 1e-12);
+        $this->assertEqualsWithDelta(0.30 * 0.80, $momentum[SegmentBooks::STATE_MARGIN . $segment] ?? null, 1e-12);
+        $this->assertGreaterThanOrEqual(1.5 - 1e-12, $momentum[SegmentBooks::STATE_TURNOVER . $segment] ?? 0.0, 'it runs the incumbents\' plant for its sales');
+        $this->assertGreaterThan(0.0, $momentum[SegmentBooks::STATE_MARKET . $segment] ?? 0.0);
+        $this->assertSame([], SegmentBooks::learningGaps($momentum), 'a going concern has nothing to learn');
+        $this->assertFalse(SegmentBooks::isBuilt($momentum, $segment));
+        $this->assertEqualsWithDelta(SegmentBooks::companyEconomics($momentum)['sales'][$segment] ?? null, $momentum[SegmentBooks::STATE_TARGET . $segment] ?? null, 1e-12);
+        $record = $store->readIndustry(self::ENTERED)[SegmentBooks::recordKey('ENTR', $segment)] ?? null;
+        $this->assertNotNull($record, 'anchored at the deal');
+        $this->assertEqualsWithDelta($acquired, $record['capacity'], 1.0);
+        $this->assertEqualsWithDelta($acquired / (4_000_000_000.0 / 0.3), $record['addressable_share'], 1e-12);
+
+        [$engine, , $home] = $this->entrant(pays: true);
+        $this->assertIsArray($engine->evaluatePrivateAcquisition($home, $this->enteringMacro(), 1.0, self::ENTRY_TICK, 252));
+        $this->assertNull(SegmentBooks::plant($home->getEarningsMomentumZ() ?? []), 'its own plant pays');
+
+        [$engine, , $diversifying] = $this->entrant(pays: false);
+        $steel = Segments::enteredKey('Steel');
+        $diversifying->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.97, $steel => 0.03], 1.0, []) + [
+            SegmentBooks::STATE_PAYS . Segments::MAIN => 0.0,
+            SegmentBooks::STATE_PAYS . $steel => 0.0,
+        ]);
+        $this->mathUtilityMock->script(generateUniform: [0.0, 0.0]);
+        $this->assertIsArray($engine->evaluatePrivateAcquisition($diversifying, $this->enteringMacro(), 1.0, self::ENTRY_TICK, 252));
+        $this->assertArrayNotHasKey($segment, SegmentBooks::plant($diversifying->getEarningsMomentumZ() ?? []) ?? [], 'one new industry at a time');
+
+        // A conglomerate's business is owning others: its plant paying does not keep it at home.
+        $machinery = Segments::enteredKey('Specialty Industrial Machinery');
+        [$engine, , $holding] = $this->entrant(pays: true, industry: 'Conglomerates', target: 'Specialty Industrial Machinery');
+        $this->assertIsArray($engine->evaluatePrivateAcquisition($holding, $this->enteringMacro(), 1.0, self::ENTRY_TICK, 252));
+        $this->assertGreaterThan(0.0, (SegmentBooks::plant($holding->getEarningsMomentumZ() ?? []) ?? [])[$machinery] ?? 0.0);
+    }
+
+    /**
+     * The plant a deal buys in a new industry was supplying it already, from the fringe: anchored at the deal, and
+     * again once the buyer's first report prices it at the share of the market its books hold it to, it leaves the
+     * incumbent's market exactly as supplied as before, with nothing waiting on the fringe to yield. The industry's
+     * outlook is gloomy and the report files it, so the share holds only if the deal struck the market with it in.
+     */
+    public function testABusinessBoughtInANewIndustryAddsNoSupply(): void
+    {
+        $segment = Segments::enteredKey(self::ENTERED);
+        [$engine, $store, $stock, $ledger, $incumbent] = $this->entrant(pays: false, outlook: log(0.6));
+        $macro = $this->enteringMacro();
+        $supply = static function (int $tick) use ($ledger, $incumbent, $macro): float {
+            $balance = $ledger->resolveIndustrySupply($incumbent, 4_000_000_000.0, 0.3, IndustryShareLedger::trendNominalGdp($macro), $macro->totalTime, 0.0, $tick, 252);
+
+            return ($balance['roster'] ?? 0.0) + ($balance['fringe'] ?? 0.0);
+        };
+        $before = $supply(self::ENTRY_TICK);
+
+        $this->assertIsArray($engine->evaluatePrivateAcquisition($stock, $macro, 1.0, self::ENTRY_TICK, 252));
+        $this->assertEqualsWithDelta($before, $supply(self::ENTRY_TICK + 1), 1e-12, 'at the deal');
+
+        $acquired = (float) $stock->getTotalRevenue() - 20_000_000_000.0;
+        $stock->setEarningsMomentumZ([SegmentBooks::STATE_OUTLOOK . $segment => log(0.6)] + ($stock->getEarningsMomentumZ() ?? []));
+        $metrics = new CorporateMetrics();
+        $scale = $metrics->calculateScaleRatio($stock->getInvestedCapital(), $macro->nominalGdpIndex, (float) $stock->getSamRatio());
+        $share = SegmentBooks::addressableShares($stock, $scale, $macro->totalTime)[$segment] ?? 0.0;
+        $this->assertEqualsWithDelta($acquired / (4_000_000_000.0 / 0.3), $share, 1e-9, 'its share of the market it bought into');
+        $ledger->resolveSegmentSupply($stock, $segment, $acquired, $acquired, $share, IndustryShareLedger::trendNominalGdp($macro), $macro->totalTime, 0.0, self::ENTRY_TICK + 2, 252);
+        $this->assertEqualsWithDelta($before, $supply(self::ENTRY_TICK + 3), 1e-12, 'at its first report');
+        $this->assertArrayNotHasKey('entry_offset', $store->readIndustry(self::ENTERED)[SegmentBooks::recordKey('ENTR', $segment)] ?? []);
+    }
+
+    /**
+     * A carmaker with an incumbent in heavy machinery that has filed what its plant earns, and its own plant earning
+     * its cost of capital or not.
+     *
+     * @return array{0: AcquisitionEngine, 1: InMemoryIndustryShareStore, 2: Stock, 3: IndustryShareLedger, 4: Stock}
+     */
+    private function entrant(bool $pays, string $industry = 'Auto Manufacturers', string $target = self::ENTERED, float $outlook = 0.0): array
+    {
+        $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+        $this->bookIssuedDebt();
+        $real = new CorporateMetrics();
+        $this->corporateMetricsMock->method('calculateAddressableShare')->willReturnCallback(
+            static fn(Stock $stock, float $capital, MacroStateDTO $macro): float => $real->calculateAddressableShare($stock, $capital, $macro),
+        );
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $macro = $this->enteringMacro();
+        $store->writeOutlooks(['salt' => 0, 'quarter' => 1, 'industries' => [$target => ['x' => $outlook, 'm' => $outlook, 'v' => 0.0, 'f' => $outlook, 'w' => 1.0, 'prior_belief' => $outlook, 'revised_tick' => -1]]]);
+        $incumbent = (new Stock())->setTicker('MACH')->setIndustry($target)->setTotalRevenue('4000000000');
+        $ledger->resolveIndustrySupply($incumbent, 4_000_000_000.0, 0.3, IndustryShareLedger::trendNominalGdp($macro), $macro->totalTime, 0.0, self::ENTRY_TICK, 252);
+        $ledger->recordIdiosyncraticGain($incumbent, 4_000_000_000.0, 0.0, 0.3, self::ENTRY_TICK, ['margin' => 0.30, 'turnover' => 1.5]);
+
+        $stock = $this->buildLedgeredAcquirer('ENTR', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+        $stock->setIndustry($industry);
+        $stock->setSamRatio('0.05');
+        $stock->setAssetTurnover('1.0');
+        $stock->setManagementStyle(ManagementStyle::Steward);
+        $stock->setEarningsMomentumZ([SegmentBooks::STATE_PAYS . Segments::MAIN => $pays ? 1.0 : 0.0]);
+
+        return [new AcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger), $store, $stock, $ledger, $incumbent];
+    }
+
+    private function enteringMacro(): MacroStateDTO
+    {
+        return new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035, nominalGdpIndex: 1.0, totalTime: 2.0);
     }
 
     /**

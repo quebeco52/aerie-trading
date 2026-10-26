@@ -64,6 +64,15 @@ the eight (all but SKYL): kappa, per-segment ledger records `TICKER/<seg>`, per-
     (entrant excess return over its sector, reports 0-8 from entry, against a one-year-earlier placebo).
   - `div4`, `div5` (venture growth paths, outcomes, abandonment; div5 adds the distance shortfall) vs `head` = ae6f0c4f: `div2.py`, `front.py` and
     `div4.py <seeds> head div4` (abandonment by closeness, successful ventures' kappa/share, pivots, prices, gates).
+  - `buy1` (5b-3 buy entry) vs `head` = BASE 3f1aa807: `div6.py <seeds> head buy1` (+ `div2.py` for build entries and
+    board). Probe `onEvent` now logs every firm's deals (with builds before, announcement move, type, cap, style);
+    venture rows carry `xrec` (ledger record of each x: segment).
+  - `buy2` (5b-3 after fixes) vs `head` = 3f1aa807: `div6.py`, `buy2x.py <seeds> buy2` (closeness vs any held
+    industry, entries per firm-year by style, pays trigger, bought segments' first reports, deals before first report);
+    deals carry `pays`, CAP_PROBE rows carry the pays dict (index 17).
+  - `buy3` (outlook filed at entry, holding companies look outside) vs `head` = 3f1aa807: `drift.py <seeds> ARM...`
+    (entered record share at deal/entry vs first report; deal events carry `xrec` with anchor_demand_share, trend GDP,
+    outlook), plus div6.py / buy2x.py / div2.py.
   - `round.py <seeds> A B [C]`: OWLS/TRIV books (revenue, EBIT margin, interest income, NI, ROE, P/E, cap) and the
     TERN distress trace (year before first default: segment prices/loads, margin, ND/EBITDA, cargo share).
   - `deals.py <seeds> A B` (phase 4; its sold-record 'violation' counts capacity != 0, which econ keeps by design): from seg.json `deals` (probe `onEvent`: " sold its " / " executed a " events

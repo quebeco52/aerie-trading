@@ -75,6 +75,14 @@ class AcquisitionContext
     /** The last sizing step that cut the purchase price (AcquisitionEngine::LIMIT_*). */
     public string $bindingLimit = '';
     public array $target = [];
+    /**
+     * The industry a deal takes its buyer into when it buys outside its own markets (AcquisitionEngine): how close it
+     * is to the buyer's, its incumbents' margin and capital turnover, the market they sell into and the share of it
+     * the fringe holds. Null for a deal in a market the buyer is in.
+     *
+     * @var array{industry: string, closeness: float, margin: float, turnover: float, market: float, room: float}|null
+     */
+    public ?array $entry = null;
     /** The segment a company that keeps plant by segment buys into (SegmentBooks); its main business otherwise. */
     public string $segment = \App\Data\Company\Segments::MAIN;
 
@@ -90,8 +98,8 @@ class AcquisitionContext
     /** The target's operating margin; turns its operating income into the revenue it brings. */
     public float $targetMargin = 0.01;
     /**
-     * The capital turnover of the segment a company that keeps plant by segment buys into, which sizes the target's
-     * identifiable assets; null for any other deal.
+     * The capital turnover of the segment a company that keeps plant by segment buys into, or of the incumbents of the
+     * industry a deal enters, which sizes the target's identifiable assets; null for any other deal.
      */
     public ?float $targetTurnover = null;
     public float $synergyValueCreation = 0.0;

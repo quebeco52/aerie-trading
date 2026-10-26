@@ -447,3 +447,72 @@ IT services 0.42, CANV freight -> internet retail 0.41 (s4); none above 50%. Boa
 (se 0.04, t 2.6), B-or-worse +0.22 pt (t 1.7), others |t| <= 1.2. Front-running: entrant -0.002 (se 0.034, n 129) vs
 placebo +0.042 (0.035), difference -0.043 (0.049). Identities exact; zero pending keys 0 of 5,933 venture rows (div4
 1,434 of 6,013); no entry with a pending venture or live gap >= 1.
+
+## 2026-10-26: 5b-3 buy entry (buy1) vs 3f1aa807, 8 seeds x 20 years
+
+    BASE=<scratchpad>/basetree-3f1aa807 bin/harness-batch var/harness/segments/run.sh 1-8 head buy1
+    python3 var/harness/segments/div6.py 1-8 head buy1 > buy1_n8.out; div2.py 1-8 head buy1 > buy1_div2_n8.out
+
+Buy entries 52 (0.33/yr; per seed 3-11) by 23 companies; build entries 130 (0.81/yr; div5 0.89). Closeness of buys
+(from the buyer's home industry): 0.5 26, 0.25 15, unresolved 11 (pair off a held segment), 0.8 none; builds 0.8 8,
+0.5 71, 0.25 51: distant share 37% buy vs 39% build. Buyers: empire builder 36, operator 9, fortress 6, steward 1;
+conglomerate expansion 34, LBO 14, strategic 4; 5 of 52 segmented. Trigger (no own segment building) held at 55 of
+1,517 deals; 52 of them became entries (3.4% of deals). Deals 9.5/yr both arms.
+At entry: kappa median 0.043 (p90 0.087, max 0.114); share of parent revenue 0.063 (p90 0.24, max 0.65); share of
+its industry 0.020 (p90 0.13, max 0.36); price / parent cap 0.056 (p90 0.14, max 0.32); goodwill 52% of price.
+Industries: agricultural inputs 7, communication equipment 5, electrical equipment 5. Kappa +4/+8/+12 y median 0.044/
+0.042/0.032; gate fails 37% of bought-segment reports; no whole sales within 10 y; 4 bolt-ons. Announcement move:
+entry deals -0.84% (se 0.15, n 52), own-market -0.44% (se 0.02). Incumbent price across the buy +0.0020 (head
++0.0017); no entry_offset on bought records; every x: segment has a record after its first report; identities exact.
+Oddities: BRKW (Investment Companies) buys $151 bn of household products (16% of the market), $121 bn of industrial
+distribution (36%), $85 bn building products; SILC makes 5 buy entries in seed 1 (6 x: segments by y20) while its cap
+falls 1,041 -> 294-596 bn. Board buy1 - head: cap +1.18 tn (se 0.37, t 3.2), capex/revenue +0.0065 (se 0.0023, t 2.9),
+real growth +0.08 pt/yr (se 0.03, t 2.3), B-or-worse -0.19 pt (t -1.3), others |t| < 0.5.
+
+## 2026-10-26: 5b-3 buy entry after the fixes (buy2) vs 3f1aa807 and vs buy1, 8 seeds x 20 years
+
+    BASE=<scratchpad>/basetree-3f1aa807 bin/harness-batch var/harness/segments/run.sh 1-8 head buy2
+    div6.py 1-8 head buy2 > buy2_n8.out; buy2x.py 1-8 buy2 >> buy2_n8.out; div2.py 1-8 head buy2 / buy1 buy2
+
+Buy entries 15 (0.09/yr; buy1 52) by 6 companies, no repeats; builds 135 (0.84/yr). Closeness (any held industry)
+buy 0.5: 4, 0.25: 11 (73% distant) vs build 0.8 7, 0.5 79, 0.25 49 (36%). Per firm-year: empire builder 0.0055,
+fortress 0.0005, operator 0.0001, steward 0. Deals with no segment paying 18 of 1,530 (1.2%), 15 became entries;
+firm-reports with none paying 2.4%: BRKW 402 (every report), TERN 312, SKUA 149, FALC 84. At entry: kappa 0.018
+(max 0.10), share of parent revenue 0.064 (max 0.38), market share median 0.006, p90 0.118, max 0.168 (CANV internet
+retail 0.168, BRKW industrial distribution 0.118: above the 10% cap), price/cap 0.063 (max 0.50), goodwill 48%.
+Kappa +4/+8/+12 y median 0.013/0.010/0.010; gate fails 20%; first two reports builds 0 in 4 of 29, pays 0 in 2; no
+sales, no bolt-ons, no deal into an x: segment before its first report. Announcement: entry -2.42% (se 0.93, n 15),
+own -0.50%. Incumbent price across the buy +0.0062 vs head +0.0057. Identities exact. BRKW buys 4 of 15 (largest $105
+bn, 8.5% of household products); SILC makes none. Board vs head: net PP&E growth -0.04 pt/yr (se 0.01, t -2.7), cap
++0.93 tn (t 1.5), capex/revenue +0.0031 (t 1.7), real growth -0.01 pt (t -0.2). vs buy1: real growth -0.08 pt (t
+-2.5), capex/revenue -0.0035 (t -2.0), cap -0.25 tn (t -0.5).
+
+## 2026-10-26: buy2 traces (no new runs)
+
+Over-cap buys. CANV s1 (deal y19.761, $77.9 bn, goodwill $60.1 bn, kappa 0.0614): first report y19.844 record as
+0.1683, capacity 55.3 bn, revenue 62.9 bn (implied market 329 bn), segment line 15.7 of 108.6 bn a quarter (0.145 =
+filed target). BRKW s3 (deal y2.433, $46.3 bn, goodwill $12.3 bn, kappa 0.0354): record as 0.1175 / 0.1083 / 0.1068
+at the next three reports, capacity 70.0-71.8 bn, implied market 596 -> 663 bn; segment line 0.38 of revenue. The
+record as written at the deal is not probed, so deal-booked vs first-report re-strike cannot be separated from these
+runs; at the first report bought capacity is 17% and 12% of the implied market.
+Net PP&E growth -0.04 pt/yr: per-firm contributions sum to -0.037 pt; builders (firms with a build entry, which build
+in head too) -0.027, untouched -0.015, buyers +0.006. Largest: SILC -0.016 (builder, no buy in buy2), SWFT -0.011,
+HARR -0.005 (untouched), CANV -0.005 (buyer), TICK, GANN, RAVN -0.004 to -0.005; positive FALC +0.006 and SKUA +0.006
+(both buyers).
+
+## 2026-10-26: buy3 (outlook filed at entry; holding companies look outside) vs 3f1aa807 and vs buy2, 8 seeds x 20 y
+
+    BASE=<scratchpad>/basetree-3f1aa807 bin/harness-batch var/harness/segments/run.sh 1-8 head buy3
+    drift.py 1-8 buy3 head; div6.py 1-8 head buy3; buy2x.py 1-8 buy3; div2.py 1-8 head buy3 / buy2 buy3
+
+Bought share: at the deal median 0.0096, max 0.1000 (capacity / entry market = 0.100 exactly for the capped ones); at
+the first report median 0.0107, max 0.1052; ratio first/deal median 0.997 (p90 1.061, max 1.474 on a small one).
+Build ventures' record share entry -> first report with revenue: ratio median 0.320 (head 0.265), max share 0.034
+(head 0.037). Buy entries 30 (0.19/yr) by 8 companies, 21 by holding companies (BRKW, OWLS, TRIV, HARR), no repeats
+in a seed; builds 135 (0.84/yr). Closeness (any held industry) buy 0.8 1, 0.5 13, 0.25 16 vs build 9/73/53. Per
+firm-year: empire builder 0.0092, fortress 0.0028, operator 0.0006, steward 0.0002. Bought kappa median 0.029 at
+entry, 0.023/0.026/0.026 at +4/+8/+12 y; gate fails 14%; no whole sales; 3 bolt-ons (TRIV bought into its new
+industrial distribution 0.03 y after entering, before its first report, $2.2 bn). Announcement entry -0.70% (se 0.17)
+vs own -0.46%. Incumbent price across the buy +0.0011 (head +0.0015). Identities exact.
+Board vs head: capex/revenue +0.0057 (se 0.0024, t 2.4), P/E -0.07 (t -1.2), defaults+deaths +0.25 (t 1.0), others
+|t| <= 0.4. vs buy2: cap -0.93 tn (se 0.44, t -2.1), P/E -0.07 (se 0.02, t -2.8), defaults +0.38 (t 1.4).

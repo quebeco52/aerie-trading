@@ -46,6 +46,12 @@ final class SegmentBooks
      */
     public const STATE_BUILDS = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_builds:';
     /**
+     * Carried stream-state key prefix: 1 when a segment's plant earns its cost of capital at a balanced price at the
+     * last report, its after-tax margin times its turnover, 0 when it does not (CapitalBudgetEngine). Filed for a
+     * company on one plant as its main segment's.
+     */
+    public const STATE_PAYS = EarningsEngine::CARRIED_STATE_PREFIX . 'segment_pays:';
+    /**
      * Carried stream-state key prefix: the plant a segment the company is building into a new industry still has under
      * construction, in currency; it joins the segment's plant share as it is placed in service.
      */
@@ -691,27 +697,95 @@ final class SegmentBooks
     }
 
     /**
+     * The segments a deal can buy into, each with its share of the plant: not a by-product, whose plant is bought only
+     * with the plant it rides; not one on its model's own path, which would not carry a bought rival along it; not a
+     * venture its company has given up on, nor one without plant. The main segment alone before the books open.
+     *
+     * @return array<string, float>
+     */
+    public static function dealSegments(Stock $stock): array
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $plant = self::plant($momentum) ?? [Segments::MAIN => 1.0];
+        $strategy = Sectors::strategyFor($stock->getIndustry());
+        foreach (array_keys($plant) as $segment) {
+            if (in_array($segment, self::jointSegments($stock), true) || $strategy->resolveSegmentPath($stock, $segment) !== null
+                || self::isAbandoned($momentum, $segment)) {
+                unset($plant[$segment]);
+            }
+        }
+
+        return array_filter($plant, static fn(float $share): bool => $share > 0.0);
+    }
+
+    /**
+     * Whether any segment a deal can buy into (dealSegments()) earned its cost of capital at a balanced price at the
+     * last report (STATE_PAYS): a company none of whose businesses does looks outside them for its deals. One not yet
+     * filed counts as earning it.
+     */
+    public static function paysAnywhere(Stock $stock): bool
+    {
+        $pays = self::filed($stock->getEarningsMomentumZ() ?? [], self::STATE_PAYS);
+        foreach (array_keys(self::dealSegments($stock)) as $segment) {
+            if (($pays[$segment] ?? 1.0) > 0.0) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether the company still runs, or is still building, a business it entered in play and has not given up on: it
+     * takes on one new industry at a time.
+     */
+    public static function isDiversifying(Stock $stock): bool
+    {
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        foreach ([...array_keys(self::dealSegments($stock)), ...array_keys(self::pending($momentum))] as $segment) {
+            if (Segments::enteredIndustry((string) $segment) !== null) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * The revenue targets after a deal brings a segment in between reports: it takes its share of the sales at its
+     * plant and turnover (companyEconomics()), the others the rest in the proportions they had (each its share of the
+     * sales where none were filed), so a sale before the next report prices it on what it sells.
+     *
+     * @param array<string, mixed> $momentum
+     * @return array<string, float> Carried state.
+     */
+    public static function boughtTargets(array $momentum, string $segment): array
+    {
+        $sales = self::companyEconomics($momentum)['sales'] ?? [];
+        $targets = self::filed($momentum, self::STATE_TARGET);
+        unset($targets[$segment]);
+        $others = array_sum($targets);
+        $bought = $sales[$segment] ?? 0.0;
+        $state = [];
+        foreach ($others > 0.0 ? $targets : array_diff_key($sales, [$segment => true]) as $key => $target) {
+            $state[self::STATE_TARGET . $key] = $others > 0.0 ? $target * (1.0 - $bought) / $others : $target;
+        }
+        $state[self::STATE_TARGET . $segment] = $bought;
+
+        return $state;
+    }
+
+    /**
      * The segment a deal buys into, drawn in proportion to the plant each holds, so deals keep the mix in expectation:
-     * a by-product's plant is bought only with the plant it rides, none into a segment on its model's own path or a
-     * venture its company has given up on, and
-     * one whose new plant did not clear its hurdle at the last report (a glut) only as far as management supports its
-     * weak segments. Where every segment is in a glut, the deal is drawn by plant alone, as a company in one market
-     * buys into its own. The main segment before the books open.
+     * only those a deal can buy into (dealSegments()), and one whose new plant did not clear its hurdle at the last
+     * report (a glut) only as far as management supports its weak segments. Where every segment is in a glut, the deal
+     * is drawn by plant alone, as a company in one market buys into its own. The main segment before the books open.
      *
      * @param float $uniform A draw on [0, 1).
      */
     public static function acquiringSegment(Stock $stock, float $uniform): string
     {
-        $plant = self::plant($stock->getEarningsMomentumZ() ?? []) ?? [];
-        // A segment that rides its model's own path would not carry a bought rival along it.
-        $strategy = Sectors::strategyFor($stock->getIndustry());
-        foreach (array_keys($plant) as $segment) {
-            if (in_array($segment, self::jointSegments($stock), true) || $strategy->resolveSegmentPath($stock, $segment) !== null
-                || self::isAbandoned($stock->getEarningsMomentumZ() ?? [], $segment)) {
-                unset($plant[$segment]);
-            }
-        }
-        $plant = array_filter($plant, static fn(float $share): bool => $share > 0.0);
+        $plant = self::dealSegments($stock);
         $builds = self::filed($stock->getEarningsMomentumZ() ?? [], self::STATE_BUILDS);
         $support = $stock->getManagementProfile()->weakSegmentSupport();
         $eligible = [];
@@ -863,6 +937,16 @@ final class SegmentBooks
         $planned = $strategy->resolveSegmentPath($stock, $segment);
 
         return $planned === null ? self::venturePath($stock->getEarningsMomentumZ() ?? [], $segment, $totalTime) : ['level' => $planned['level'], 'growth' => $planned['growth']];
+    }
+
+    /**
+     * Whether a segment was built into its industry in play (startVenture()), not bought there as a going concern.
+     *
+     * @param array<string, mixed> $momentum
+     */
+    public static function isBuilt(array $momentum, string $segment): bool
+    {
+        return isset($momentum[self::STATE_VENTURE_START . $segment]);
     }
 
     /**

@@ -1161,6 +1161,30 @@ class IndustryShareLedger
      */
     public function openVentureRecord(Stock $stock, string $segment, float $annualCapacity, float $addressableShare, MacroStateDTO $macroState, int $tick): void
     {
+        $this->openEnteredRecord($stock, $segment, $annualCapacity, $addressableShare, $macroState, $tick, built: true);
+    }
+
+    /**
+     * Anchors the record of a segment a company has just bought in a new industry, at the deal and not its next report,
+     * so that a second deal or another entrant before then finds it there: its trend plant is the plant it bought, all
+     * of it installed, at its share of the industry's market. That plant was the fringe's and already supplied the
+     * market, so the fringe yields its share at once (no entry_offset), and the record follows its industry from here.
+     *
+     * @param float $annualCapacity   The revenue the bought plant earns a year at full use and the balanced price.
+     * @param float $addressableShare Its share of its industry's market.
+     */
+    public function openAcquiredRecord(Stock $stock, string $segment, float $annualCapacity, float $addressableShare, MacroStateDTO $macroState, int $tick): void
+    {
+        $this->openEnteredRecord($stock, $segment, $annualCapacity, $addressableShare, $macroState, $tick, built: false);
+    }
+
+    /**
+     * Writes the anchor of a segment entered in play: its trend plant at its share of its industry's market as the
+     * public now sees it. Plant bought is installed at once; plant built is none of it yet, and the fringe yields it
+     * its share only as fast as the fringe builds, along the venture's own path.
+     */
+    private function openEnteredRecord(Stock $stock, string $segment, float $annualCapacity, float $addressableShare, MacroStateDTO $macroState, int $tick, bool $built): void
+    {
         $address = self::segmentAddress($stock, $segment);
         $trendNominalGdp = self::trendNominalGdp($macroState);
         if ($address === null || $annualCapacity <= 0.0 || $addressableShare <= 0.0 || $trendNominalGdp <= 0.0) {
@@ -1168,22 +1192,26 @@ class IndustryShareLedger
         }
 
         $share = min(1.0, $addressableShare);
-        $this->store->writeRecord($address[0], $address[1], [
-            'revenue'               => 0.0,
+        $installed = $built ? 0.0 : $annualCapacity;
+        $record = [
+            'revenue'               => $installed,
             'gain'                  => 0.0,
-            'capacity'              => 0.0,
+            'capacity'              => $installed,
             'anchor_capacity_share' => $annualCapacity / $trendNominalGdp,
             'anchor_demand_share'   => $annualCapacity / ($share * $trendNominalGdp),
             'anchor_time'           => $macroState->totalTime,
             'anchor_outlook'        => $this->outlook($address[0])['belief'],
-            'entry_offset'          => $share,
-            'entry_time'            => $macroState->totalTime,
-            'path'                  => 0.0,
-            'anchor_path'           => 0.0,
             'addressable_share'     => $share,
             'tick'                  => $tick,
             'consumed_tick'         => $tick,
-        ]);
+        ];
+        if ($built) {
+            $record['entry_offset'] = $share;
+            $record['entry_time'] = $macroState->totalTime;
+            $record['path'] = 0.0;
+            $record['anchor_path'] = 0.0;
+        }
+        $this->store->writeRecord($address[0], $address[1], $record);
     }
 
     /**
