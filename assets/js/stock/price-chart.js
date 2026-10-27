@@ -4,11 +4,17 @@ const VOLUME_UP = withAlpha(THEME_COLORS.positive, 0.35);
 const VOLUME_DOWN = withAlpha(THEME_COLORS.negative, 0.35);
 import { CHART_FONT_MONO } from '../utils/fonts.js';
 import { fillTickGaps } from '../utils/tick-gaps.js';
+import { attachChartEvents } from './chart-events.js';
+import { attachChartReadout } from './chart-readout.js';
 
 let lwChart = null;
 let areaSeries = null;
 let candleSeries = null;
 let volumeSeries = null;
+/** Company stories pinned to the line (chart-events.js); null for a chart without them. */
+let chartEvents = null;
+/** The figures under the cursor (chart-readout.js). */
+let chartReadout = null;
 let chartStyle = 'area';
 let chartField = 'price';
 let lastBar = null;
@@ -18,6 +24,8 @@ let currentSimTime = 0;
 let lastChartPointTime = 0;
 let currentStepSize = 1;
 let currentTicker = null;
+/** Axis seconds the chosen range spans; Infinity for 'max', which has no bound. */
+let currentRangeSeconds = Infinity;
 let secondsPerTick = 600;
 let chartData = [];
 let candleData = [];
@@ -47,6 +55,15 @@ const TRIM_BATCH = 8000;
  * one-year line already scrolls about a pixel per paint, so a higher rate buys sub-pixel steps.
  */
 const LIVE_PAINTS_PER_SECOND = 30;
+
+/** How far, in bars, the view may start past the first bar and still count as showing it. */
+const HISTORY_START_SLACK = 0.5;
+
+/**
+ * Narrowest the right-hand scale is drawn, in pixels: wide enough for a price or a volume label, so a label that
+ * changes width from one tick to the next ("1.18M", "751.94K") does not resize the plot and shake the chart.
+ */
+const PRICE_SCALE_MIN_WIDTH = 76;
 
 /** Timestamp jitter tolerated when holding a paint to LIVE_PAINTS_PER_SECOND. */
 const PAINT_JITTER_MS = 2;
@@ -89,6 +106,7 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
         },
         rightPriceScale: {
             borderVisible: false,
+            minimumWidth: PRICE_SCALE_MIN_WIDTH,
             autoScale: true,
             scaleMargins: { top: 0.1, bottom: 0.1 }
         },
@@ -132,6 +150,15 @@ export function initPriceChart(container, ticker, ticksPerYear = 54000) {
     lwChart.priceScale('volume').applyOptions({
         scaleMargins: { top: 0.82, bottom: 0.0 }
     });
+
+    // Company stories on the line and the figures under the cursor; both draw in the chart's positioned wrapper. Funds
+    // and bonds have no stories and the endpoint serves them none.
+    if (container.parentElement) {
+        chartReadout = attachChartReadout(lwChart, container.parentElement, drawnSeries, () => chartField);
+        if (typeof LightweightCharts.createSeriesMarkers === 'function') {
+            chartEvents = attachChartEvents(lwChart, container.parentElement, drawnSeries());
+        }
+    }
 
     chartResizeObserver = new ResizeObserver(entries => {
         if (entries.length > 0 && entries[0].target === container && lwChart) {
@@ -205,6 +232,7 @@ export async function loadPriceHistory(range) {
         if (bars.length === 0 || !areaSeries) return;
 
         const anchorTime = Math.floor(Date.now() / 1000);
+        currentRangeSeconds = Number(data.range_years) > 0 ? Number(data.range_years) * SECONDS_PER_SIM_YEAR : Infinity;
 
         // Every bar is one slice of simulated time, dated by its age behind the newest. A slot shorter than a tick
         // cannot be advanced one tick at a time, so the live tail never steps finer than the clock that drives it.
@@ -258,6 +286,10 @@ export async function loadPriceHistory(range) {
 
         currentSimTime = chartData[chartData.length - 1].time;
         lastChartPointTime = currentSimTime;
+
+        if (chartEvents && chartField === 'price') {
+            chartEvents.load(currentTicker, range, anchorTime, chartData.map(point => point.time), SECONDS_PER_SIM_YEAR);
+        }
     } catch (err) {
         console.error('Failed to load history:', err);
     } finally {
@@ -336,6 +368,7 @@ function updateLivePricePoint(newPrice, volume = 0) {
     currentSimTime += secondsPerTick;
 
     const openedNewBar = currentSimTime >= lastChartPointTime + currentStepSize;
+    const widen = openedNewBar && historyStartInView();
     if (openedNewBar) {
         lastChartPointTime += currentStepSize;
         trimSeriesIfNeeded();
@@ -343,6 +376,7 @@ function updateLivePricePoint(newPrice, volume = 0) {
 
     const point = { time: lastChartPointTime, value: newPrice };
     areaSeries.update(point);
+    if (widen && lwChart) lwChart.timeScale().fitContent();
 
     // The series is mirrored here so the tail can be trimmed: lightweight-charts has no way to drop a
     // point, only to be handed the series again.
@@ -398,6 +432,18 @@ function updateLivePricePoint(newPrice, volume = 0) {
 }
 
 /**
+ * Whether a new bar should widen the view rather than scroll it: the history is shorter than the chosen range and its
+ * first bar is still in view. A short history would otherwise slide off the left edge within seconds at the bar width
+ * it was first fitted to; once it fills the range, or the reader has zoomed in, the tail scrolls as usual.
+ */
+function historyStartInView() {
+    if (!lwChart || chartData.length === 0) return false;
+    if (lastChartPointTime - chartData[0].time >= currentRangeSeconds) return false;
+    const visible = lwChart.timeScale().getVisibleLogicalRange();
+    return visible !== null && visible.from <= HISTORY_START_SLACK;
+}
+
+/**
  * Drops the oldest points once the live tail has grown past its bound.
  *
  * Every series shares one time scale, and that scale is indexed rather than measured: a slot exists
@@ -418,6 +464,7 @@ function trimSeriesIfNeeded() {
     areaSeries.setData(chartData);
     if (candleSeries) candleSeries.setData(candleData);
     if (volumeSeries) volumeSeries.setData(volumeData);
+    if (chartEvents) chartEvents.trim(cutoff);
 
     if (visible) {
         // Shifting the window by the whole batch would push it past the start of what is left and open a
@@ -428,6 +475,11 @@ function trimSeriesIfNeeded() {
     }
 }
 
+/** The rendering of the price now drawn: the line or the candles. */
+function drawnSeries() {
+    return chartStyle === 'candles' ? candleSeries : areaSeries;
+}
+
 /** Switches between the line and candle renderings of the same series. */
 export function setChartStyle(style) {
     const next = style === 'candles' ? 'candles' : 'area';
@@ -436,6 +488,7 @@ export function setChartStyle(style) {
 
     if (areaSeries) areaSeries.applyOptions({ visible: chartStyle === 'area' });
     if (candleSeries) candleSeries.applyOptions({ visible: chartStyle === 'candles' });
+    if (chartEvents) chartEvents.follow(drawnSeries());
 
     document.querySelectorAll('.chart-style-btn').forEach(btn => {
         btn.setAttribute('aria-pressed', btn.dataset.style === chartStyle ? 'true' : 'false');
@@ -470,6 +523,14 @@ export function destroyPriceChart() {
     if (chartResizeObserver) {
         try { chartResizeObserver.disconnect(); } catch (e) {}
         chartResizeObserver = null;
+    }
+    if (chartEvents) {
+        chartEvents.destroy();
+        chartEvents = null;
+    }
+    if (chartReadout) {
+        chartReadout.destroy();
+        chartReadout = null;
     }
     if (lwChart) {
         try { lwChart.remove(); } catch (e) {}

@@ -55,3 +55,8 @@ g = log(P/F), its persistence and its attribution to price channels.
   vol, defaults, blow-ups, and from VAL_OUT `agent_rows` (momentum agents' share) and `franchise_rows` (franchise power,
   belief gap). Arms in run.sh: `mbase`/`mbase2` = BASE tree b29b723f, `mom*` = working tree or `ovr-*` overlays of one
   constant (rebuild an overlay from src after src edits). BoardRun fixes the outlook salt from 10-27, so arms pair on firms.
+- Franchise fix (10-28): `fbase` = BASE tree 2b345931, `ffix` = working tree (power steps on the value elasticity at
+  the current power, news share capped by FRANCHISE_POWER_VOLATILITY 0.35, run costs scaled), `ffix50` = ffix with
+  OVR=<dir> holding MarketEngine.php at 0.50. `BASE=<tree> bin/harness-batch $V/run.sh 1-8 fbase ffix && OVR=<dir>
+  bin/harness-batch $V/run.sh 1-8 ffix50`, then `momentum.py 1-8 fbase ffix ffix50` and `franchise.py 1-8 fbase ffix
+  ffix50` (power sd / max / count > 2, SAFE, P/E max and p90, top cap share, P/F max at the end). ~8 min for 24 runs.

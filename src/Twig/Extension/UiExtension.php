@@ -47,6 +47,8 @@ class UiExtension extends AbstractExtension
             // and an extension function of the same name replaces it.
             new TwigFunction('source_line', [self::class, 'source']),
             new TwigFunction('ui_id', $this->uniqueId(...)),
+            // An industry's page address, from its name (the industry pages).
+            new TwigFunction('industry_slug', [\App\Data\Company\Sectors::class, 'industrySlug']),
         ];
     }
 

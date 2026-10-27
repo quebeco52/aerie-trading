@@ -38,6 +38,69 @@
 			</div>
 		</div>
 
+		{# What moved the shares (MoveAttributionBuilder): each period's move as the market's part, the peers' part
+		   beyond the market and the company's own, in a bar that runs left for a fall and right for a rise. #}
+		{% set moves = moveAttribution|default(null) %}
+		{% if moves %}
+			{% set peerWord = moves.peerLabel == 'industry' ? 'Industry' : 'Sector' %}
+			{% set parts = [
+				{key: 'market', label: 'Market', swatch: 'bg-series-blue'},
+				{key: 'peers', label: peerWord, swatch: 'bg-series-orange'},
+				{key: 'company', label: 'Company', swatch: 'bg-series-aqua'},
+			] %}
+			{% set side = 0.0001 %}
+			{% for period in moves.periods %}
+				{% set up = 0 %}{% set down = 0 %}
+				{% for part in parts %}
+					{% set v = attribute(period, part.key) %}
+					{% if v > 0 %}{% set up = up + v %}{% else %}{% set down = down - v %}{% endif %}
+				{% endfor %}
+				{% set side = max(side, up, down) %}
+			{% endfor %}
+			<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" id="move-attribution">
+				<h2 class="text-sm font-semibold text-on-surface">What moved the shares</h2>
+				<p class="text-xs text-on-surface-variant mt-1 mb-4">Each move split into what the whole market did, what {{ moves.peerLabel == 'industry' ? 'its industry, ' ~ moves.peerName ~ ',' : 'the ' ~ moves.peerName ~ ' sector' }} did beyond the market, and what was the company's own. From weekly closes over two years, the shares move <span class="font-mono text-on-surface">{{ moves.beta|number_format(2) }}</span> times the market.</p>
+				<table class="w-full text-xs">
+					<thead>
+						<tr class="table-head">
+							<th scope="col" class="text-left font-semibold pb-2">Period</th>
+							{% for part in parts %}
+								<th scope="col" class="text-right font-semibold pb-2"><span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full {{ part.swatch }}" aria-hidden="true"></span>{{ part.label }}</span></th>
+							{% endfor %}
+							<th scope="col" class="text-right font-semibold pb-2">Total</th>
+							<th scope="col" class="hidden sm:table-cell pb-2 w-2/5"><span class="sr-only">Split</span></th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for period in moves.periods %}
+							<tr>
+								<th scope="row" class="py-2 text-left font-normal text-on-surface-variant">{{ period.label }}</th>
+								{% for part in parts %}
+									<td class="py-2 text-right font-mono tabular-nums {{ attribute(period, part.key)|signed_class }}">{{ attribute(period, part.key)|pct(1, true) }}</td>
+								{% endfor %}
+								<td class="py-2 text-right font-mono tabular-nums font-semibold {{ period.total|signed_class }}">{{ period.total|pct(1, true) }}</td>
+								<td class="hidden sm:table-cell py-2 pl-4" aria-hidden="true">
+									<div class="flex h-2.5">
+										<div class="w-1/2 flex flex-row-reverse border-r border-outline-variant/60">
+											{% for part in parts %}{% set v = attribute(period, part.key) %}{% if v < 0 %}<span class="block h-full {{ part.swatch }}" style="width: {{ (-v / side * 100)|round(1) }}%"></span>{% endif %}{% endfor %}
+										</div>
+										<div class="w-1/2 flex">
+											{% for part in parts %}{% set v = attribute(period, part.key) %}{% if v > 0 %}<span class="block h-full {{ part.swatch }}" style="width: {{ (v / side * 100)|round(1) }}%"></span>{% endif %}{% endfor %}
+										</div>
+									</div>
+								</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+				{% set quarter = moves.periods|first %}
+				{% set lead = parts|first %}
+				{% for part in parts %}{% if attribute(quarter, part.key)|abs > attribute(quarter, lead.key)|abs %}{% set lead = part %}{% endif %}{% endfor %}
+				{% set leadWords = {market: 'the market as a whole', peers: moves.peerLabel == 'industry' ? 'its industry' : 'its sector', company: 'the company\'s own news'} %}
+				<p class="text-xs text-on-surface-variant mt-3">The largest part of the past quarter's move came from {{ attribute(leadWords, lead.key) }}: <span class="font-mono {{ attribute(quarter, lead.key)|signed_class }}">{{ attribute(quarter, lead.key)|pct(1, true) }}</span>.</p>
+			</div>
+		{% endif %}
+
 								<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 			<h2 class="text-sm font-semibold text-on-surface mb-2">About {{ asset.name }}</h2>
 			<div class="text-sm text-on-surface-variant leading-relaxed space-y-3">
@@ -219,7 +282,8 @@
 					{% endif %}
 					{{ ui.stat('Bid-ask spread', (halfSpread * 2)|bps(1), {id: 'stat-spread'}) }}
 					{{ ui.stat('Volatility', (asset.currentVolatility ?? asset.volatility)|pct(2), {id: 'stat-volatility'}) }}
-					{{ ui.stat('Beta', asset.beta|number_format(2)) }}
+					{# Measured from weekly closes when two years of them exist (What moved the shares); the listing's figure before. #}
+					{{ ui.stat('Beta', (moveAttribution.beta ?? asset.beta)|number_format(2), {tip: 'How far the shares move with the whole market: 1.20 means 12% when the market moves 10%. Measured on weekly closes over two years.'}) }}
 					{{ ui.stat(isFinancial ? 'ROE' : 'ROIC', displayReturn|pct(2), {id: 'stat-roic'}) }}
 					{{ ui.stat('Book value (equity)', asset.totalEquity|format_large('$'), {id: 'stat-equity'}) }}
 					{% if capital %}

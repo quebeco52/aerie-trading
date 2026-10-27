@@ -188,3 +188,19 @@ slope -.32 -> -.22; E/P spread 19.5 -> 14.5% (t -3.2); gap sd .173 -> .153; PEAD
 flat, index vol -.2pp; momentum agents' median share .473 -> .478; defaults .25 -> 1.1 per run (t 2.5, TERN 3 seeds).
 mom3w: momentum +2.0pp only, defaults +1.5 (t 4.6). Unpaired earlier arms: margin-points v1 (mom1) blew up at the
 fair-value floor; step 2 at s = .5 (mom3s) -1.6% with daily vol held, (mom3c, no rescale) +0.4% with median vol -1.4pp.
+
+## Franchise fix: power on the current elasticity, news share by vol (10-28, 8 seeds x 20 y, 360 ticks/y)
+
+    BASE=<scratchpad>/fbase bin/harness-batch var/harness/valuation/run.sh 1-8 fbase ffix
+    OVR=<scratchpad>/ovr50 bin/harness-batch var/harness/valuation/run.sh 1-8 ffix50
+    momentum.py 1-8 fbase ffix ffix50; franchise.py 1-8 fbase ffix ffix50  -> franchise_fix_8s20y.out
+
+fbase = 2b345931 (its franchise rows equal mom3's exactly); ffix = working tree (step on
+Valuation::franchiseValueElasticity at the current power, news share min(.5, (0.35 e / sigma_own)^2), run costs x
+(1-m')/(1-m)); ffix50 = ffix at volatility 0.50. Paired vs fbase (se):
+- Power at y20: sd 1.06 -> 0.63 (t -5.9) / 0.80 (t -2.9); max |p| 4.7 -> 2.1 (t -4.7) / 2.9; names |p| > 2 5.6 -> 1.3
+  (t -7.0) / 3.6; |SAFE p| 3.73 -> 0.80 (t -3.5) / 1.16 (t -3.3).
+- PEAD 1q +0.6 -> +1.1% (t 3.1); gap sd .153 -> .165 (t 3.1); noise slope -.22 -> -.26 (t -3.8); momentum 12-1, E/P
+  spread, vol, defaults, blowups n.s. ffix50 sits between on gap sd and PEAD (n.s.).
+- P/E max, P/E p90, top cap share (~10-12%), P/F max: n.s.; ffix's P/E max mean is one name (WEAV seed 5, EPS 0.002,
+  P/F 1.10), a near-zero-earnings ratio, not a runaway.

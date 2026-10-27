@@ -66,6 +66,67 @@
 			</div>
 		{% endif %}
 
+		{# The month on the exchange (MarketWrapBuilder): breadth, the largest moves either way, each sector's move and
+		   the latest headlines. Read at page load, on the same one-month change the listings table prints. #}
+		{% if wrap is defined and wrap %}
+			<section class="bg-surface-container-low rounded-lg border border-outline-variant/20 p-5 space-y-5" id="market-wrap">
+				<div class="flex flex-wrap items-baseline justify-between gap-3">
+					<h2 class="text-base font-semibold text-on-surface">The month on the exchange</h2>
+					<p class="text-xs text-on-surface-variant"><span class="font-mono text-secondary">{{ wrap.advancing }}</span> rose, <span class="font-mono text-tertiary">{{ wrap.declining }}</span> fell{% if wrap.unchanged > 0 %}, <span class="font-mono">{{ wrap.unchanged }}</span> unchanged{% endif %}</p>
+				</div>
+				<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+					{% for list in [{title: 'Leaders', rows: wrap.leaders, empty: 'No listing rose.'}, {title: 'Laggards', rows: wrap.laggards, empty: 'No listing fell.'}] %}
+						<div>
+							<h3 class="text-xs font-semibold text-on-surface-variant mb-2">{{ list.title }}</h3>
+							<ul class="divide-y divide-outline-variant/10 text-xs">
+								{% for row in list.rows %}
+									<li class="py-1.5 flex items-center justify-between gap-3">
+										<a href="/stock/{{ row.ticker }}" class="min-w-0 truncate hover:text-primary"><span class="font-mono font-semibold text-on-surface">{{ row.ticker }}</span> <span class="text-on-surface-variant">{{ row.name }}</span></a>
+										<span class="font-mono tabular-nums shrink-0 {{ row.change|signed_class }}">{{ row.change|pct(1, true) }}</span>
+									</li>
+								{% else %}
+									<li class="py-1.5 text-on-surface-variant">{{ list.empty }}</li>
+								{% endfor %}
+							</ul>
+						</div>
+					{% endfor %}
+					<div>
+						<h3 class="text-xs font-semibold text-on-surface-variant mb-2">Sectors</h3>
+						{% set widest = max(0.0001, wrap.sectors|map(s => s.change|abs)|reduce((a, b) => max(a, b), 0)) %}
+						<ul class="space-y-1.5 text-xs" aria-label="Sector moves, weighted by market value">
+							{% for sector in wrap.sectors %}
+								<li class="flex items-center gap-2">
+									<span class="w-36 shrink-0 truncate text-on-surface-variant" title="{{ sector.companies }} {{ sector.companies == 1 ? 'listing' : 'listings' }}">{{ sector.name }}</span>
+									<span class="flex-1 flex h-1.5" aria-hidden="true">
+										<span class="w-1/2 flex justify-end">{% if sector.change < 0 %}<span class="block h-full rounded-l-full bg-tertiary" style="width: {{ (-sector.change / widest * 100)|round(1) }}%"></span>{% endif %}</span>
+										<span class="w-1/2 flex border-l border-outline-variant/60">{% if sector.change > 0 %}<span class="block h-full rounded-r-full bg-secondary" style="width: {{ (sector.change / widest * 100)|round(1) }}%"></span>{% endif %}</span>
+									</span>
+									<span class="w-14 shrink-0 text-right font-mono tabular-nums {{ sector.change|signed_class }}">{{ sector.change|pct(1, true) }}</span>
+								</li>
+							{% endfor %}
+						</ul>
+					</div>
+					<div>
+						<div class="flex items-baseline justify-between mb-2">
+							<h3 class="text-xs font-semibold text-on-surface-variant">Headlines</h3>
+							<a href="/news" class="text-xs text-primary hover:underline">Newswire</a>
+						</div>
+						<ul class="space-y-2.5 text-xs">
+							{% for story in wrap.headlines %}
+								<li>
+									<div class="flex items-center gap-2"><span class="badge {{ story.card.badgeClass }}">{{ story.card.badge|lower|capitalize }}</span><a href="/stock/{{ story.source.ticker }}" class="font-mono font-semibold text-on-surface hover:text-primary">{{ story.source.ticker }}</a></div>
+									<p class="text-on-surface-variant mt-1 leading-snug">{{ story.card.headline }}</p>
+								</li>
+							{% else %}
+								<li class="text-on-surface-variant">No headlines yet.</li>
+							{% endfor %}
+						</ul>
+					</div>
+				</div>
+				<p class="text-xs text-on-surface-variant">Which industries are short of plant or overbuilt: <a href="{{ path('app_industries') }}" class="text-primary hover:underline">Industries</a>.</p>
+			</section>
+		{% endif %}
+
 		{# Every listing, largest first; home.js keeps the order live. #}
 		<div class="bg-surface-container-low rounded-lg border border-outline-variant/20 overflow-hidden">
 			<div class="px-5 py-4 border-b border-outline-variant/15 flex items-baseline justify-between gap-4">

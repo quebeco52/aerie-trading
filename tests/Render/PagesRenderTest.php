@@ -97,6 +97,10 @@ final class PagesRenderTest extends KernelTestCase
                     ['ticker' => 'LBC', 'name' => 'Skein Total Market', 'label' => 'Whole board', 'isBenchmark' => false, 'price' => 188.02],
                 ],
                 'stocks' => $stocks,
+                'wrap' => \App\Service\View\MarketWrapBuilder::moves($stocks) + ['headlines' => array_map(
+                    static fn(array $item): array => ['card' => $item['card'], 'source' => ['ticker' => $item['ticker'], 'name' => $item['name']]],
+                    array_values(array_filter(self::newswire()['items'], static fn(array $item): bool => $item['ticker'] !== null)),
+                )],
                 'cycleLabel' => 'Boom',
                 'inflationTarget' => \App\Service\Math\MacroConstants::TARGET_INFLATION,
             ]],
@@ -197,6 +201,22 @@ final class PagesRenderTest extends KernelTestCase
                 ],
                 'userQuantity' => 0, 'userDividendIncome' => 0, 'marketCap' => 2.02e11, 'peRatio' => 13.76, 'dividendYield' => 0.031, 'strategicStake' => 0, 'macro' => ['sovereignFundOwnershipShare' => 0.23, 'stampDutyRate' => 0.001],
                 'analystTargets' => ['rating' => 'Outperform', 'tone' => 'up', 'upside' => 0.084, 'consensus' => 91.3, 'growth_analyst' => 95.1, 'value_analyst' => 88.2, 'income_analyst' => 90.4],
+                'rivals' => self::rivals(),
+                'timeline' => \App\Service\View\CompanyTimelineBuilder::fromEvents(array_map(
+                    static fn(array $e): StockEvent => (new StockEvent())->setEventType($e[0])->setDescription($e[2])->setFacts([])->setRecordedAt(new \DateTime('2026-01-01'))->setSimTime($e[1])->setHeadline($e[3] ?? false),
+                    [
+                        ['DISTRICT', 0.4, 'Took a frontage on Glasswater Row.'],
+                        ['STRATEGIC ACQUISITION', 3.2, 'Lakebird Bank bought Tern Savings for $3.1B.'],
+                        ['MANAGEMENT CHANGE', 6.7, 'Lakebird Bank named a new chief executive after 6.1 years.'],
+                        ['CREDIT_DOWNGRADE', 9.1, 'Shrike Standard Ratings cut Lakebird Bank to BB+, below investment grade.', true],
+                        ['SPLIT', 11.8, 'Lakebird Bank has executed a 2-for-1 stock split.'],
+                        ['CREDIT_UPGRADE', 13.4, 'Shrike Standard Ratings raised Lakebird Bank to BBB-, investment grade again.', true],
+                    ],
+                ), new \App\Service\News\EventPresenter()),
+                'moveAttribution' => ['beta' => 1.18, 'peerLabel' => 'sector', 'peerName' => 'Financials', 'periods' => [
+                    ['label' => 'Past quarter', 'total' => -0.062, 'market' => -0.041, 'peers' => -0.019, 'company' => -0.002],
+                    ['label' => 'Past year', 'total' => 0.087, 'market' => 0.052, 'peers' => -0.031, 'company' => 0.066],
+                ]],
                 'isInsurer' => false, 'pieLabels' => [], 'pieData' => [], 'displayReturn' => 0.124, 'fundStake' => 0.184, 'industryCharts' => ['netInterestEngineChart', 'regulatoryRatiosChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['commercial_bank'],
                 'openOrders' => [['id' => 52, 'ticker' => 'LAKE', 'assetType' => 'STOCK', 'action' => 'SELL', 'orderType' => 'STOP', 'stop' => true, 'quantity' => 50, 'limitPrice' => null, 'stopPrice' => 79.5, 'createdAt' => new \DateTimeImmutable('2026-10-02 09:30')]], 'userTrades' => [['ticker' => 'LAKE', 'assetType' => 'STOCK', 'action' => 'BUY', 'orderType' => 'MARKET', 'origin' => null, 'quantity' => 100, 'filledQuantity' => 100, 'executionPrice' => 83.9, 'limitPrice' => null, 'status' => 'FILLED', 'spreadCost' => 3.4, 'impactCost' => 0.0, 'stampDuty' => 8.39, 'createdAt' => new \DateTimeImmutable('2026-09-20 10:00'), 'filledAt' => new \DateTimeImmutable('2026-09-20 10:00')]], 'tradeHistory' => [], 'optionsListed' => false, 'optionExpiries' => [], 'lifecycleStage' => \App\Data\Company\LifecycleStage::Mature, 'lifecycleStages' => \App\Data\Company\LifecycleStage::cases(), 'financialSummary' => [], 'peers' => [], 'industry' => null, 'management' => null, 'anchorPortfolio' => null, 'netAssetValue' => null, 'capital' => null, 'credit' => null, 'ticksPerYear' => 14400, 'halfSpread' => 0.0004, 'advShares' => 3400000, 'borrowFee' => 0.01, 'availableToBorrow' => 1000000, 'shortUtilization' => 0.2,
                 'borrowWarnings' => ['expensiveFee' => 0.05, 'scarceUtilization' => 0.90, 'recallUtilization' => 0.97],
@@ -358,6 +378,7 @@ final class PagesRenderTest extends KernelTestCase
         $pages['stock-industrial'] = ['/stock/FNCH', 'stock/index.html.twig', array_replace($pages['stock'][2], self::minerStock())];
 
         $pages += self::bondPages();
+        $pages += self::industryPages();
 
         self::bootKernel();
         $container = static::getContainer();
@@ -553,6 +574,83 @@ final class PagesRenderTest extends KernelTestCase
                 'event' => ['text' => 'Strike at the coldwater pit', 'figure' => null, 'format' => null, 'tone' => 'warn'],
             ],
             'priceAlerts' => [],
+        ];
+    }
+
+    /**
+     * The industry list and one industry's page over twelve years of stub quarters: a shortage that new plant clears
+     * into a glut, a seller gaining share, an entrant from another industry and a deal, a failure and an outlook cut.
+     *
+     * @return array<string, array{0: string, 1: string, 2: array<string, mixed>}>
+     */
+    private static function industryPages(): array
+    {
+        $quarters = [];
+        for ($q = 0; $q < 48; ++$q) {
+            $t = 2.0 + $q / 4.0;
+            $cycle = sin($q / 7.0);
+            $falc = 0.30 + 0.004 * $q;
+            $quarters[] = [
+                't' => $t, 'label' => \App\Data\District\DistrictCalendar::quarter($t), 'revenue' => 4.0e9 + 2.0e7 * $q,
+                'shares' => ['FALC' => $falc, 'EIDR' => 0.42 - 0.003 * $q, 'MOTO' => 0.28 - 0.001 * $q],
+                'priceGap' => 0.09 * $cycle, 'idle' => max(0.0, -0.06 * $cycle), 'building' => 0.05 + 0.05 * cos($q / 7.0),
+                'margin' => 0.08 + 0.04 * $cycle,
+            ];
+        }
+        $latest = $quarters[47];
+        $presenter = new \App\Service\News\EventPresenter();
+        $story = static fn(string $type, string $text, array $facts, ?array $source, float $t): array => [
+            'card' => $presenter->present(new \App\Service\News\PresentableEvent($type, $text, $facts, null, null, $t, new \DateTimeImmutable('2026-10-06 14:00'))),
+            'source' => $source,
+        ];
+
+        $industry = [
+            'name' => 'Auto Manufacturers', 'sector' => 'Consumer Cyclical', 'pricesCapacity' => true, 'latest' => $latest,
+            'buildingYearAgo' => $quarters[43]['building'], 'balance' => 'overbuilt', 'balanceTone' => 'warn', 'capacityRatio' => 1.07,
+            'mover' => ['ticker' => 'FALC', 'name' => 'Falcon Motors', 'shareChange' => 0.048],
+            'outlook' => ['level' => 1.12, 'doubt' => 0.08, 'revision' => -0.081],
+            'companies' => [
+                ['ticker' => 'FALC', 'name' => 'Falcon Motors', 'marketValue' => 2.1e11, 'share' => 0.46, 'shareChange' => 0.048],
+                ['ticker' => 'EIDR', 'name' => 'Eider Automotive', 'marketValue' => 9.0e10, 'share' => 0.27, 'shareChange' => -0.036],
+                ['ticker' => 'MOTO', 'name' => 'Moto Works', 'marketValue' => 4.0e10, 'share' => 0.21, 'shareChange' => -0.012],
+            ],
+            'entrants' => [['ticker' => 'SHRK', 'name' => 'Shrike Industries', 'home' => 'Auto Parts', 'homeSlug' => 'auto-parts', 'share' => 0.06]],
+            'failed' => 1,
+            'charts' => \App\Service\View\IndustryPageBuilder::charts($quarters),
+            'stories' => [
+                $story('OUTLOOK', 'Industry data cut the demand outlook for Auto Manufacturers 8.1% to 1.12.', ['revision' => -0.081, 'level' => 1.12], null, 13.6),
+                $story('STRATEGIC ACQUISITION', 'Falcon Motors bought a regional rival for $4.2B.', [], ['ticker' => 'FALC', 'name' => 'Falcon Motors'], 12.9),
+                $story('BANKRUPTCY', 'Kestrel Cars filed for liquidation.', [], ['ticker' => 'KCAR', 'name' => 'Kestrel Cars'], 11.2),
+            ],
+        ];
+        $index = [
+            ['name' => 'Airlines', 'slug' => 'airlines', 'sector' => 'Industrials', 'companies' => 1, 'priceGap' => 0.004, 'idle' => 0.0, 'outlook' => ['level' => 1.03, 'doubt' => 0.1, 'revision' => 0.012]],
+            ['name' => 'Auto Manufacturers', 'slug' => 'auto-manufacturers', 'sector' => 'Consumer Cyclical', 'companies' => 3, 'priceGap' => $latest['priceGap'], 'idle' => $latest['idle'], 'outlook' => $industry['outlook']],
+            ['name' => 'Banks - Regional', 'slug' => 'banks-regional', 'sector' => 'Financial Services', 'companies' => 2, 'priceGap' => null, 'idle' => null, 'outlook' => null],
+        ];
+
+        return [
+            'industry' => ['/industry/auto-manufacturers', 'industry/view.html.twig', ['industry' => $industry]],
+            'industries' => ['/industries', 'industry/index.html.twig', ['industries' => $index]],
+        ];
+    }
+
+    /** A bank's return on equity against its sector's median: an edge that opened and is now narrowing. */
+    private static function rivals(): array
+    {
+        $own = [];
+        $median = [];
+        for ($q = 0; $q < 48; ++$q) {
+            $t = 2.0 + $q / 4.0;
+            $label = \App\Data\District\DistrictCalendar::quarter($t);
+            $own[] = ['t' => $t, 'label' => $label, 'value' => 0.11 + 0.03 * sin($q / 15.0) + 0.004 * sin($q)];
+            $median[] = ['t' => $t, 'label' => $label, 'value' => 0.10 + 0.01 * sin($q / 9.0)];
+        }
+
+        return [
+            'measure' => 'Return on equity', 'peerLabel' => 'sector', 'peerName' => 'Financials', 'peers' => 9,
+            'chart' => \App\Service\View\IndustryCharts::lines([['name' => 'LAKE', 'points' => $own], ['name' => 'Sector median', 'points' => $median]]),
+            'gap' => $own[47]['value'] - $median[47]['value'], 'gapThen' => $own[35]['value'] - $median[35]['value'],
         ];
     }
 

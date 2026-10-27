@@ -478,6 +478,24 @@ class Sectors
         return (float) self::metricsFor($industry)['equity_limit'];
     }
 
+    /** The industry's name as a page address: lower case, every run of other characters a hyphen ("auto-parts"). */
+    public static function industrySlug(string $industry): string
+    {
+        return trim((string) preg_replace('/[^a-z0-9]+/', '-', strtolower($industry)), '-');
+    }
+
+    /** The listed industry a page address names, or null for none. */
+    public static function industryForSlug(string $slug): ?string
+    {
+        foreach (array_keys(self::INDUSTRY_METRICS) as $industry) {
+            if (self::industrySlug($industry) === $slug) {
+                return $industry;
+            }
+        }
+
+        return null;
+    }
+
     /**
      * The sector's baseline trading multiple, used as the cross-sectional prior when a firm's own Gordon
      * multiple is shrunk toward its peers. Every engine that forms a fair-value multiple must read it from

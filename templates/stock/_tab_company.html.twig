@@ -6,7 +6,8 @@
 	<h3 class="text-sm font-semibold text-on-surface mb-3">Sector and industry</h3>
 	<div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs mt-3">
 		{{ ui.tile('Sector', asset.sector, null, {mono: false}) }}
-		{{ ui.tile('Industry', asset.industry|default('General'), null, {mono: false}) }}
+		{% set industryLink %}<a href="{{ path('app_industry', {slug: industry_slug(asset.industry|default('General'))}) }}" class="text-primary hover:underline">{{ asset.industry|default('General') }}</a>{% endset %}
+		{{ ui.tile('Industry', industryLink, null, {mono: false}) }}
 		{% set reach %}of its addressable market{% if industry and industry.rosterShare is not null %} · {{ industry.rosterShare|pct(1) }} of sales among {{ industry.rosterSize }} listed peers{% endif %}{% endset %}
 		{{ ui.tile('Market share', marketShare|pct(2), reach, {id: 'stat-market-share'}) }}
 	</div>
@@ -34,7 +35,7 @@
 					{% for segment in segments %}
 						<tr>
 							<td class="py-2 text-on-surface">{{ segment.label }}</td>
-							<td class="py-2 text-on-surface-variant">{{ segment.industry }}</td>
+							<td class="py-2 text-on-surface-variant"><a href="{{ path('app_industry', {slug: industry_slug(segment.industry)}) }}" class="hover:text-primary hover:underline">{{ segment.industry }}</a></td>
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.outlook is null ? 'text-on-surface-faint' : (segment.outlook - 1)|signed_class }}">{{ segment.outlook|figure('index', 2) }}</td>
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.revenue is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.revenue|format_large('$') }}</td>
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.share|pct(1) }}</td>
@@ -116,6 +117,34 @@
 {% endif %}
 
 {# Industry Position: the industry ledger's roster and capacity balance, and the last report's price response #}
+{# The company's history as milestones, oldest first, by year (CompanyTimelineBuilder). #}
+{% if timeline|default(null) and timeline.years is not empty %}
+	<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" id="company-timeline">
+		<h3 class="text-sm font-semibold text-on-surface">Milestones</h3>
+		<p class="text-xs text-on-surface-variant mt-1 mb-4">Deals, markets entered and left, changes of management, failures, splits and the rating changes that crossed investment grade, oldest first.{% if timeline.earlier > 0 %} {{ timeline.earlier }} earlier {{ timeline.earlier == 1 ? 'milestone is' : 'milestones are' }} on the newswire.{% endif %}</p>
+		<ol class="space-y-4">
+			{% for year in timeline.years %}
+				<li class="grid grid-cols-[5.5rem_1fr] gap-4">
+					<span class="text-xs font-semibold text-on-surface-variant pt-0.5">{{ year.year }}</span>
+					<ol class="border-l border-outline-variant/30 pl-4 space-y-3">
+						{% for milestone in year.milestones %}
+							{% set card = milestone.card %}
+							<li class="relative">
+								<span class="absolute -left-[1.3rem] top-1.5 w-2 h-2 rounded-full {{ card.tone.value == 'down' ? 'bg-tertiary' : (card.tone.value == 'up' ? 'bg-secondary' : (card.tone.value == 'warn' ? 'bg-warning' : (card.tone.value == 'accent' ? 'bg-primary' : 'bg-outline-variant'))) }}" aria-hidden="true"></span>
+								<div class="flex flex-wrap items-center gap-2">
+									<span class="badge {{ card.badgeClass }}">{{ card.badge|lower|capitalize }}</span>
+									<span class="text-2xs font-mono tabular-nums text-on-surface-variant">{{ card.dateline }}</span>
+								</div>
+								<p class="text-xs text-on-surface mt-1 leading-snug">{{ card.headline }}</p>
+							</li>
+						{% endfor %}
+					</ol>
+				</li>
+			{% endfor %}
+		</ol>
+	</div>
+{% endif %}
+
 {% if industry %}
 	<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" id="industry-position-card">
 		<div class="flex items-start justify-between gap-3 mb-4">

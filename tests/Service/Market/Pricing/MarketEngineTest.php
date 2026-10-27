@@ -7,6 +7,7 @@ namespace App\Tests\Service\Market\Pricing;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Market\Pricing\FairValue;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\PolicyCapitalization;
 use App\Service\Market\Pricing\VarianceBudget;
@@ -863,13 +864,24 @@ class MarketEngineTest extends TestCase
         );
     }
 
-    /** The step's franchise news: its share of the own diffusion, split from the draw by a draw hashed from it. */
-    private static function franchiseNews(MarketPricingContext $context, float $z): float
+    /**
+     * The step's franchise news, split from the draw by a draw hashed from it, and the power it moves: its share of the
+     * own diffusion is FRANCHISE_NEWS_SHARE, less where that would move the power faster than
+     * FRANCHISE_POWER_VOLATILITY.
+     *
+     * @return array{news: float, shift: float, independent: float}
+     */
+    private static function franchiseNews(MarketPricingContext $context, float $z): array
     {
+        $state = FairValue::fundamentalStateFor($context);
+        $faded = $context->franchisePower * exp(-MarketEngine::FRANCHISE_FADE_SPEED * $context->dt);
+        $elasticity = Valuation::franchiseValueElasticity($state['franchise_share'], $state['franchise_leverage'], $context->baselineMargin, $faded);
+        $ownVolatility = VarianceBudget::forStep($context)->idiosyncraticVolatility() * sqrt(1.0 - MarketEngine::SECTOR_FACTOR_VARIANCE_SHARE);
+        $share = min(MarketEngine::FRANCHISE_NEWS_SHARE, (MarketEngine::FRANCHISE_POWER_VOLATILITY * $elasticity / $ownVolatility) ** 2);
         $independent = Distributions::standardNormalQuantile(MathUtility::hashedUniform(0, 'franchise-news:' . bin2hex(pack('e', $z))));
+        $news = $ownVolatility * sqrt($context->dt) * Distributions::conditionalComponent($z, $independent, $share);
 
-        return VarianceBudget::forStep($context)->idiosyncraticVolatility() * sqrt((1.0 - MarketEngine::SECTOR_FACTOR_VARIANCE_SHARE) * $context->dt)
-            * Distributions::conditionalComponent($z, $independent, MarketEngine::FRANCHISE_NEWS_SHARE);
+        return ['news' => $news, 'shift' => $news / $elasticity, 'independent' => $independent];
     }
 
     /**
@@ -885,35 +897,42 @@ class MarketEngineTest extends TestCase
 
         $result = $this->engine->calculateNextPrice($context);
 
-        $news = self::franchiseNews($context, $z);
-        $this->assertEqualsWithDelta($news, log($result['perceived_fair_value'] / $before), 0.02 * abs($news) + 1e-6);
-        $this->assertGreaterThan(0.0, $result['franchise_power'] * $news, 'the power moves with the news');
+        $expected = self::franchiseNews($context, $z);
+        $this->assertEqualsWithDelta($expected['news'], log($result['perceived_fair_value'] / $before), 0.02 * abs($expected['news']) + 1e-6);
+        $this->assertEqualsWithDelta($expected['shift'], $result['franchise_power'], 1e-12);
+        $this->assertGreaterThan(0.0, $result['franchise_power'] * $expected['news'], 'the power moves with the news');
 
         $restruck = $this->engine->strikeFairValue($this->franchiseContext($result['franchise_power']))['perceived_fair_value'];
         $this->assertEqualsWithDelta($result['perceived_fair_value'], $restruck, 1e-9);
     }
 
     /**
-     * The news moves the power by the same amount whatever the power already is; fair value takes it at the power's
-     * elasticity, which falls as the margin thins, so a franchise under bad news never takes fair value to its floor.
+     * Fair value takes the news it is given, no more, wherever the power stands: a thin margin far up, where profit
+     * runs at e^p and the power moves value fastest, and a margin worn thin, where it barely moves it. A reinsurer's
+     * 1.5% margin stepped at its zero-power rate took value many times the news there. Where little of the value is
+     * left to move, less of the news is the franchise's and the power moves no faster than FRANCHISE_POWER_VOLATILITY.
      */
-    public function testNewsMovesThePowerEvenlyAndValueByItsElasticity(): void
+    public function testFairValueTakesTheNewsWhereverThePowerStandsAndThePowerMovesBoundedly(): void
     {
         $z = -2.5;
-        $step = function (float $power) use ($z): array {
+        foreach ([[0.0, 0.20], [-4.0, 0.20], [4.0, 0.015], [-4.0, 0.015]] as [$power, $margin]) {
             $this->mathUtilityMock->script(generateStandardNormal: $z);
-            $context = $this->franchiseContext($power);
+            $context = $this->franchiseContext($power, 'none', $margin);
             $faded = $power * exp(-MarketEngine::FRANCHISE_FADE_SPEED * $context->dt);
+            $before = $this->engine->strikeFairValue($context)['perceived_fair_value'];
             $result = $this->engine->calculateNextPrice($context);
 
-            return ['shift' => $result['franchise_power'] - $faded, 'move' => log($result['perceived_fair_value'] / $this->engine->strikeFairValue($context)['perceived_fair_value']), 'value' => $result['perceived_fair_value']];
-        };
-
-        $atZero = $step(0.0);
-        $deep = $step(-4.0);
-        $this->assertEqualsWithDelta($atZero['shift'], $deep['shift'], 1e-12);
-        $this->assertLessThan(0.25 * abs($atZero['move']), abs($deep['move']), 'a franchise already worn thin has little left to lose');
-        $this->assertGreaterThan(1.0, $deep['value'], 'fair value keeps the business without its franchise');
+            $expected = self::franchiseNews($context, $z);
+            $label = sprintf('power %.1f on a %.1f%% margin', $power, 100 * $margin);
+            // To first order: the step takes the elasticity where it starts, and deep in a tail a day's step bends it.
+            $this->assertEqualsWithDelta($expected['news'], log($result['perceived_fair_value'] / $before), 0.1 * abs($expected['news']) + 1e-9, $label);
+            $this->assertLessThanOrEqual(
+                MarketEngine::FRANCHISE_POWER_VOLATILITY * sqrt($context->dt) * (abs($z) + abs($expected['independent'])) + 1e-12,
+                abs($result['franchise_power'] - $faded),
+                $label,
+            );
+            $this->assertGreaterThan(1.0, $result['perceived_fair_value'], 'fair value keeps the business without its franchise');
+        }
     }
 
     /** With no news, the power halves over its half-life. */
@@ -951,9 +970,9 @@ class MarketEngineTest extends TestCase
     }
 
     /**
-     * Equity news is operating news levered: a firm whose equity return moves three times its operating return moves
-     * its power a third as far on the same draw, while its fair value still takes the news. A lender's return is struck
-     * on its equity already, so its balance sheet does not scale the map.
+     * Equity news is operating news levered: on the same draw a firm whose equity return moves three times its
+     * operating return moves its power less, while its fair value still takes the news it is given. A lender's return
+     * is struck on its equity already, so its balance sheet does not scale the map.
      */
     public function testEquityNewsMovesTheFranchiseAtTheLeverageFairValueIsStruckOn(): void
     {
@@ -963,13 +982,16 @@ class MarketEngineTest extends TestCase
             $context = $this->franchiseContext(0.0, $model, 0.20, 1.0 / 252.0, 30.0, $investedCapital);
             $result = $this->engine->calculateNextPrice($context);
 
-            return ['power' => $result['franchise_power'], 'move' => log($result['perceived_fair_value'] / $this->engine->strikeFairValue($context)['perceived_fair_value'])];
+            return ['power' => $result['franchise_power'], 'move' => log($result['perceived_fair_value'] / $this->engine->strikeFairValue($context)['perceived_fair_value']), 'news' => self::franchiseNews($context, $z)['news']];
         };
 
         $unlevered = $step('none', 30.0);
         $levered = $step('none', 90.0);
-        $this->assertEqualsWithDelta(1.0 / 3.0, $levered['power'] / $unlevered['power'], 0.02, 'a third the operating news');
-        $this->assertEqualsWithDelta($unlevered['move'], $levered['move'], 0.1 * abs($unlevered['move']), 'the equity takes the news either way');
+        $this->assertGreaterThan(0.0, $levered['power']);
+        $this->assertLessThan($unlevered['power'], $levered['power'], 'less operating news for the same equity news');
+        foreach ([$unlevered, $levered] as $arm) {
+            $this->assertEqualsWithDelta($arm['news'], $arm['move'], 0.05 * abs($arm['news']), 'the equity takes the news either way');
+        }
 
         $this->assertEqualsWithDelta($step('commercial_bank', 30.0)['power'], $step('commercial_bank', 90.0)['power'], 1e-12);
     }

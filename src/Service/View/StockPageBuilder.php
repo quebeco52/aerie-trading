@@ -81,6 +81,9 @@ class StockPageBuilder
         private readonly ?BusinessMapBuilder $businessMap = null,
         private readonly ?SegmentNoteBuilder $segmentNote = null,
         private readonly ?CompanyProfiles $profiles = null,
+        private readonly ?MoveAttributionBuilder $moveAttribution = null,
+        private readonly ?RivalComparisonBuilder $rivals = null,
+        private readonly ?CompanyTimelineBuilder $timeline = null,
     ) {}
 
     /**
@@ -153,6 +156,7 @@ class StockPageBuilder
             + $this->biotechPipeline->build($stock)
             + ($this->businessMap?->build($stock) ?? ['businessMap' => null])
             + ($this->segmentNote?->build($stock) ?? ['segments' => null])
+            + ['moveAttribution' => $this->moveAttribution?->build($stock), 'rivals' => $this->rivals?->build($stock), 'timeline' => $this->timeline?->build($stock)]
             + [
                 'industryCharts' => self::industryCharts($snapshot['businessModel'], $snapshot['isFinancial'], $snapshot['isInsurer'], $summary['kpiSeries'] !== []),
                 // What the industry label in the header means: the business model the company is run on.
@@ -345,6 +349,9 @@ class StockPageBuilder
             'nextReport' => null,
             'kpiSeries' => [],
             'businessMap' => null,
+            'moveAttribution' => null,
+            'rivals' => null,
+            'timeline' => null,
             'segments' => null,
             'pipeline' => null,
             'management' => null,

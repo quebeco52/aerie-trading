@@ -50,12 +50,18 @@ class MarketEngine
     public const FRANCHISE_FADE_SPEED = M_LN2 / self::FRANCHISE_HALF_LIFE_YEARS;
     /**
      * Share of the variance of a name's own diffusion, its sector factor aside, that is news about its franchise, which
-     * fair value follows; the rest is noise the pull reverses. Half keeps a typical name's franchise power within about
-     * e^(+/-0.5) of its structural margin after twenty years, where a larger share spreads a levered name's earnings
-     * far enough to raise defaults; with its reports, a little over half of a name's own variance is then cash-flow
-     * news (Vuolteenaho 2002 measures about two thirds).
+     * fair value follows; the rest is noise the pull reverses. A larger share spreads a levered name's earnings far
+     * enough to raise defaults; with its reports, a little over half of a name's own variance is then cash-flow news
+     * (Vuolteenaho 2002 measures about two thirds).
      */
     public const FRANCHISE_NEWS_SHARE = 0.50;
+    /**
+     * Fastest the franchise power moves, per square root of a year. A name whose franchise is a small part of its value
+     * (a long-lived business at a low cap rate) would need its margin to swing many times over to carry half its news,
+     * so less of its news is the franchise's. At the 10-year half-life the power settles within about +/-0.9 (one sd)
+     * of zero: a 20% margin between about 9% and 39%.
+     */
+    public const FRANCHISE_POWER_VOLATILITY = 0.35;
 
     // --- Institutional & Market Architecture ---
     /**
@@ -146,7 +152,6 @@ class MarketEngine
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
 
         // The step's franchise news moves fair value with the price, so the pull reverses only the noise beside it.
-        // The step's franchise news moves fair value with the price, so the pull reverses only the noise beside it.
         $franchise = $this->stepFranchise($ctx, $budget, $idiosyncraticShock, $perceivedFairValue, $fundamentalState);
         $franchiseRevision = $franchise['fair_value'] / $perceivedFairValue;
         $perceivedFairValue = $franchise['fair_value'];
@@ -220,13 +225,12 @@ class MarketEngine
     }
 
     /**
-     * The franchise power after one step, and fair value with it. A share of the name's own diffusion
-     * (FRANCHISE_NEWS_SHARE) is news about its franchise: its conditional share of the draw already taken
-     * (Distributions::conditionalComponent()), split by a draw hashed from it, so the price path and every other draw
-     * are those of a run without the split. Equity news is operating news levered: the power moves at the rate a unit
-     * of it moves fair value at no franchise, the fading share times d log(margin) / d power (1 - m) times the leverage
-     * fair value levers it by, and fair value then moves as the power's value does: in full near the structural
-     * margin, less as the margin nears either end. The power fades at FRANCHISE_FADE_SPEED.
+     * The franchise power after one step, and fair value with it. A share of the name's own diffusion is news about its
+     * franchise: its conditional share of the draw already taken (Distributions::conditionalComponent()), split by a
+     * draw hashed from it, so the price path and every other draw are those of a run without the split. The power
+     * moves by that news over the rate it moves fair value where it stands (Valuation::franchiseValueElasticity()),
+     * so fair value moves by the news, no more. The share is FRANCHISE_NEWS_SHARE, less where that would move the
+     * power faster than FRANCHISE_POWER_VOLATILITY. The power fades at FRANCHISE_FADE_SPEED.
      *
      * @param array{franchise_base: float, franchise_share: float, franchise_multiple: float, franchise_leverage: float} $fundamentalState
      * @return array{power: float, fair_value: float}
@@ -235,14 +239,16 @@ class MarketEngine
     {
         $faded = $ctx->franchisePower * exp(-self::FRANCHISE_FADE_SPEED * $ctx->dt);
         $margin = $ctx->baselineMargin;
-        $valueElasticity = $fundamentalState['franchise_share'] * (1.0 - $margin) * $fundamentalState['franchise_leverage'];
-        if ($valueElasticity <= 0.0 || $margin <= 0.0 || $margin >= 1.0 || $ctx->dt <= 0.0) {
+        $valueElasticity = Valuation::franchiseValueElasticity($fundamentalState['franchise_share'], $fundamentalState['franchise_leverage'], $margin, $faded);
+        $ownVolatility = $budget->idiosyncraticVolatility() * sqrt(1.0 - self::SECTOR_FACTOR_VARIANCE_SHARE);
+        if ($valueElasticity <= 0.0 || $ownVolatility <= 0.0 || $ctx->dt <= 0.0) {
             return ['power' => $faded, 'fair_value' => $fairValue];
         }
 
+        $newsShare = min(self::FRANCHISE_NEWS_SHARE, (self::FRANCHISE_POWER_VOLATILITY * $valueElasticity / $ownVolatility) ** 2);
         $independent = Distributions::standardNormalQuantile(MathUtility::hashedUniform(0, 'franchise-news:' . bin2hex(pack('e', $idiosyncraticShock))));
-        $ownLoading = $budget->idiosyncraticVolatility() * sqrt((1.0 - self::SECTOR_FACTOR_VARIANCE_SHARE) * $ctx->dt);
-        $power = $faded + (($ownLoading * Distributions::conditionalComponent($idiosyncraticShock, $independent, self::FRANCHISE_NEWS_SHARE)) / $valueElasticity);
+        $news = $ownVolatility * sqrt($ctx->dt) * Distributions::conditionalComponent($idiosyncraticShock, $independent, $newsShare);
+        $power = $faded + ($news / $valueElasticity);
 
         $multiple = Valuation::leveredValueMultiple(
             Valuation::franchiseValueMultiple($fundamentalState['franchise_share'], FirmEconomics::franchiseProfitMultiple($margin, $power)),

@@ -4,6 +4,7 @@
 {% set market_links = [
     { href: '/', label: 'Markets', active: current_path == '/' or current_path starts with '/stock' or current_path starts with '/search' },
     { href: '/screener', label: 'Screener', active: current_path == '/screener' },
+    { href: '/industries', label: 'Industries', active: current_path starts with '/industr' },
     { href: '/bonds', label: 'Bonds', active: current_path starts with '/bond' },
     { href: '/news', label: 'News', active: current_path == '/news' },
     { href: '/leaderboard', label: 'Leaderboard', active: current_path == '/leaderboard' }
@@ -38,11 +39,11 @@
     <div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center h-14">
             <div class="flex items-center gap-8">
-                <a href="/" class="flex items-center gap-2.5 text-base font-semibold tracking-tight text-on-surface hover:text-primary transition-colors">
+                <a href="/" class="flex items-center gap-2.5 text-base font-semibold whitespace-nowrap tracking-tight text-on-surface hover:text-primary transition-colors">
                     <img src="{{ asset('favicon.svg') }}" alt="" width="28" height="28" class="w-7 h-7">
                     <span>Aerie Exchange</span>
                 </a>
-                <div class="hidden lg:flex items-center gap-6">
+                <div class="hidden lg:flex items-center gap-5 whitespace-nowrap">
                     {% for link in market_links %}
                         <a href="{{ link.href }}"
                            {% if link.active %}aria-current="page"{% endif %}
@@ -70,10 +71,10 @@
             </div>
 
             <div class="flex items-center gap-4">
-                <div class="relative hidden sm:block" data-controller="navbar-search">
+                <div class="relative hidden sm:block lg:hidden xl:block" data-controller="navbar-search">
                     <form action="/search" method="GET" id="search-form" role="search">
                         <label for="market-search-input" class="sr-only">Search ticker or company</label>
-                        <input id="market-search-input" name="q" type="search" placeholder="Search ticker or company" class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-52 xl:w-64 text-on-surface outline-none placeholder:text-on-surface-faint" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-results-dropdown" aria-autocomplete="list" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
+                        <input id="market-search-input" name="q" type="search" placeholder="Search ticker or company" class="bg-surface-container-lowest border border-outline-variant/25 rounded px-3 py-1 text-xs focus:ring-1 focus:ring-primary focus:border-primary w-40 xl:w-44 2xl:w-64 text-on-surface outline-none placeholder:text-on-surface-faint" autocomplete="off" role="combobox" aria-expanded="false" aria-controls="search-results-dropdown" aria-autocomplete="list" data-navbar-search-target="input" data-action="input->navbar-search#onInput keydown->navbar-search#onKeyDown">
                         <div id="search-results-dropdown" role="listbox" aria-label="Search results" data-navbar-search-target="dropdown" class="absolute left-0 mt-1 w-full bg-surface-container-high border border-outline-variant/30 rounded shadow-md hidden z-50 overflow-hidden text-xs">
                         </div>
                     </form>
@@ -110,7 +111,7 @@
                         </div>
                     </details>
                 {% else %}
-                    <a href="{{ path('app_login') }}" class="text-sm font-medium text-on-surface-variant hover:text-on-surface transition-colors">Sign in</a>
+                    <a href="{{ path('app_login') }}" class="text-sm font-medium whitespace-nowrap text-on-surface-variant hover:text-on-surface transition-colors">Sign in</a>
                     <a href="{{ path('app_register') }}" class="hidden sm:inline-flex px-3 py-1 rounded border border-outline-variant/40 text-sm font-medium text-on-surface hover:bg-surface-container-high transition-colors">Register</a>
                 {% endif %}
 

@@ -49,10 +49,10 @@ class StockPageBuilderTest extends TestCase
         'borrowFee', 'borrowWarnings', 'businessMap', 'businessModel', 'capital', 'capitalThresholds', 'changePercent', 'components', 'corporateBonds', 'creditHealth', 'displayReturn', 'dividendYield',
         'events', 'financialSummary', 'fundStake', 'generalInfo', 'halfSpread', 'hasProfile', 'indexFacts', 'industry', 'industryCharts', 'industryDescription', 'isEtf',
         'isFinancial', 'isInsurer', 'kpiSeries', 'lifecycleStage', 'lifecycleStages', 'macro', 'management', 'marketCap',
-        'marketShare', 'netAssetValue', 'nextReport', 'openOrders', 'optionDealerGammaPerPercent',
+        'marketShare', 'moveAttribution', 'netAssetValue', 'nextReport', 'openOrders', 'optionDealerGammaPerPercent',
         'optionExpiries', 'optionMultiplier', 'optionOpenInterest', 'optionsListed', 'optionsReason',
-        'peRatio', 'peers', 'pieData', 'pieLabels', 'pipeline', 'segments', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
-        'ticksPerYear', 'userAvgCost', 'userBorrowAccrued', 'userDividendIncome', 'userQuantity', 'userRealised', 'userTrades',
+        'peRatio', 'peers', 'pieData', 'pieLabels', 'pipeline', 'rivals', 'segments', 'sharesMap', 'shortInterest', 'shortUtilization', 'strategicStake',
+        'ticksPerYear', 'timeline', 'userAvgCost', 'userBorrowAccrued', 'userDividendIncome', 'userQuantity', 'userRealised', 'userTrades',
         'userUnrealizedPnL', 'userUnrealizedReturn',
     ];
 

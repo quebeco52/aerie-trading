@@ -1,0 +1,47 @@
+{% extends 'base.html.twig' %}
+
+{% block page_title %}Industries{% endblock %}
+
+{% block description %}Every industry with a company listed on the Aerie Exchange: its price against a balanced market, idle plant and demand outlook.{% endblock %}
+
+{% block body %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5">
+
+		{% embed 'partials/_page_header.html.twig' with {title: 'Industries'} %}
+			{% block lead %}
+				Every industry with a listed company, from the companies' last full quarter of reports. An industry short of plant sells above a balanced price until new plant opens; an overbuilt one sells below it.
+			{% endblock %}
+		{% endembed %}
+
+		<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden">
+			<div class="overflow-x-auto">
+				<table class="w-full text-sm min-w-180">
+					<thead>
+						<tr class="table-head">
+							<th scope="col" class="text-left font-semibold px-4 py-3">Industry</th>
+							<th scope="col" class="text-left font-semibold px-4 py-3">Sector</th>
+							<th scope="col" class="text-right font-semibold px-4 py-3">Companies</th>
+							<th scope="col" class="text-right font-semibold px-4 py-3" title="What the industry's output sold for against what it would fetch with just enough plant for demand">Price against balance</th>
+							<th scope="col" class="text-right font-semibold px-4 py-3" title="Plant switched off because its output would not cover its running cost">Idle plant</th>
+							<th scope="col" class="text-right font-semibold px-4 py-3" title="Expected long-run demand, 1.00 when trading opened">Demand outlook</th>
+							<th scope="col" class="text-right font-semibold px-4 py-3" title="The outlook's last revision">Last revision</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-outline-variant/10">
+						{% for row in industries %}
+							<tr class="hover:bg-surface-container/40">
+								<th scope="row" class="px-4 py-2 text-left font-normal"><a href="{{ path('app_industry', {slug: row.slug}) }}" class="text-on-surface hover:text-primary">{{ row.name }}</a></th>
+								<td class="px-4 py-2 text-on-surface-variant">{{ row.sector }}</td>
+								<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface">{{ row.companies }}</td>
+								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.priceGap is null ? 'text-on-surface-faint' : (row.priceGap|abs >= constant('App\\Service\\View\\IndustryPageBuilder::PRICE_GAP_NOTED') ? 'text-warning' : 'text-on-surface') }}">{{ row.priceGap is null ? '—' : row.priceGap|pct(1, true) }}</td>
+								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.idle is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ row.idle is null ? '—' : row.idle|pct(1) }}</td>
+								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.outlook is null ? 'text-on-surface-faint' : (row.outlook.level - 1)|signed_class }}">{{ row.outlook is null ? '—' : row.outlook.level|figure('index', 2) }}</td>
+								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.outlook is null or row.outlook.revision is null ? 'text-on-surface-faint' : row.outlook.revision|signed_class }}">{{ row.outlook is null or row.outlook.revision is null ? '—' : row.outlook.revision|pct(1, true) }}</td>
+							</tr>
+						{% endfor %}
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+{% endblock %}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Math;
 
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
 use PHPUnit\Framework\Attributes\Group;
@@ -547,5 +548,29 @@ class ValuationTest extends TestCase
         $slopeBelow = (1.0 - Valuation::leveredValueMultiple(1.0 - 1e-6, 3.0)) / 1e-6;
         $this->assertEqualsWithDelta(3.0, $slopeBelow, 1e-4, 'the same slope either side of one');
         $this->assertEqualsWithDelta(0.8, Valuation::leveredValueMultiple(0.8, 0.5), 1e-12, 'leverage below one is one');
+    }
+
+    /**
+     * The elasticity is the slope of log value in the power on both sides of no franchise: s L (1 - m) at zero, several
+     * times that a few units up on a thin margin (profit runs at e^p, so value does), and near zero far down.
+     */
+    public function testTheFranchiseValueElasticityIsTheSlopeOfLogValueInThePower(): void
+    {
+        $logValue = static fn(float $share, float $leverage, float $margin, float $power): float => log(Valuation::leveredValueMultiple(
+            Valuation::franchiseValueMultiple($share, FirmEconomics::franchiseProfitMultiple($margin, $power)),
+            $leverage,
+        ));
+        foreach ([[0.4, 1.5, 0.20], [0.07, 1.0, 0.015], [0.3, 3.0, 0.55]] as [$share, $leverage, $margin]) {
+            $this->assertEqualsWithDelta($share * $leverage * (1.0 - $margin), Valuation::franchiseValueElasticity($share, $leverage, $margin, 0.0), 1e-12);
+            foreach ([-5.0, -1.0, 0.5, 2.0, 6.0] as $power) {
+                $h = 1e-5;
+                $slope = ($logValue($share, $leverage, $margin, $power + $h) - $logValue($share, $leverage, $margin, $power - $h)) / (2.0 * $h);
+                $this->assertEqualsWithDelta($slope, Valuation::franchiseValueElasticity($share, $leverage, $margin, $power), 1e-6, sprintf('m %.3f, p %.1f', $margin, $power));
+            }
+        }
+
+        $this->assertGreaterThan(5.0 * Valuation::franchiseValueElasticity(0.07, 1.0, 0.015, 0.0), Valuation::franchiseValueElasticity(0.07, 1.0, 0.015, 3.0), 'a thin margin up moves value fastest');
+        $this->assertLessThan(0.01, Valuation::franchiseValueElasticity(0.4, 1.5, 0.20, -6.0), 'a margin worn away has little value left to move');
+        $this->assertSame(0.0, Valuation::franchiseValueElasticity(0.4, 1.5, 0.0, 1.0), 'no margin, nothing to shift');
     }
 }

@@ -1,0 +1,155 @@
+{% extends 'base.html.twig' %}
+
+{% block page_title %}{{ industry.name }}{% endblock %}
+
+{% block description %}{{ industry.name }} on the Aerie Exchange: prices against a balanced market, plant idle and under construction, who sells its output and the news that changed it.{% endblock %}
+
+{% import 'partials/_ui.html.twig' as ui %}
+{% import 'industry/_macros.html.twig' as charts %}
+
+{% block body %}
+	{% set latest = industry.latest %}
+	<div class="max-w-400 mx-auto px-4 sm:px-6 lg:px-8 py-5 w-full space-y-5">
+
+		{% embed 'partials/_page_header.html.twig' with {title: industry.name, industry: industry, latest: latest} %}
+			{% block crumbs %}
+				<nav class="text-2xs text-on-surface-variant flex items-center gap-1 mb-3" aria-label="Breadcrumb">
+					<a href="{{ path('app_industries') }}" class="hover:text-on-surface hover:underline">Industries</a>
+					<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
+					<span class="text-on-surface" aria-current="page">{{ industry.name }}</span>
+				</nav>
+			{% endblock %}
+			{% block lead %}
+				{{ industry.companies|length }} listed {{ industry.companies|length == 1 ? 'company has' : 'companies have' }} this as {{ industry.companies|length == 1 ? 'its' : 'their' }} main business{% if industry.entrants is not empty %}, and {{ industry.entrants|length }} more {{ industry.entrants|length == 1 ? 'sells' : 'sell' }} here from another industry{% endif %}. Figures are summed from their quarterly reports.
+			{% endblock %}
+			{% block aside %}
+				{% import 'partials/_ui.html.twig' as ui %}
+				<dl class="grid grid-cols-3 gap-x-8">
+					{% if industry.pricesCapacity and latest and latest.priceGap is not null %}
+						{{ ui.figure('Price against balance', latest.priceGap|pct(1, true), {tone: latest.priceGap|abs >= constant('App\\Service\\View\\IndustryPageBuilder::PRICE_GAP_NOTED') ? 'text-warning' : 'text-on-surface', note: latest.label, tip: 'What the industry\'s output sold for against what it would fetch with just enough plant for demand. Above means too little plant; below, too much.'}) }}
+					{% endif %}
+					{% if latest and latest.building is not null %}
+						{{ ui.figure('Under construction', latest.building|pct(1), {note: 'of the plant standing'}) }}
+					{% endif %}
+					{% if industry.outlook %}
+						{{ ui.figure('Demand outlook', industry.outlook.level|figure('index', 2), {tone: (industry.outlook.level - 1)|signed_class, note: '1.00 when trading opened', tip: 'What industry data lead the market to expect of demand for the whole industry in the long run, against what it expected when trading opened.'}) }}
+					{% endif %}
+				</dl>
+			{% endblock %}
+		{% endembed %}
+
+		{# The story so far: the page's figures read as sentences, each only when it has something to say. #}
+		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+			<h2 class="text-sm font-semibold text-on-surface mb-2">Where the industry stands</h2>
+			<ul class="text-sm text-on-surface-variant leading-relaxed space-y-1.5 list-disc pl-5">
+				{% if industry.pricesCapacity and latest and latest.priceGap is not null %}
+					{% if latest.priceGap >= constant('App\\Service\\View\\IndustryPageBuilder::PRICE_GAP_NOTED') %}
+						<li>Buyers pay <span class="font-mono text-on-surface">{{ latest.priceGap|pct(1) }}</span> more than a balanced industry would charge: there is too little plant for demand, and the companies in it earn more on what they have.</li>
+					{% elseif latest.priceGap <= -constant('App\\Service\\View\\IndustryPageBuilder::PRICE_GAP_NOTED') %}
+						<li>Prices sit <span class="font-mono text-on-surface">{{ (-latest.priceGap)|pct(1) }}</span> under a balanced industry's: there is more plant than demand, and every producer sells for less.</li>
+					{% else %}
+						<li>Prices are close to a balanced industry's: plant and demand are roughly matched.</li>
+					{% endif %}
+				{% elseif not industry.pricesCapacity %}
+					<li>Its companies do not sell a common product, so no rival's plant moves the price the others get.</li>
+				{% endif %}
+				{% if latest and latest.idle is not null and latest.idle >= 0.005 %}
+					<li><span class="font-mono text-on-surface">{{ latest.idle|pct(1) }}</span> of the plant is switched off, because at today's price its output would not cover the cost of running it.</li>
+				{% endif %}
+				{% if latest and latest.building is not null and latest.building >= 0.0005 %}
+					<li>Plant under construction is <span class="font-mono text-on-surface">{{ latest.building|pct(1) }}</span> of the plant standing{% if industry.buildingYearAgo is not null %}, against <span class="font-mono text-on-surface">{{ industry.buildingYearAgo|pct(1) }}</span> a year earlier{% endif %}. It adds to supply when it opens.</li>
+				{% endif %}
+				{% if industry.mover and industry.mover.shareChange|abs >= 0.005 %}
+					<li><a href="/stock/{{ industry.mover.ticker }}" class="font-mono text-on-surface hover:text-primary">{{ industry.mover.ticker }}</a> has {{ industry.mover.shareChange > 0 ? 'gained' : 'lost' }} <span class="font-mono {{ industry.mover.shareChange|signed_class }}">{{ industry.mover.shareChange|abs|pp(1) }}</span> of the listed companies' sales in three years, the largest move among them.</li>
+				{% endif %}
+				{% if industry.outlook and industry.outlook.revision is not null %}
+					<li>Industry data last {{ industry.outlook.revision < 0 ? 'cut' : 'raised' }} the long-run demand outlook by <span class="font-mono {{ industry.outlook.revision|signed_class }}">{{ industry.outlook.revision|abs|pct(1) }}</span>, to <span class="font-mono text-on-surface">{{ industry.outlook.level|figure('index', 2) }}</span>. Companies plan their plant for this demand.</li>
+				{% endif %}
+				{% if industry.failed > 0 %}
+					<li>{{ industry.failed }} listed {{ industry.failed == 1 ? 'company' : 'companies' }} in it {{ industry.failed == 1 ? 'has' : 'have' }} failed.</li>
+				{% endif %}
+			</ul>
+		</section>
+
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+			{% if industry.charts.price and industry.pricesCapacity %}
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+					<h2 class="text-sm font-semibold text-on-surface">Price against a balanced industry</h2>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">What the industry's output fetched each quarter against what it would with just enough plant. Short of plant, prices rise until new plant opens; overbuilt, they fall until plant wears out or demand catches up.</p>
+					{{ charts.line_chart(industry.charts.price, 'Price against a balanced industry, by quarter') }}
+				</section>
+			{% endif %}
+			{% if industry.charts.plant %}
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+					<h2 class="text-sm font-semibold text-on-surface">Plant idle and under construction</h2>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">Idle plant is switched off because its output would not cover its running cost. Plant under construction is the next wave of supply, as a share of the plant standing.</p>
+					{{ charts.line_chart(industry.charts.plant, 'Idle plant and plant under construction, by quarter') }}
+				</section>
+			{% endif %}
+			{% if industry.charts.shares %}
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+					<h2 class="text-sm font-semibold text-on-surface">Who sells its output</h2>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">Each listed company's share of the sales the listed companies report, largest first.</p>
+					{{ charts.line_chart(industry.charts.shares, 'Share of listed sales by company, by quarter') }}
+				</section>
+			{% endif %}
+			{% if industry.charts.margin %}
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+					<h2 class="text-sm font-semibold text-on-surface">Operating margin</h2>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">Operating profit over sales, summed across the listed companies.</p>
+					{{ charts.line_chart(industry.charts.margin, 'Operating margin of the listed companies, by quarter') }}
+				</section>
+			{% endif %}
+		</div>
+
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+				<h2 class="text-sm font-semibold text-on-surface mb-3">Companies</h2>
+				<div class="overflow-x-auto">
+					<table class="w-full text-xs">
+						<thead>
+							<tr class="table-head">
+								<th scope="col" class="text-left font-semibold pb-2">Company</th>
+								<th scope="col" class="text-right font-semibold pb-2">Market value</th>
+								<th scope="col" class="text-right font-semibold pb-2" title="Share of what the industry's listed sellers sell">Share</th>
+								<th scope="col" class="text-right font-semibold pb-2" title="Change in its share of listed sales over three years">3-year change</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-outline-variant/10">
+							{% for company in industry.companies %}
+								<tr>
+									<th scope="row" class="py-1.5 text-left font-normal"><a href="/stock/{{ company.ticker }}" class="hover:text-primary"><span class="font-mono font-semibold text-on-surface">{{ company.ticker }}</span> <span class="text-on-surface-variant">{{ company.name }}</span></a></th>
+									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ company.marketValue|format_large('$') }}</td>
+									<td class="py-1.5 text-right font-mono tabular-nums {{ company.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ company.share is null ? '—' : company.share|pct(1) }}</td>
+									<td class="py-1.5 text-right font-mono tabular-nums {{ company.shareChange is null ? 'text-on-surface-faint' : company.shareChange|signed_class }}">{{ company.shareChange is null ? '—' : company.shareChange|pp(1, true) }}</td>
+								</tr>
+							{% endfor %}
+						</tbody>
+					</table>
+				</div>
+				{% if industry.entrants is not empty %}
+					<h3 class="text-xs font-semibold text-on-surface-variant mt-5 mb-2">Also selling here from another industry</h3>
+					<ul class="space-y-1.5 text-xs">
+						{% for entrant in industry.entrants %}
+							<li class="flex items-center justify-between gap-3">
+								<span><a href="/stock/{{ entrant.ticker }}" class="font-mono font-semibold text-on-surface hover:text-primary">{{ entrant.ticker }}</a> <span class="text-on-surface-variant">{{ entrant.name }}, from <a href="{{ path('app_industry', {slug: entrant.homeSlug}) }}" class="hover:text-primary">{{ entrant.home }}</a></span></span>
+								<span class="font-mono tabular-nums text-on-surface">{{ entrant.share|pct(1) }}</span>
+							</li>
+						{% endfor %}
+					</ul>
+				{% endif %}
+			</section>
+
+			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+				<h2 class="text-sm font-semibold text-on-surface mb-1">Deals, failures and outlook</h2>
+				<div class="divide-y divide-outline-variant/10">
+					{% for story in industry.stories %}
+						{% include 'partials/_event_card.html.twig' with { event: story.card, source: story.source } only %}
+					{% else %}
+						<p class="py-6 text-center text-sm text-on-surface-variant">No deals, failures or outlook revisions yet.</p>
+					{% endfor %}
+				</div>
+			</section>
+		</div>
+	</div>
+{% endblock %}

@@ -322,11 +322,14 @@ final class OperatingCapacityEngine
         // base follows the season, the rest (rent, depreciation, head office) carries evenly through the year.
         $seasonalShare = $strategy->getSeasonalFixedCostShare();
         $ctx->seasonalFixedCostFactor = 1.0 - $seasonalShare + ($seasonalShare * $ctx->seasonalFactor);
-        // The franchise the firm's own news has built or worn away is a cost edge on its structural revenue. It sits in
-        // the committed base, so the quarter books it as the margin the market priced whatever the cycle does to
-        // volume.
-        $ctx->franchiseCostSaving = (FirmEconomics::franchiseMargin($ctx->stableMargin, (float) ($stock->getFranchisePower() ?? 0.0)) - $ctx->stableMargin) * $ctx->structuralRevenue;
-        $ctx->fixedCosts = (($structuralFixedCosts * $this->resolveCommittedCostScale($ctx)) - $ctx->franchiseCostSaving) * $ctx->seasonalFixedCostFactor;
+        // The franchise the firm's own news has built or worn away is a cost edge: its run costs, fixed and variable,
+        // scale by the ratio of its cost share at the franchise margin to the one at its structural margin, so no cost
+        // line turns negative however strong the franchise. Depreciation on plant already bought is not among them.
+        $franchiseMargin = FirmEconomics::franchiseMargin($ctx->stableMargin, (float) ($stock->getFranchisePower() ?? 0.0));
+        $ctx->franchiseCostScale = $ctx->stableMargin > 0.0 && $ctx->stableMargin < 1.0 ? (1.0 - $franchiseMargin) / (1.0 - $ctx->stableMargin) : 1.0;
+        $committedFixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx);
+        $ctx->franchiseCostSaving = (1.0 - $ctx->franchiseCostScale) * ($committedFixedCosts + $structuralVariableCosts);
+        $ctx->fixedCosts = $committedFixedCosts * $ctx->franchiseCostScale * $ctx->seasonalFixedCostFactor;
 
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
     }
@@ -788,14 +791,15 @@ final class OperatingCapacityEngine
         $realizedVariableMargin = StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, $z2);
         // What the ratio was expected to run at: the same step without its draw, at the output the quarter was
         // expected to sell.
-        $ctx->publicVariableMargin = min(0.99, max(0.01, StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, 0.0)
-            + self::overtimePremium($ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor * $ctx->plantLoad, $ctx->seasonalFactor)));
+        $ctx->publicVariableMargin = min(0.99, max(0.01, (StochasticProcesses::calculateCIR($currentVariableMargin, $kappa, $dynamicVariableTheta, $marginVol, $ctx->dt, 0.0)
+            + self::overtimePremium($ctx->capacityUtilizationBeforeShocks * $ctx->sectorActivityFactor * $ctx->plantLoad, $ctx->seasonalFactor)) * $ctx->franchiseCostScale));
 
         $stock->setStructuralVariableMargin($realizedVariableMargin);
 
         // Variable cost is per unit: cost stickiness (Anderson, Banker & Janakiraman 2003) lives in the committed
-        // base alone (resolveCommittedCostScale), so a fall in volume is not charged as sticky twice.
-        $ctx->realizedVariableMargin = min(0.99, max(0.01, $realizedVariableMargin + self::overtimePremium($ctx->capacityUtilization * $ctx->sectorActivityFactor * $ctx->plantLoad, $ctx->seasonalFactor)));
+        // base alone (resolveCommittedCostScale), so a fall in volume is not charged as sticky twice. The franchise's
+        // cost edge is struck on the ratio booked, not the structural state the process carries.
+        $ctx->realizedVariableMargin = min(0.99, max(0.01, ($realizedVariableMargin + self::overtimePremium($ctx->capacityUtilization * $ctx->sectorActivityFactor * $ctx->plantLoad, $ctx->seasonalFactor)) * $ctx->franchiseCostScale));
     }
 
     /**
@@ -826,7 +830,7 @@ final class OperatingCapacityEngine
         }
 
         // Severance is owed on the staffed base, not on the franchise's edge over it.
-        $structuralFixedCosts = (($ctx->fixedCosts / $ctx->seasonalFixedCostFactor) + $ctx->franchiseCostSaving) / $ctx->committedCostScale;
+        $structuralFixedCosts = $ctx->fixedCosts / ($ctx->seasonalFixedCostFactor * $ctx->franchiseCostScale * $ctx->committedCostScale);
         $charge = $ctx->committedCostCut
             * $structuralFixedCosts
             * $ctx->strategy->getLaborCostShare()

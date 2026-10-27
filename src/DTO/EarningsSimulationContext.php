@@ -32,9 +32,11 @@ class EarningsSimulationContext
     public float $sharesOutstanding = 0.0;
     public float $stableMargin = 0.0;
     /**
-     * The quarter's structural revenue times the margin its franchise power adds (Stock::$franchisePower): what its own
-     * news has taken off (or added to) the committed cost base, before the season.
+     * The firm's run costs, fixed and variable, over what they would be at its structural margin: (1 - m') / (1 - m) at
+     * the margin its franchise power gives it (Stock::$franchisePower).
      */
+    public float $franchiseCostScale = 1.0;
+    /** What the franchise takes off (or adds to) the structural quarter's run costs, before the season. */
     public float $franchiseCostSaving = 0.0;
     public float $seasonalFactor = 1.0;
     /** The quarter's fixed costs over their even-year level: the seasonal share of the base following the season. */

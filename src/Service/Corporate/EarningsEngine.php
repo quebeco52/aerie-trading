@@ -891,7 +891,7 @@ class EarningsEngine
         ));
 
         $saExpectedRevenue = $ctx->expectedRevenue / max(0.01, $ctx->seasonalFactor);
-        $saExpectedEbit = ($saExpectedRevenue * (1.0 - $ctx->baselineVariableMargin)) - ($ctx->fixedCosts / $ctx->seasonalFixedCostFactor) - $ctx->quarterlyDepreciation - $ctx->expectedCreditLossProvision;
+        $saExpectedEbit = ($saExpectedRevenue * (1.0 - ($ctx->baselineVariableMargin * $ctx->franchiseCostScale))) - ($ctx->fixedCosts / $ctx->seasonalFixedCostFactor) - $ctx->quarterlyDepreciation - $ctx->expectedCreditLossProvision;
         $saExpectedMargin = $saExpectedEbit / max(1.0, $saExpectedRevenue);
         $expectedDebtMetrics = $this->debtEngine->calculateInterestExpense($stock, $ctx->macroState, $saExpectedRevenue * 4.0, $saExpectedMargin);
         $ctx->expectedInterestExpense = $expectedDebtMetrics->interestExpense / 4.0;

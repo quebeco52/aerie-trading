@@ -1,0 +1,33 @@
+{# The industry page's charts. `chart` is an App\Service\View\IndustryCharts::lines() drawing; `label` its accessible
+   summary. Series take the SERIES slots in legend order; each quarter is a titled point for the hover readout. #}
+{% macro line_chart(chart, label) %}
+	{% set strokes = ['stroke-series-blue', 'stroke-series-orange', 'stroke-series-aqua', 'stroke-series-yellow', 'stroke-series-magenta', 'stroke-series-green', 'stroke-series-violet', 'stroke-series-red'] %}
+	{% set fills = ['fill-series-blue', 'fill-series-orange', 'fill-series-aqua', 'fill-series-yellow', 'fill-series-magenta', 'fill-series-green', 'fill-series-violet', 'fill-series-red'] %}
+	{% set swatches = ['bg-series-blue', 'bg-series-orange', 'bg-series-aqua', 'bg-series-yellow', 'bg-series-magenta', 'bg-series-green', 'bg-series-violet', 'bg-series-red'] %}
+	<svg data-controller="chart-tip" viewBox="0 0 600 190" class="w-full" role="img" aria-label="{{ label }}">
+		{% for line in chart.gridlines %}
+			<line x1="{{ chart.plot[0] }}" y1="{{ line.y }}" x2="{{ chart.plot[1] }}" y2="{{ line.y }}" class="stroke-outline-variant" stroke-opacity="{{ line.zero ? 1 : 0.3 }}" stroke-dasharray="{{ line.zero ? '' : '2 3' }}" stroke-width="{{ line.zero ? 1 : 0.6 }}"></line>
+			<text x="{{ chart.plot[0] - 5 }}" y="{{ line.y + 3 }}" text-anchor="end" font-size="8" class="fill-on-surface-variant">{{ line.label }}</text>
+		{% endfor %}
+		{% for year in chart.years %}
+			<line x1="{{ year.x }}" y1="{{ chart.plot[3] }}" x2="{{ year.x }}" y2="{{ chart.plot[3] + 4 }}" class="stroke-outline-variant" stroke-width="0.8"></line>
+			<text x="{{ year.x }}" y="{{ chart.plot[3] + 15 }}" text-anchor="middle" font-size="8" class="fill-on-surface-variant">{{ year.label }}</text>
+		{% endfor %}
+		{% for series in chart.series %}
+			{% set slot = loop.index0 % strokes|length %}
+			{% for points in series.lines %}
+				<polyline points="{{ points }}" fill="none" class="{{ strokes[slot] }}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"></polyline>
+			{% endfor %}
+			{% for point in series.points %}
+				<circle cx="{{ point.x }}" cy="{{ point.y }}" r="1.2" class="{{ fills[slot] }}"><title>{{ point.title }}</title></circle>
+			{% endfor %}
+		{% endfor %}
+	</svg>
+	{% if chart.series|length > 1 %}
+		<ul class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs text-on-surface-variant" aria-hidden="true">
+			{% for series in chart.series %}
+				<li class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full {{ swatches[loop.index0 % swatches|length] }}"></span>{{ series.name }}</li>
+			{% endfor %}
+		</ul>
+	{% endif %}
+{% endmacro %}

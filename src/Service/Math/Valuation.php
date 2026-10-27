@@ -434,6 +434,29 @@ final class Valuation
     }
 
     /**
+     * d log(equity value) / d power at a franchise power: the rate the power moves fair value, where it stands. At no
+     * franchise s L (1 - m); on a thin margin it rises toward 1 - m' as profit runs at e^p, and it falls to zero as the
+     * margin nears either end, where the power no longer moves profit.
+     *
+     * @param float $fadingShare      fadingProfitShare() at the firm's cap rate.
+     * @param float $leverage         d(equity return) / d(operating return), at least one.
+     * @param float $structuralMargin The margin the power shifts, in (0, 1).
+     */
+    public static function franchiseValueElasticity(float $fadingShare, float $leverage, float $structuralMargin, float $franchisePower): float
+    {
+        if ($structuralMargin <= 0.0 || $structuralMargin >= 1.0) {
+            return 0.0;
+        }
+        $leverage = max(1.0, $leverage);
+        $margin = FirmEconomics::franchiseMargin($structuralMargin, $franchisePower);
+        $operatingMultiple = self::franchiseValueMultiple($fadingShare, $margin / $structuralMargin);
+        $operatingSlope = $fadingShare * $margin * (1.0 - $margin) / $structuralMargin;
+
+        // Up, d log(1 + L (x - 1)) = L dx / (1 + L (x - 1)); down, d log(x^L) = L dx / x.
+        return $leverage * $operatingSlope / ($operatingMultiple >= 1.0 ? self::leveredValueMultiple($operatingMultiple, $leverage) : max(1e-12, $operatingMultiple));
+    }
+
+    /**
      * The return a dividend tax adds to a stock's required return over the founding rate's, on the after-tax CAPM
      * (Brennan 1970): holders price after tax, so with the taxable share w of them the stock must earn
      * w (t_d - t_g) y / (1 - w t_g) more on a dividend yield y, the gains tax at its accrual equivalent. The founding

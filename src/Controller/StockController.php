@@ -13,6 +13,7 @@ use App\Repository\CorporateReportRepository;
 use App\Repository\EtfRepository;
 use App\Repository\StockRepository;
 use App\Service\Macro\MacroStateProvider;
+use App\Service\Market\Chart\ChartEventMarkers;
 use App\Service\Market\Chart\ChartRange;
 use App\Service\Market\Chart\PriceBarAggregator;
 use App\Service\Market\Ticker\HistoryPruner;
@@ -151,7 +152,8 @@ class StockController extends AbstractController
             }
 
             // Buffered points are single ticks, so the bar has to be built here or every candle is a doji.
-            return $this->json($barAggregator->aggregate($results, count($results) / $entriesPerYear, $entriesPerYear, $targetBars, $minRowsPerBar));
+            return $this->json($barAggregator->aggregate($results, count($results) / $entriesPerYear, $entriesPerYear, $targetBars, $minRowsPerBar)
+                + ['range_years' => ChartRange::years($range)]);
         }
 
         $conn = $entityManager->getConnection();
@@ -246,14 +248,37 @@ class StockController extends AbstractController
             $rowsPerYear = min($rowsPerYear, HistoryPruner::THINNED_ROWS_PER_YEAR);
         }
 
-        // Aggregate rows into bars of equal simulated time, preserving price extremes.
+        // Aggregate rows into bars of equal simulated time, preserving price extremes. The range's own span rides
+        // along, so a chart whose history falls short of it can tell.
         return $this->json($barAggregator->aggregate(
             $stmt->iterateAssociative(),
             (float) $newestSimTime - (float) $oldestSimTime,
             $rowsPerYear,
             $targetBars,
             $minRowsPerBar,
-        ));
+        ) + ['range_years' => ChartRange::years($range)]);
+    }
+
+    /**
+     * The company stories a price chart pins to its line over a range, dated by age behind the newest history row as
+     * the history endpoint dates its bars. Funds and bonds have none.
+     */
+    #[Route('/api/chart-events', name: 'api_chart_events')]
+    public function chartEvents(Request $request, StockRepository $stocks, EntityManagerInterface $entityManager, ChartEventMarkers $markers): JsonResponse
+    {
+        $stock = $stocks->findOneByTicker((string) $request->query->get('ticker', ''));
+        if ($stock === null) {
+            return $this->json([]);
+        }
+
+        $newest = $entityManager->getConnection()->fetchOne('SELECT MAX(sim_time) FROM stock_history WHERE stock_id = :id', ['id' => $stock->getId()]);
+        if ($newest === null || $newest === false) {
+            return $this->json([]);
+        }
+        $newest = (float) $newest;
+        $from = ChartRange::simTimeFloor((string) $request->query->get('range', ChartRange::DEFAULT_RANGE), $newest);
+
+        return $this->json($markers->between($stock, $from, $newest));
     }
 
     /**

@@ -42,6 +42,63 @@ class StockEventRepository extends ServiceEntityRepository
     }
 
     /**
+     * A company's events of the given types stamped inside a span of simulated time, oldest first; a null start reaches
+     * back to the first. Rows from before events carried their simulation time have none and are left out.
+     *
+     * @param  list<string>     $types
+     * @return list<StockEvent>
+     */
+    public function findBetween(Stock $stock, ?float $from, float $to, array $types): array
+    {
+        if ($types === []) {
+            return [];
+        }
+
+        $query = $this->createQueryBuilder('e')
+            ->andWhere('e.stock = :stock')
+            ->andWhere('e.simTime IS NOT NULL AND e.simTime <= :to')
+            ->andWhere('e.eventType IN (:types)')
+            ->setParameter('stock', $stock)
+            ->setParameter('to', $to)
+            ->setParameter('types', $types)
+            ->orderBy('e.simTime', 'ASC')
+            ->addOrderBy('e.id', 'ASC');
+        if ($from !== null) {
+            $query->andWhere('e.simTime >= :from')->setParameter('from', $from);
+        }
+
+        return $query->getQuery()->getResult();
+    }
+
+    /**
+     * The newest events of the given types across a set of companies, newest first, each event's company loaded in the
+     * same query.
+     *
+     * @param  list<Stock>      $stocks
+     * @param  list<string>     $types
+     * @return list<StockEvent>
+     */
+    public function findLatestAmong(array $stocks, array $types, int $limit): array
+    {
+        if ($stocks === [] || $types === []) {
+            return [];
+        }
+
+        return $this->createQueryBuilder('e')
+            ->addSelect('s')
+            ->join('e.stock', 's')
+            ->andWhere('e.stock IN (:stocks)')
+            ->andWhere('e.eventType IN (:types)')
+            ->setParameter('stocks', $stocks)
+            ->setParameter('types', $types)
+            ->orderBy('e.recordedAt', 'DESC')
+            ->addOrderBy('e.id', 'DESC')
+            ->setMaxResults($limit)
+            ->getQuery()
+            ->getResult();
+    }
+
+    /**
      * The newest events across every company, newest first, optionally only those of the given types, with each
      * event's company loaded in the same query.
      *

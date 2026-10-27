@@ -11,6 +11,7 @@ use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Index\MarketIndex;
 use App\Service\Math\MacroConstants;
+use App\Service\View\MarketWrapBuilder;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
@@ -35,7 +36,7 @@ class HomeController extends AbstractController
      * @return Response Returns the rendered home page view with market data.
      */
     #[Route('/', name: 'app_home')]
-    public function index(StockRepository $stockRepository, EtfRepository $etfs, MacroStateProvider $macroStateProvider, PriceChangeFeed $priceChangeFeed): Response
+    public function index(StockRepository $stockRepository, EtfRepository $etfs, MacroStateProvider $macroStateProvider, PriceChangeFeed $priceChangeFeed, MarketWrapBuilder $wrap): Response
     {
         $stocks = $stockRepository->findAll();
         $macroState = $macroStateProvider->liveState();
@@ -62,6 +63,7 @@ class HomeController extends AbstractController
         return $this->render('home/index.html.twig', [
             'indices' => $this->indexTiles($etfs),
             'stocks'  => $marketData,
+            'wrap'    => $wrap->build($marketData),
             'macro'   => $macroState->toArray(),
             'cycleLabel' => $macroState->economicCycleLabel(),
             'inflationTarget' => MacroConstants::TARGET_INFLATION,
