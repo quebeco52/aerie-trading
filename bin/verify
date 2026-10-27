@@ -44,6 +44,13 @@ if (( ${#harness[@]} > 0 )); then
     for shared in var/harness/bootstrap.php var/harness/lib/*.php; do
         [[ " ${harness[*]} " == *" $shared "* ]] || harness+=("$shared")
     done
+    # A file a changed harness pulls in from another topic (require_once __DIR__ . '/../x/Y.php') is analysed too.
+    for file in "${harness[@]}"; do
+        while IFS= read -r relative; do
+            required=$(realpath -m --relative-to=. "$(dirname "$file")/$relative")
+            [[ -f $required && " ${harness[*]} " != *" $required "* ]] && harness+=("$required")
+        done < <(grep -oP "require(_once)?\s+__DIR__\s*\.\s*'\K[^']+(?=')" "$file")
+    done
     if out=$(bin/php-slot php vendor/bin/phpstan analyse --level 0 --memory-limit=2G --no-progress --error-format=raw "${harness[@]}" 2>&1); then
         echo "Harness: ${#harness[@]} files clean at PHPStan level 0"
     else

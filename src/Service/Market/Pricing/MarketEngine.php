@@ -70,7 +70,7 @@ class MarketEngine
         // What each source of variance supplies this step, and the idiosyncratic state left to the diffusion.
         $budget = VarianceBudget::forStep($ctx);
 
-        // Expected total return is the cost of equity the fair value is discounted at (CAPM on the 10Y,
+        // Expected total return is the cost of equity the fair value is discounted at (CAPM on equity's riskless rate,
         // DebtEngine::calculateHealth()), so a fairly priced name drifts at the rate it is valued at; the
         // dividend leaves the price on the ex-date.
         $finalDrift = $budget->jumpCompensatedDrift($ctx->liveCostOfEquity);

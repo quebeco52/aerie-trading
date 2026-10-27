@@ -128,6 +128,16 @@ final class ValuationHarnessTest extends BoardRun
         }
     }
 
+    /** MACRO_OUT rows also carry the discount-rate inputs fair value reads and the market factor's state. */
+    protected function macroRow(array $row, \App\DTO\MacroStateDTO $m): array
+    {
+        return $row + [
+            'y10' => $m->yield10y, 'credit' => $m->macroCreditSpread, 'tips' => $m->tipsBreakeven,
+            'mood' => $m->sentimentResidual(), 'mz_latent' => $m->marketZLatent, 'vol_ema' => $m->marketVolatilityEma,
+            'ebp' => $m->excessBondPremium, 'gap_ema' => $m->outputGapEma,
+        ];
+    }
+
     protected function onEnd(): void
     {
         $out = getenv('VAL_OUT');

@@ -404,4 +404,71 @@ class FixedIncomeTest extends TestCase
         $this->assertEqualsWithDelta(MacroConstants::NEUTRAL_MORTGAGE_RATE, FixedIncome::mortgageRate($neutralPolicyRate), 1e-15);
         $this->assertEqualsWithDelta(MacroConstants::NEUTRAL_MORTGAGE_RATE, FixedIncome::expectedMortgageRate($neutralPolicyRate), 1e-15);
     }
+
+    /** The expected rate path of the opening curve, with the slope and level shifted. */
+    private static function openingPath(float $slopeShift = 0.0, float $levelShift = 0.0): \Closure
+    {
+        $opening = new MacroStateDTO();
+
+        return static fn(float $tau): float => FixedIncome::calculateSvenssonYield(
+            level: $opening->nsLevel + $levelShift,
+            slope: $opening->nsBeta1 + $slopeShift,
+            curvature1: $opening->nsCurvature,
+            curvature2: 0.0,
+            tau: $tau,
+            lambda1: MacroConstants::SVENSSON_LAMBDA_1,
+            lambda2: MacroConstants::SVENSSON_LAMBDA_2,
+            slopeLambda: MacroConstants::SVENSSON_SLOPE_LAMBDA,
+        );
+    }
+
+    /** On a flat curve every flow is discounted at the one yield, so the perpetuity's equivalent is that yield. */
+    public function testAPerpetuityOnAFlatCurveIsWorthItsOwnYield(): void
+    {
+        foreach ([0.01, 0.045, 0.08] as $yield) {
+            foreach ([0.0, 0.005, 0.03] as $spread) {
+                $this->assertEqualsWithDelta($yield, FixedIncome::perpetuityEquivalentYield(static fn(float $tau): float => $yield, $spread), 1e-12);
+            }
+        }
+    }
+
+    /** The sampled nodes stand in for the whole curve: within a basis point of a fine integral of every flow. */
+    public function testTheNodesValueThePerpetuityAsAFineIntegralDoes(): void
+    {
+        foreach ([self::openingPath(), self::openingPath(slopeShift: 0.03), self::openingPath(slopeShift: -0.02)] as $path) {
+            foreach ([0.0, 0.005, 0.03] as $spread) {
+                $value = 0.0;
+                $step = 0.01;
+                for ($tau = $step / 2.0; $tau < 600.0; $tau += $step) {
+                    $value += exp(-($path($tau) + $spread) * $tau) * $step;
+                }
+
+                $this->assertEqualsWithDelta((1.0 / $value) - $spread, FixedIncome::perpetuityEquivalentYield($path, $spread), 0.0001);
+            }
+        }
+    }
+
+    /**
+     * A ten-year move the curve expects to reverse (the slope factor, which decays with maturity) reaches only the
+     * part of a perpetuity's life it spans; a lasting move (the level) reaches all of it.
+     */
+    public function testARiseTheCurveExpectsToReverseMovesThePerpetuityRateLessThanTheTenYear(): void
+    {
+        $spread = 0.005;
+        $base = FixedIncome::perpetuityEquivalentYield(self::openingPath(), $spread);
+        $slopeLoading10y = (1.0 - exp(-10.0 * MacroConstants::SVENSSON_SLOPE_LAMBDA)) / (10.0 * MacroConstants::SVENSSON_SLOPE_LAMBDA);
+        $reversing = self::openingPath(slopeShift: 0.01 / $slopeLoading10y);
+
+        $this->assertEqualsWithDelta(0.01, $reversing(10.0) - self::openingPath()(10.0), 1e-12);
+        $rise = FixedIncome::perpetuityEquivalentYield($reversing, $spread) - $base;
+        $this->assertGreaterThan(0.0, $rise);
+        $this->assertLessThan(0.008, $rise);
+        $this->assertEqualsWithDelta(0.01, FixedIncome::perpetuityEquivalentYield(self::openingPath(levelShift: 0.01), $spread) - $base, 0.0001);
+    }
+
+    public function testAPerpetuityThatOutgrowsItsDiscountHasNoValue(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        FixedIncome::perpetuityEquivalentYield(static fn(float $tau): float => -0.01, 0.005);
+    }
 }

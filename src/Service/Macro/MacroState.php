@@ -182,6 +182,7 @@ class MacroState
     public float $termPremium10yEma;
     public float $riskNeutral10y;
     public float $riskNeutral10yEma;
+    public float $equityRiskFreeRate;
     public float $termPremiumShock;
     public float $expectedPathShock;
     public float $termPremiumRegime;

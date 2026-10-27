@@ -1288,7 +1288,7 @@ class MonetaryPolicySubsystemTest extends TestCase
             'structural_10y' => $structural10y,
             'yield_2y' => $state->policyRate, 'yield_5y' => $structural10y,
             'yield_10y' => $structural10y, 'yield_30y' => $structural10y,
-            'risk_neutral_10y' => $structural10y, 'term_premium_10y' => 0.0,
+            'risk_neutral_10y' => $structural10y, 'term_premium_10y' => 0.0, 'equity_risk_free_rate' => $structural10y,
         ];
     }
 

@@ -317,7 +317,8 @@ class MacroStateHydrationTest extends TestCase
         // Openings are declared to the basis point.
         foreach (['yield_2y' => 'yield2y', 'yield_5y' => 'yield5y', 'yield_10y' => 'yield10y', 'yield_30y' => 'yield30y',
             'level' => 'nsLevel', 'beta1' => 'nsBeta1', 'curvature' => 'nsCurvature', 'curvature2' => 'nsCurvature2',
-            'base_term_premium' => 'nsBaseTermPremium', 'term_premium_10y' => 'termPremium10y', 'risk_neutral_10y' => 'riskNeutral10y'] as $key => $field) {
+            'base_term_premium' => 'nsBaseTermPremium', 'term_premium_10y' => 'termPremium10y', 'risk_neutral_10y' => 'riskNeutral10y',
+            'equity_risk_free_rate' => 'equityRiskFreeRate'] as $key => $field) {
             $this->assertEqualsWithDelta($curve[$key], $state->$field, 0.00006, $field);
         }
     }

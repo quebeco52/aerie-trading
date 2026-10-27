@@ -106,3 +106,56 @@ seed. 12 fresh seeds per arm, unpaired: mean gap +0.15 pp (t 0.6), board growth 
 belong on replay pairs; macro-level gates need ~16 unpaired seeds per arm, and growth is read as a log-trend slope, not
 first year to last. The "paired" t of every macro-dependent board quantity in this file (P/E, cap, defaults, deals,
 growth) is a 4-seed unpaired comparison.
+
+## 2026-10-27: crashes without an earnings fall (live read item 3), HEAD 98b7d96a, 8 seeds x 20 y
+
+    bin/harness-batch var/harness/valuation/run.sh 1-6 crash && bin/harness-batch var/harness/valuation/run.sh 7-8 crash
+    python3 var/harness/valuation/crash.py crash 1-8 > crash_8s20y.out   # also f1 1-4, c1 1-4 (no macro rows)
+
+`crash` arm = working tree with MACRO_OUT/BOARD_NI and the macro rows extended (y10, credit, tips, mood, mz_latent,
+vol_ema, ebp). Board = float-cap weights at the quarter start; channels are the Probe price channels; d g = index log
+price return - d log F per share; `idio` carries the expected-return drift (+0.036 a quarter unconditionally, with jS
+-0.014 a quarter as the jumps' mean). Drawdowns >= 25% on the index, year 1 skipped.
+
+Frequency: >= 20% 14, >= 25% 6, >= 30% 4 episodes in 152 seed-years; worst per 19-y run median -26% (-20..-35%). Board
+log(P/F) sd 0.154, quarterly AR(1) 0.76 (half-life 0.63 y).
+
+Means over the 6 crash-arm episodes (f1: 4, c1: 6 episodes agree in sign and size):
+- build-up (neutral g to peak, 3.2 q): index +0.15, d log F -0.06 (y10 +0.7 pp; F about -0.12 against its trend), d g
+  +0.20 = market (mkt+jS) +0.09 + drift above F + F falling, pull -0.07; board NI +6%.
+- fall (peak to trough, 6.5 q): index -0.39, d log F +0.08 (y10 -0.6 pp), d g -0.49 = mkt -0.24, jS -0.31 (-0.22 beyond
+  the jumps' mean), drift +0.22 (normal), pull -0.01; board NI -12% (-37..+9%); gap -1.5 pp; vol +0.12.
+- rebound (trough + 4 q): index +0.36 = d log F +0.17 (NI +12%) + d g +0.17 (mkt +0.17, selected by the trough; pull
+  +0.06); jS normal.
+
+What the common component loads on (quarterly, 584 board-quarters): market channel vs d(y10, credit, gap, vol, erp,
+mood): R2 0.42, all from vol (corr -0.64, the leverage effect it causes); corr with d y10 -0.02, credit 0.00, gap +0.07,
+erp -0.01, mood 0.00. Board d log F: y10 -17.1, erp -14.8 per unit, R2 0.97, corr with the market channel ~0. Board d g:
+y10 +15.7, erp +15.4, R2 0.67, corr(d g, d y10) +0.57. Share of quarterly board d g variance: market channel 0.56,
+-d log F 0.43. Annual index return vs d y10: corr -0.05. Annual d y10 AR(1) -0.24.
+
+Rebound reliability without look-ahead (next 4 q index log return; unconditional +0.075, 70% > 0): board g >= 0.20 below
+its seed median +0.205, 91% > 0 (n 69; c1 +0.267, 100%, n 26); from the quarter the index first closes 25% below its
+peak +0.32, 6 of 6 > 0 (c1 +0.14, 4 of 6). Slope of next-4q return on board g -0.40, R2 0.22 (c1 -0.60, 0.31).
+
+Reading: the crashes are round trips of the board gap. Market noise (diffusion and clustered market jumps) has no macro
+counterpart and never reaches fair value (FairValue discounts at CAPM on y10 with the habit ERP of the output-gap EMA),
+so every market fall opens a gap that the 1-y pull closes; fair value's own discount-rate swings (y10, ERP), which the
+price ignores, widen the build-up (rates up, F down) and the trough (rates down, F up). Earnings dip mildly. Real
+references (US): 1-y R2 of returns on D/P 0.04-0.09 (Cochrane); ~1 in 4 drawdowns of 30%+ without a recession (Man
+Group), and those are short (~3 months) and shallow (median -22%, CFA Institute); 1987 fell 34% with forward EPS +6%
+on a P/E cut from 14.8 to 10.5 (Yardeni); average 1-y return from a 25% fall +19% (RBC), after drawdowns > 20% +17.6%
+(Gilbert) vs ~+9-10% unconditional, with 1929, 1973-74, 2001 and 2008 lower a year later.
+
+## Fix B: equity's riskless rate off the expected path (10-27, 8 paired seeds x 20 y, b1 vs crash)
+
+Cost of equity struck on the 10y term premium plus the expected rate path read at an equity's ~18-year duration, in
+place of the spot 10y. Macro-only probe (4 seeds x 40 y, a market-beta perpetuity): d log PV per pp of 10y -19.9% ->
+-13.7%, level -1.4% (the full curve would give -12.0% but -8.5% on the level, the long-end term premium counted on
+top of a premium measured over the 10y). Board, paired:
+- quarterly d log F on d y10 -17.1 -> -14.2; corr(d log F, d y10) -0.90 -> -0.75; sd quarterly d log F .072 -> .065;
+- sd quarterly d g .104 -> .100; corr(d g, d y10) +.57 -> +.46;
+- next-4q return on board g: slope -0.40 -> -0.39, R2 0.22 -> 0.20; drawdowns >= 25%: 6 -> 5;
+- median CoE 8.13% -> 8.22%; median P/E 19.05 -> 18.96 (t -0.7); vol, defaults, B-or-worse, E/P slope, momentum n.s.;
+  cap y20 -5.5% (t -2.0).
+A modest gain: the market channel (fix A) carries the rest.

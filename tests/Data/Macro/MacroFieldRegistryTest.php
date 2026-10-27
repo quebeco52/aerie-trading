@@ -39,6 +39,7 @@ class MacroFieldRegistryTest extends TestCase
         'marketZ' => 'Redrawn every tick, so a quarterly sample is one arbitrary tick of noise.',
         'marketZLatent' => 'Per-tick latent behind marketZ; same objection.',
         'marketJumpMultiplier' => 'Per-tick jump scale; marketVolatility carries the quarter-scale reading.',
+        'equityRiskFreeRate' => 'Recomputed from the recorded curve every tick (its level, slope, curvature and the 10y term premium).',
 
         'metalsChi' => 'Latent OU state behind industrialMetalsIndex, which is recorded.',
         'retailCreditFactor' => 'Latent OU state behind retailDefaultRate, which is recorded.',

@@ -17,6 +17,48 @@ final class FixedIncome
     /** Price convergence tolerance, in currency units on a 100-face bond (0.01 = one cent). */
     public const YTM_PRICE_TOLERANCE = 1.0e-9;
 
+    // --- Perpetuity-Equivalent Yield ---
+    /**
+     * Maturities (years) at which perpetuityEquivalentYield() reads the curve: dense where curves bend, sparse where
+     * they flatten. Within 1bp of a yearly grid on the District's curves.
+     */
+    public const PERPETUITY_CURVE_NODES = [1.0, 2.0, 3.0, 5.0, 7.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0, 75.0, 100.0];
+
+    /**
+     * The flat yield at which a perpetuity is worth what it is worth discounted along a zero curve. The flow at t
+     * weighs e^{-(z(t) + spread) t}, so the spread (the discount rate's excess over the flow's growth, past the
+     * riskless rate) sets how far out the curve is read. Forwards are flat between the nodes and past the last, so a
+     * flat curve returns its own yield.
+     *
+     * @param callable(float): float $zeroYield Continuously compounded zero yield at a maturity in years.
+     * @param float                  $spread    The discount rate's spread over the flow's growth, past the riskless
+     *                                          rate.
+     *
+     * @throws \InvalidArgumentException When the far forward plus the spread is not positive: the flows then outgrow
+     *                                   their discount forever and have no finite value.
+     */
+    public static function perpetuityEquivalentYield(callable $zeroYield, float $spread): float
+    {
+        $value = 0.0;
+        $previousTime = 0.0;
+        $previousLog = 0.0;
+        $segmentRate = 0.0;
+        foreach (self::PERPETUITY_CURVE_NODES as $time) {
+            $log = -($zeroYield($time) + $spread) * $time;
+            $segmentRate = ($previousLog - $log) / ($time - $previousTime);
+            $value += abs($segmentRate) > 1.0e-12
+                ? (exp($previousLog) - exp($log)) / $segmentRate
+                : exp($previousLog) * ($time - $previousTime);
+            $previousTime = $time;
+            $previousLog = $log;
+        }
+        if ($segmentRate <= 0.0) {
+            throw new \InvalidArgumentException('The far forward rate plus the spread must be positive for a perpetuity to have a value.');
+        }
+
+        return (1.0 / ($value + (exp($previousLog) / $segmentRate))) - $spread;
+    }
+
     /**
      * A year's interest on a book of debt, its floating share at the floating rate and the rest at the fixed coupon.
      */

@@ -156,7 +156,7 @@ class DivestitureEngine
      */
     public static function businessCostOfCapital(Stock $stock, MacroStateDTO $macroState): float
     {
-        return Valuation::calculateCAPM($macroState->yield10y, (float) $stock->getBeta(), $macroState->equityRiskPremium);
+        return Valuation::calculateCAPM($macroState->equityRiskFreeRate, (float) $stock->getBeta(), $macroState->equityRiskPremium);
     }
 
     /**

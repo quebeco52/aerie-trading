@@ -216,6 +216,11 @@ readonly class MacroStateDTO
         public float $termPremium10yEma = 0.0115,
         public float $riskNeutral10y = 0.0347,
         public float $riskNeutral10yEma = 0.0347,
+        /**
+         * The riskless rate equity is discounted at: the ten-year's term premium plus the expected rate path read at
+         * an equity's duration (MonetaryPolicySubsystem::calculateYieldCurve()).
+         */
+        public float $equityRiskFreeRate = 0.0464,
         public float $termPremiumShock = 0.0,
         public float $expectedPathShock = 0.0,
         public float $termPremiumRegime = MacroConstants::NS_BASE_TERM_PREMIUM,

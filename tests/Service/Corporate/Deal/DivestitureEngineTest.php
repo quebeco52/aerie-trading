@@ -273,7 +273,7 @@ class DivestitureEngineTest extends TestCase
         $stock->setLongRunReturn('0.065');
         $stock->setTotalNetIncome('500000000');
         $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
-        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskFreeRate: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
 
         $this->assertEqualsWithDelta(0.06, DivestitureEngine::businessCostOfCapital($stock, $macro), 1e-12);
         // The firm's 12% WACC would put it 5.5 points under its hurdle, past the dying line.
@@ -290,7 +290,7 @@ class DivestitureEngineTest extends TestCase
         $stock->setLongRunReturn('0.085');
         $stock->setTotalNetIncome('-300000000');
         $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
-        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskFreeRate: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
 
         $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
         $this->assertSame(8_000_000_000.0, $stock->getNetPpe());
@@ -306,7 +306,7 @@ class DivestitureEngineTest extends TestCase
         $stock->setLongRunReturn('0.085');
         $stock->setLifecycleStage(\App\Data\Company\LifecycleStage::ShakeOut);
         $this->primeDistressedDivestiture(operatingBase: 10_000_000_000.0, fraction: 0.25);
-        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
+        $macro = new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, yield10y: 0.04, equityRiskFreeRate: 0.04, equityRiskPremium: 0.05, nominalGdpIndex: 1.0);
 
         $this->assertNull($this->engine->evaluateCorporateDivestiture($stock, $macro, 1.0));
         $this->assertSame(8_000_000_000.0, $stock->getNetPpe());

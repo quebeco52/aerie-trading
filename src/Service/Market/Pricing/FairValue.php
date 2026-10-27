@@ -102,8 +102,9 @@ final class FairValue
      * @param float $baselineIndustryPE  The standard P/E multiple for this industry.
      * @param float $revenuePerShare     The total revenue per share.
      * @param string $businessModel      The type of business (e.g., 'tech', 'bank', 'retail').
-     * @param float $liveCostOfEquity    The Cost of Equity (CAPM on the 10Y), the hurdle every equity leg is discounted
-     *                                   at.
+     * @param float $liveCostOfEquity    The Cost of Equity (CAPM on equity's riskless rate), the hurdle every equity
+     *                                   leg
+     *                                   is discounted at.
      * @param float $netDebtPerShare     The net debt per share.
      * @param float $secularGrowth       The long-term growth rate of the sector/economy.
      * @param float $baselineRoic        The historical average ROIC.

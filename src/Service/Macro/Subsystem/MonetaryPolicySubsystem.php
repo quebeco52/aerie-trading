@@ -102,6 +102,13 @@ class MonetaryPolicySubsystem
      */
     public const EXPECTED_PATH_SHOCK_CAP = 0.04;
 
+    // --- Equity Riskless Rate ---
+    /**
+     * Spread of a market-beta equity's discount rate over its nominal growth, past the riskless rate (a ~4.5% premium
+     * less ~4% nominal trend growth): reads the expected rate path at an equity's ~18-year duration.
+     */
+    public const EQUITY_DURATION_SPREAD = 0.005;
+
     // --- Central Bank Balance Sheet (QE & QT) ---
     /** Minimum reinvestment hold period (years) after QE ends before QT runoff can begin (Bernanke 2020). */
     public const BALANCE_SHEET_REINVESTMENT_HOLD_YEARS = 1.5;
@@ -807,8 +814,9 @@ class MonetaryPolicySubsystem
      *     yield_10y: float,
      *     yield_30y: float,
      *     risk_neutral_10y: float,
-     *     term_premium_10y: float
-     * } Sovereign yield curve tenors, NSS factors, risk-neutral rate, and term premium.
+     *     term_premium_10y: float,
+     *     equity_risk_free_rate: float
+     * } Sovereign yield curve tenors, NSS factors, risk-neutral rate, term premium, and equity's riskless rate.
      */
     public function calculateYieldCurve(MacroState $state, float $targetInflation, float $naturalRate): array
     {
@@ -858,6 +866,21 @@ class MonetaryPolicySubsystem
         $riskNeutral10y = $level + ($nsBeta1 * $durationFactor10y) + ($nsBeta2 * $factor2_10y);
         $termPremium10y = $yield10y - $riskNeutral10y;
 
+        // Equity's riskless rate: the ten-year's term premium (the duration risk an equity premium is measured over)
+        // plus the short rates the curve expects over an equity's life, so a rise the market expects to reverse moves
+        // a perpetuity's value less than a lasting one.
+        $expectedPath = static fn(float $tau): float => FixedIncome::calculateSvenssonYield(
+            level: $level,
+            slope: $nsBeta1,
+            curvature1: $nsBeta2,
+            curvature2: 0.0,
+            tau: $tau,
+            lambda1: MacroConstants::SVENSSON_LAMBDA_1,
+            lambda2: MacroConstants::SVENSSON_LAMBDA_2,
+            slopeLambda: MacroConstants::SVENSSON_SLOPE_LAMBDA,
+        );
+        $equityRiskFreeRate = FixedIncome::perpetuityEquivalentYield($expectedPath, self::EQUITY_DURATION_SPREAD) + $termPremium10y;
+
         $structural10y = $this->calculateSvenssonTenor(10.0, $level, $nsBeta1, $nsBeta2, 0.0, $state, $totalBaseTermPremium, $longEndPremium);
 
         return [
@@ -874,6 +897,7 @@ class MonetaryPolicySubsystem
             'yield_30y' => $yield30y,
             'risk_neutral_10y' => $riskNeutral10y,
             'term_premium_10y' => $termPremium10y,
+            'equity_risk_free_rate' => $equityRiskFreeRate,
         ];
     }
 
@@ -912,6 +936,7 @@ class MonetaryPolicySubsystem
 
         $state->termPremium10y = $yieldData['term_premium_10y'];
         $state->riskNeutral10y = $yieldData['risk_neutral_10y'];
+        $state->equityRiskFreeRate = $yieldData['equity_risk_free_rate'];
 
         // The slope against the short rate the market expects, as the curve itself is built on: a rounded decision
         // would step the slope, and the inversion clock with it, on meeting days.

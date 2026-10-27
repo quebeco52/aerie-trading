@@ -39,3 +39,12 @@ g = log(P/F), its persistence and its attribution to price channels.
   (board gap down >= 3 pp) with peak-to-trough NI and trough lag, growth, beat rate (revenue vs expected), board NI vs
   price lead-lag.
 - Runtime ~30 s per seed-decade with the probe.
+- `crash` arm = working tree with MACRO_OUT (runs/crash-<seed>.macro.jsonl, extended in ValuationHarnessTest::macroRow
+  with y10, credit, tips, mood, mz_latent, vol_ema, ebp) and BOARD_NI. `crash.py <arm> <seeds>` (DD=0.25): index
+  drawdowns with the build-up (neutral board g to peak), fall and rebound decomposed into d log F, d g and the Probe
+  channels, board NI and the macro deltas; the quarterly loading of the market channel, d log F and d g on macro
+  changes; next-4q returns conditional on board g, on the first 25% close and from the trough. Runs on any arm's
+  snapshots (macro columns only with the crash arm).
+- `b1` arm = the crash arm's set-up on the working tree with fix B (CAPM on MacroStateDTO::equityRiskFreeRate, the 10y
+  term premium plus the expected rate path at an equity's duration). Base = `crash` runs (98b7d96a); arms pair on the
+  macro. `crash.py b1 1-8` (crash_b1_8s.out) and `d1.py 1-8 crash b1`.
