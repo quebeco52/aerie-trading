@@ -48,9 +48,11 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 
 ## Measuring
 
-- **Pair the arms.** Same seeds in every arm: `mt_srand($seed)` before each arm and `MathUtility::ownStream($seed)` for
-  politics. Report the paired difference with its standard error. Over a long macro run the arms drift apart on the
-  same seed: a 40-year sweep had sd(difference) 1.29x sd(level), so pairing buys no seeds there; size n as if unpaired.
+- **Pair the arms.** Same seeds in every arm: `SEED` seeds the firms, and the bootstrap derives `MACRO_SEED` and
+  `POLITICS_SEED` (the economy's and the Diet's own streams) from it. Report the paired difference with its standard
+  error. Arms on one seed now meet the same cycle (output gap sd(difference) 0.01pp over 10 years, against 1.65pp
+  unpaired), so pairing holds over a long live macro. A `BASE` tree from before the split economy stream does not
+  pair; build it from a later commit. Delete `var/harness/cache/test` after any change to `config/` or a constructor.
 - **Name 1-3 target quantities before you run**, from the question you were given, and judge only those. Extra columns
   are context: of 81 quantities at |t| >= 2, about 4 pass by chance.
 - **Seeds sized to the question.** A display or news rule (how often a headline fires) gets one 3-seed run. A

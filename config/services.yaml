@@ -69,5 +69,18 @@ services:
         arguments:
             $mathUtility: '@app.politics_draws'
 
+    # The economy draws from a generator of its own too, so a change to how firms draw leaves the economy's path where
+    # it was and paired harness arms meet the same cycle. MACRO_SEED pins it; unset, it is seeded from the system's
+    # entropy.
+    app.macro_draws:
+        class: App\Service\Math\MathUtility
+        factory: ['App\Service\Math\MathUtility', 'ownStream']
+        arguments: ['%env(default::int:MACRO_SEED)%']
+
+    App\Service\Macro\:
+        resource: '../src/Service/Macro/'
+        bind:
+            App\Service\Math\MathUtility: '@app.macro_draws'
+
     # add more service definitions when explicit configuration is needed
     # please note that last definitions always *replace* previous ones

@@ -68,7 +68,8 @@ one seed with the probe on and off must give the same `OUT` record.
 ### Environment
 
 **Core**
-- `YEARS` (1), `TPY` (360), `SEED` (1).
+- `YEARS` (1), `TPY` (360), `SEED` (1). `SEED` seeds the firms' shared stream; `MACRO_SEED` and `POLITICS_SEED`, the
+  economy's and the Diet's own streams (`config/services.yaml`), are derived from it unless set.
 - `OUT=<jsonl>`: one record per run. It holds deaths, reorganisations, payment defaults, and each firm's quarter rows,
   final price and volatility. It also keeps the treasury's distress lines from the event text. A NaN in the record
   is written as 0, and the record is flagged `json_error`.
@@ -95,7 +96,7 @@ one seed with the probe on and off must give the same `OUT` record.
 ### Gotchas
 
 - The container is compiled once into `var/harness/cache[-<basename of BASE>]/test`, with debug off, and is never
-  refreshed. Delete it after a constructor or service change in `src/`.
+  refreshed. Delete it after a constructor or service change in `src/` or any change to `config/`.
 - `BASE=<tree>` runs another tree's `src` (a `git archive` copy with its own copied `vendor`). The harness and this
   library come from the path given to phpunit.
 
@@ -114,4 +115,8 @@ one seed with the probe on and off must give the same `OUT` record.
 - `fmt(p)` prints a `paired()` result as `+0.012 (0.004) t 3.0 n 16`.
 - `python3 var/harness/lib/stats.py` runs its self-check.
 
-Over a long live macro, arms on one seed drift apart; size n as if unpaired there (`.claude/agents/harness-runner.md`).
+The economy draws from its own stream, so arms on one seed meet the same cycle: two 10-year runs on one `MACRO_SEED`
+with entirely different firm draws differed by 0.01pp sd in the output gap, against 1.65pp on another seed. What
+still differs comes only through what the economy reads from the board (household wealth, the reserve fund). Both
+arms need a tree from after the stream was split; an older `BASE` tree draws its economy from the shared stream and
+does not pair.

@@ -79,6 +79,12 @@ if (getenv('POLITICS_SEED') === false) {
     putenv("POLITICS_SEED={$politicsSeed}");
     $_ENV['POLITICS_SEED'] = $_SERVER['POLITICS_SEED'] = $politicsSeed;
 }
+// The economy has its own stream as well (app.macro_draws), derived the same way, so arms on one SEED meet one cycle.
+if (getenv('MACRO_SEED') === false) {
+    $macroSeed = (string) crc32('macro:' . (getenv('SEED') ?: '1'));
+    putenv("MACRO_SEED={$macroSeed}");
+    $_ENV['MACRO_SEED'] = $_SERVER['MACRO_SEED'] = $macroSeed;
+}
 
 define('HARNESS_PROJECT', getenv('BASE') ?: '/home/quebeco/Projects/Code/Private/aerie-trading');
 require HARNESS_PROJECT . '/tests/bootstrap.php';
