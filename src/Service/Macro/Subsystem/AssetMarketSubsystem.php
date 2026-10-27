@@ -10,6 +10,7 @@ use App\Service\Macro\Subsystem\Aggregate\ConsumerPrices;
 use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\Aggregate\NationalAccounts;
 use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -533,6 +534,13 @@ class AssetMarketSubsystem
     public const MARKET_FACTOR_TAIL_DF = 5;
     /** Share of market factor variance carried by the slow regime leg; kept small so beta stays horizon-stable. */
     public const MARKET_FACTOR_REGIME_VARIANCE_SHARE = 0.15;
+
+    // --- Equity Valuation Shift ---
+    /**
+     * Half-life (years) of the repricing the market factor puts on equity value: the discount-rate news it carries
+     * fades as valuation ratios revert (log dividend yields persist ~0.87-0.94 a year, a 5-11 year half-life).
+     */
+    public const EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS = 5.0;
     /**
      * Mean variance jump on a market-wide crash (Duffie, Pan & Singleton 2000 SVCJ): a crash lifts vol from the 15%
      * anchor to ~16%; at four arrivals a year the jumps fund about a fifth of the long-run variance, leaving the
@@ -804,6 +812,12 @@ class AssetMarketSubsystem
         return (MacroConstants::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / self::MACRO_VOL_KAPPA;
     }
 
+    /** Share of the equity valuation shift that fades each year (EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS). */
+    public static function equityValuationShiftFade(): float
+    {
+        return M_LN2 / self::EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS;
+    }
+
     /**
      * The systemic market factor and the market-wide jump: the one driver every equity price shares.
      *
@@ -834,6 +848,21 @@ class AssetMarketSubsystem
             dt: $dt,
         );
         $state->marketJumpMultiplier = $systemicJump['price_multiplier'];
+
+        // The market factor carries no news of cash flows, so by the present-value identity its moves are news of the
+        // discount rate: equity value is repriced by the factor's unexpected log return, at the market vol known before
+        // the shock as prices load it, and the repricing fades as that discount rate returns to normal.
+        $expectedJumpLogReturn = MacroConstants::SYSTEMIC_JUMP_INTENSITY * $dt * StochasticProcesses::kouTruncatedMean(
+            MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
+            MacroConstants::SYSTEMIC_JUMP_ETA_UP,
+            MacroConstants::SYSTEMIC_JUMP_ETA_DOWN,
+            FinancialConstants::MAX_JUMP_LOG_RETURN,
+            abs(FinancialConstants::MIN_JUMP_LOG_RETURN),
+        );
+        $marketLogReturnInnovation = ($state->marketVolatility * sqrt($dt) * $state->marketZ)
+            + (log($state->marketJumpMultiplier) - $expectedJumpLogReturn);
+        $state->equityValuationShift = ($state->equityValuationShift * exp(-self::equityValuationShiftFade() * $dt))
+            + $marketLogReturnInnovation;
 
         return ['returnInnovation' => $tailShock, 'varianceJump' => $systemicJump['var_jump']];
     }

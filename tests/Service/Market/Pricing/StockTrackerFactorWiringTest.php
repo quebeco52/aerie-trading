@@ -61,6 +61,7 @@ final class StockTrackerFactorWiringTest extends TestCase
                     'next_volatility' => 0.20,
                     'analyst_targets' => [],
                     'perceived_fair_value' => 100.0,
+                    'market_repricing' => 1.0,
                 ];
             },
         );

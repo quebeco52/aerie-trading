@@ -426,6 +426,65 @@ class MarketEngineTest extends TestCase
         $this->assertSame($value(-0.03), $value(0.03));
     }
 
+    private function repricedContext(float $shift, float $beta, float $price = 40.0): MarketPricingContext
+    {
+        return new MarketPricingContext(
+            currentPrice: $price,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
+            beta: $beta,
+            macroState: new MacroStateDTO(equityValuationShift: $shift),
+            bookValuePerShare: 30.0,
+            currentRoic: 0.12,
+            trailingReturn: 0.12,
+            revenuePerShare: 40.0,
+            businessModel: 'tech',
+            liveCostOfEquity: 0.09,
+        );
+    }
+
+    /**
+     * The market factor's repricing reaches fair value and every analyst target by the name's beta, as the factor
+     * reaches its price, so a market move opens no gap for the pull to close.
+     */
+    public function testAMarketRepricingReachesFairValueByBeta(): void
+    {
+        foreach ([1.5, 0.6, -0.4] as $beta) {
+            $calm = $this->engine->strikeFairValue($this->repricedContext(0.0, $beta));
+            $fallen = $this->engine->strikeFairValue($this->repricedContext(-0.3, $beta));
+
+            $this->assertEqualsWithDelta(exp(-0.3 * $beta), $fallen['perceived_fair_value'] / $calm['perceived_fair_value'], 1e-12);
+            foreach ($calm['analyst_targets'] as $analyst => $target) {
+                $this->assertEqualsWithDelta(exp(-0.3 * $beta), $fallen['analyst_targets'][$analyst] / $target, 1e-12, $analyst);
+            }
+        }
+    }
+
+    /**
+     * While the repricing fades, fair value climbs back by beta times the share given back each year, and a fairly
+     * priced name's expected return rises by the same, so price and value climb back together.
+     */
+    public function testTheExpectedReturnRisesAsTheRepricingFades(): void
+    {
+        $beta = 1.5;
+        $pullWeight = 1.0;
+        $logStep = function (float $shift) use ($beta, &$pullWeight): float {
+            $fair = $this->engine->strikeFairValue($this->repricedContext($shift, $beta))['perceived_fair_value'];
+            $step = $this->engine->calculateNextPrice($this->repricedContext($shift, $beta, $fair));
+            $pullWeight = exp(-$step['dynamic_reversion'] / 252.0);
+
+            return log($step['price'] / $fair);
+        };
+
+        $fadeReturn = (new MacroStateDTO(equityValuationShift: -0.3))->equityValuationShiftReturn();
+        $this->assertGreaterThan(0.0, $fadeReturn);
+        $difference = $logStep(-0.3) - $logStep(0.0);
+        // The step blends its log move toward fair value, so a drift reaches the price scaled by the pull's weight.
+        $this->assertEqualsWithDelta($beta * $fadeReturn / 252.0 * $pullWeight, $difference, 1e-9);
+    }
+
     private function incomeContext(float $quarterlyDividend, float $targetPayout, float $speed, string $businessModel = 'none'): MarketPricingContext
     {
         return new MarketPricingContext(

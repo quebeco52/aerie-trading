@@ -101,7 +101,7 @@ class StockTrackerTest extends TestCase
             'shock' => null, // No market shock
             'next_volatility' => 0.21,
             'analyst_targets' => [],
-            'perceived_fair_value' => 100.0,
+            'perceived_fair_value' => 100.0, 'market_repricing' => 1.0,
         ]);
 
         $this->earningsEngineMock->method('calculate')->willReturn(null); // No earnings report
@@ -141,7 +141,7 @@ class StockTrackerTest extends TestCase
             'shock' => -10.0, // Simulate a 10% drop shock
             'next_volatility' => 0.50,
             'analyst_targets' => [],
-            'perceived_fair_value' => 100.0,
+            'perceived_fair_value' => 100.0, 'market_repricing' => 1.0,
         ]);
 
         $this->earningsEngineMock->method('calculate')->willReturn(null);
@@ -177,28 +177,28 @@ class StockTrackerTest extends TestCase
     // --- Post-Report Fair Value ---
 
     /**
-     * @return array{0: array<string, mixed>, 1: int} The tick's update row, and how many times fair value was
-     *                                                re-struck.
+     * @return array{0: array<string, mixed>, 1: int, 2: Stock} The tick's update row, how many times fair value was
+     *                                                          re-struck, and the stock ticked.
      */
-    private function tickWithReport(?array $report): array
+    private function tickWithReport(?array $report, float $marketRepricing = 1.0): array
     {
         $stock = $this->createDummyStock();
         $this->marketEngineMock->method('calculateNextPrice')->willReturn([
             'price' => 100.0, 'shock' => null, 'next_volatility' => 0.20,
-            'analyst_targets' => ['growth_analyst' => 100.0], 'perceived_fair_value' => 100.0,
+            'analyst_targets' => ['growth_analyst' => 100.0], 'perceived_fair_value' => 100.0, 'market_repricing' => $marketRepricing,
         ]);
         $strikes = 0;
         $this->marketEngineMock->method('strikeFairValue')->willReturnCallback(function () use (&$strikes): array {
             $strikes++;
 
-            return ['perceived_fair_value' => 130.0, 'analyst_targets' => ['growth_analyst' => 130.0]];
+            return ['perceived_fair_value' => 130.0, 'market_repricing' => 1.0, 'analyst_targets' => ['growth_analyst' => 130.0]];
         });
         $this->earningsEngineMock->method('calculate')->willReturn($report);
         $this->corporateActionEngineMock->method('processSplits')->willReturn(['price' => 100.0, 'shares' => 1000, 'event' => null]);
 
         $result = $this->tracker->updateStocks([$stock], 1.0 / 252.0, false);
 
-        return [$result['updates'][0], $strikes];
+        return [$result['updates'][0], $strikes, $stock];
     }
 
     public function testAReportTickHandsTheAgentsThePostReportFairValue(): void
@@ -217,6 +217,17 @@ class StockTrackerTest extends TestCase
 
         $this->assertSame(0, $strikes);
         $this->assertEqualsWithDelta(100.0, $update['perceived_fair_value'], 1e-9);
+    }
+
+    /**
+     * The equity the next tick's beta is levered on is the one the fundamentals support: fair value without the
+     * market's repricing, or a fall would raise the beta that deepens the fall.
+     */
+    public function testTheBetaIsLeveredOnFairValueWithoutTheMarketsRepricing(): void
+    {
+        [, , $stock] = $this->tickWithReport(null, 0.5);
+
+        $this->assertEqualsWithDelta(200.0 * 1000, (float) $stock->getFairEquityValue(), 1e-6);
     }
 
     // --- Industry Outlook Stories ---
@@ -246,7 +257,7 @@ class StockTrackerTest extends TestCase
             industryOutlook: new IndustryOutlook($store, new CorporateMetrics()),
         );
         $this->marketEngineMock->method('calculateNextPrice')->willReturn([
-            'price' => 100.0, 'shock' => null, 'next_volatility' => 0.20, 'analyst_targets' => [], 'perceived_fair_value' => 100.0,
+            'price' => 100.0, 'shock' => null, 'next_volatility' => 0.20, 'analyst_targets' => [], 'perceived_fair_value' => 100.0, 'market_repricing' => 1.0,
         ]);
         $this->earningsEngineMock->method('calculate')->willReturn(null);
         $this->corporateActionEngineMock->method('processSplits')->willReturn(['price' => 100.0, 'shares' => 1000, 'event' => null]);

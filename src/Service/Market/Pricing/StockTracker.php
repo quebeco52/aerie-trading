@@ -637,8 +637,9 @@ class StockTracker
             );
         }
 
-        // The equity the fundamentals support, which the next tick's beta is levered on.
-        $stock->setFairEquityValue($tick->perceivedFairValue * $tick->shares);
+        // The equity the fundamentals support, which the next tick's beta is levered on: without the market's
+        // repricing, or a fall would raise the beta that deepens the fall.
+        $stock->setFairEquityValue($tick->perceivedFairValue / $tick->pricing['market_repricing'] * $tick->shares);
 
         // Sell-side analyst price targets: infrequent discrete revisions anchored to fair value.
         $analystRevision = $this->reviseAnalystTarget($stock, $tick->perceivedFairValue, $restateForSplit ? $tick->splitRatio : 1.0);

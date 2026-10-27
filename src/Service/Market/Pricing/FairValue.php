@@ -48,11 +48,11 @@ final class FairValue
     /**
      * Fair value, pull speed, policy repricing and analyst targets struck on a pricing context.
      *
-     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array<string, float>}
+     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array<string, float>, market_repricing: float}
      */
     public static function fundamentalStateFor(MarketPricingContext $ctx): array
     {
-        return self::evaluateFundamentalState(
+        $state = self::evaluateFundamentalState(
             $ctx->macroState->outputGap ?? 0.0,
             $ctx->macroState->inflation ?? 0.02,
             $ctx->beta,
@@ -82,6 +82,15 @@ final class FairValue
             $ctx->capacityGap,
             $ctx->capacitySpare,
         );
+
+        // Value at the market's discount rate: the repricing the market factor has put on equities reaches the name by
+        // its beta, as the factor reaches its price, so a market move leaves no gap for the pull to close.
+        $repricing = exp($ctx->beta * ($ctx->macroState->equityValuationShift ?? 0.0));
+        $state['perceived_fair_value'] *= $repricing;
+        $state['analyst_targets'] = array_map(static fn(float $target): float => $target * $repricing, $state['analyst_targets']);
+        $state['market_repricing'] = $repricing;
+
+        return $state;
     }
 
     /**

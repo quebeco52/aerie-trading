@@ -236,6 +236,11 @@ readonly class MacroStateDTO
         public float $marketZ = 0.0,
         public float $marketZLatent = 0.0,
         public float $marketJumpMultiplier = 1.0,
+        /**
+         * The log repricing the market factor has put on equity value, as discount-rate news that fades
+         * (AssetMarketSubsystem::updateSystemicMarketFactor()); a stock's fair value carries its beta times it.
+         */
+        public float $equityValuationShift = 0.0,
         /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
         public array $sectorZ = [],
         /**
@@ -963,6 +968,15 @@ readonly class MacroStateDTO
     public function moneyMarketYield(): float
     {
         return FixedIncome::moneyMarketYield($this->policyRateEma);
+    }
+
+    /**
+     * The return a market-beta equity earns over its cost of equity while the valuation shift fades: the share of the
+     * repricing given back each year, positive after a fall.
+     */
+    public function equityValuationShiftReturn(): float
+    {
+        return -$this->equityValuationShift * AssetMarketSubsystem::equityValuationShiftFade();
     }
 
     /**

@@ -159,3 +159,19 @@ top of a premium measured over the 10y). Board, paired:
 - median CoE 8.13% -> 8.22%; median P/E 19.05 -> 18.96 (t -0.7); vol, defaults, B-or-worse, E/P slope, momentum n.s.;
   cap y20 -5.5% (t -2.0).
 A modest gain: the market channel (fix A) carries the rest.
+
+## Fix A: market moves reprice fair value as discount-rate news (10-27, 8 paired seeds x 20 y, a1 vs b1)
+
+The market factor carries no cash-flow news, so by the present-value identity its moves are discount-rate news: its
+unexpected log return accumulates in a macro state v that fades with a 5-year half-life; fair value and the analyst
+targets carry exp(beta v), the drift adds beta times v's fade, and the beta is levered on fair value without the
+repricing. The first run levered beta on fair value with it: a distressed name's (IBHI, seed 1) beta and value
+spiralled (fair value 226 -> 1996 in a year), and B-or-worse rose 1.4pp; levering on the fundamentals fixed it.
+- Board next-year return on board E/P: R2 0.135 -> 0.066 (real 0.04-0.09); on board log(P/F) 0.187 -> 0.008.
+- Drawdowns >= 25%: 5 -> 14 in 152 seed-years (one per ~11 years; post-war US ~one per 7-10). In a fall d log F
+  -0.45 and d g -0.03 (B: F +0.04, g -0.50).
+- From the first close 25% below the peak, next 4 q: +0.171, 77% positive, n 13 (B: +0.306, 100%, n 5; real +17-19%,
+  about 2 in 3).
+- Paired, n.s.: E/P slope, momentum, gate slopes, cap y20, P/E, vol (daily index and name, quarterly), issuance,
+  deals; defaults -0.5 (t -1.5). B-or-worse +0.7pp (t 2.3): the Merton distance to default reads market equity, which
+  now stays down through a bear market as real equity does.

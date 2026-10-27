@@ -48,3 +48,6 @@ g = log(P/F), its persistence and its attribution to price channels.
 - `b1` arm = the crash arm's set-up on the working tree with fix B (CAPM on MacroStateDTO::equityRiskFreeRate, the 10y
   term premium plus the expected rate path at an equity's duration). Base = `crash` runs (98b7d96a); arms pair on the
   macro. `crash.py b1 1-8` (crash_b1_8s.out) and `d1.py 1-8 crash b1`.
+- `a1` arm = working tree with fix A on b15e4a54 (B committed): the market factor's unexpected log return reprices fair
+  value by beta (MacroStateDTO::equityValuationShift, 5-year half-life), the drift earns its fade, beta levered on fair
+  value without it. Base = `b1`. `crash.py a1 1-8` (crash_a1_8s.out) and `d2.py 1-8 b1 a1` (board E/P R2 at the end).

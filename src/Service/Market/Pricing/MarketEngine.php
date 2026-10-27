@@ -52,7 +52,7 @@ class MarketEngine
      * Calculates the next stock price: diffusion on the market and sector factors, Kou jumps held to the variance
      * budget, stochastic variance, and a pull toward the multi-leg fair value.
      *
-     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value, the reversion speed that was applied and the policy news multiplier the price took.
+     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, market_repricing: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value, the reversion speed that was applied, the policy news multiplier the price took and the market repricing fair value carries.
      */
     public function calculateNextPrice(MarketPricingContext $ctx): array
     {
@@ -72,8 +72,9 @@ class MarketEngine
 
         // Expected total return is the cost of equity the fair value is discounted at (CAPM on equity's riskless rate,
         // DebtEngine::calculateHealth()), so a fairly priced name drifts at the rate it is valued at; the
-        // dividend leaves the price on the ex-date.
-        $finalDrift = $budget->jumpCompensatedDrift($ctx->liveCostOfEquity);
+        // dividend leaves the price on the ex-date. While the market's valuation shift fades, fair value climbs back
+        // by the name's beta times it, and so does the expected return.
+        $finalDrift = $budget->jumpCompensatedDrift($ctx->liveCostOfEquity + ($ctx->beta * ($ctx->macroState?->equityValuationShiftReturn() ?? 0.0)));
 
         // The SVJJ Jump Process (Kou Distribution). The variance jump scales with the name's own
         // idiosyncratic variance (VarianceBudget::varianceJumpMean()).
@@ -187,6 +188,7 @@ class MarketEngine
             'perceived_fair_value' => $perceivedFairValue,
             'dynamic_reversion' => $dynamicReversion,
             'policy_repricing' => $fundamentalState['policy_repricing'],
+            'market_repricing' => $fundamentalState['market_repricing'],
         ];
     }
 
@@ -196,12 +198,12 @@ class MarketEngine
      * The ticker re-strikes on a report tick, so the agents and analysts who trade after the filing value the
      * books it filed rather than the ones the tick's price step saw.
      *
-     * @return array{perceived_fair_value: float, analyst_targets: array<string, float>}
+     * @return array{perceived_fair_value: float, analyst_targets: array<string, float>, market_repricing: float}
      */
     public function strikeFairValue(MarketPricingContext $ctx): array
     {
         $state = FairValue::fundamentalStateFor($ctx);
 
-        return ['perceived_fair_value' => $state['perceived_fair_value'], 'analyst_targets' => $state['analyst_targets']];
+        return ['perceived_fair_value' => $state['perceived_fair_value'], 'analyst_targets' => $state['analyst_targets'], 'market_repricing' => $state['market_repricing']];
     }
 }

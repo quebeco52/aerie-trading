@@ -256,6 +256,7 @@ class MacroState
     public float $marketZ;
     public float $marketZLatent;
     public float $marketJumpMultiplier;
+    public float $equityValuationShift;
     /** @var array<string, float> Per-macro-sector shock, keyed by Sectors::MACRO_SECTORS. */
     public array $sectorZ;
     /**

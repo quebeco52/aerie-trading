@@ -14,9 +14,9 @@ case "$1" in
   c1) BASEV=${BASE:?set BASE=<tree>} ;;  # a8207c15 + the cycle fix alone (patched BASE tree)
   f1) BASEV="" ;;  # working tree: cycle fix + F1 (durable demand responds to the change in the lagged gap)
   d2b) BASEV="" ;;  # working tree: D2 + no cycle term in perpetual growth + revision variance on its own quarter-window EMA
-  crash|b1) BASEV=""  # crash: 98b7d96a; b1: + fix B (equity's riskless rate off the expected path). Working tree with the quarterly macro rows (MACRO_OUT, BOARD_NI) for the crash anatomy
+  crash|b1|a1) BASEV=""  # crash: 98b7d96a; b1: + fix B (equity's riskless rate off the expected path); a1: + fix A (market moves reprice fair value, fading). Working tree with the quarterly macro rows (MACRO_OUT, BOARD_NI) for the crash anatomy
     rm -f "$H/runs/$1-$2.macro.jsonl"; export MACRO_OUT="$H/runs/$1-$2.macro.jsonl" BOARD_NI=1 ;;
-  *) echo "usage: run.sh head|base|d1|d2|d2b|c1|f1|crash|b1 <seed>" >&2; exit 2 ;;
+  *) echo "usage: run.sh head|base|d1|d2|d2b|c1|f1|crash|b1|a1 <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" VAL_OUT="$H/runs/$1-$2.val.json" \

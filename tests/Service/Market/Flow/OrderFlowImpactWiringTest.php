@@ -77,6 +77,7 @@ class OrderFlowImpactWiringTest extends TestCase
                     'perceived_fair_value' => $context->currentPrice,
                     'dynamic_reversion' => 0.0,
                     'policy_repricing' => $policyRepricing !== null ? $policyRepricing() : 1.0,
+                    'market_repricing' => 1.0,
                 ];
             },
         );

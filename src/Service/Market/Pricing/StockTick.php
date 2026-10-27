@@ -37,7 +37,7 @@ final class StockTick
     /** Float cap as the price step opens, which the fund's slice and the board's return are weighted on. */
     public float $floatCapAtStart;
     /**
-     * @var array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float}
+     * @var array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, market_repricing: float}
      */
     public array $pricing;
     /** Price after the diffusion and the tick's order flow. */
