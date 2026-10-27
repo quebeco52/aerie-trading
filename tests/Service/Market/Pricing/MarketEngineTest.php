@@ -401,6 +401,31 @@ class MarketEngineTest extends TestCase
         );
     }
 
+    /**
+     * The cycle adds no perpetual growth: a boom's earnings reach fair value through the return the firm files, and its
+     * gap closes, so at the same filed returns a boom and a slump strike the same value.
+     */
+    public function testTheCycleIsNotPricedAsPerpetualGrowth(): void
+    {
+        $value = fn(float $outputGap): float => $this->engine->strikeFairValue(new MarketPricingContext(
+            currentPrice: 40.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
+            beta: 1.5,
+            macroState: new MacroStateDTO(outputGap: $outputGap),
+            bookValuePerShare: 30.0,
+            currentRoic: 0.12,
+            trailingReturn: 0.12,
+            revenuePerShare: 40.0,
+            businessModel: 'tech',
+            liveCostOfEquity: 0.09,
+        ))['perceived_fair_value'];
+
+        $this->assertSame($value(-0.03), $value(0.03));
+    }
+
     private function incomeContext(float $quarterlyDividend, float $targetPayout, float $speed, string $businessModel = 'none'): MarketPricingContext
     {
         return new MarketPricingContext(

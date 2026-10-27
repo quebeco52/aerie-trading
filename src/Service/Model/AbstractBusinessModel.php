@@ -55,6 +55,19 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     /** Years for a move in the output gap to reach the order book: none, a business that sells as demand appears. */
     public const DEMAND_LAG_YEARS = 0.0;
 
+    // --- Durable Spending Adjustment (stock-adjustment accelerator) ---
+    /**
+     * Share of the firm's sales that buyers hold as a stock in step with their income (durables, equipment,
+     * advertising), whose spending follows the change in income as well as its level; none for a firm selling
+     * services or one whose model carries its own order-book accelerator.
+     */
+    public const DURABLE_DEMAND_SHARE = 0.0;
+    /**
+     * Years of spending a change in the desired stock is worth, 1/(depreciation + growth): about 4 at a fifth a year
+     * worn out and 5% growth, so a gap falling a point a year cuts durable spending about 4%.
+     */
+    public const DURABLE_STOCK_ADJUSTMENT_MULTIPLE = 4.0;
+
     // --- FX Exposure ---
     /**
      * Share of revenue whose competitiveness moves with the trade-weighted exchange rate (0.05): a mostly domestic firm

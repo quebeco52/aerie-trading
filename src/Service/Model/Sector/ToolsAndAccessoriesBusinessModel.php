@@ -30,6 +30,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
      * and prosumer hardware.
      */
     public const OPERATING_CYCLICALITY = 1.00;
+    /** Share of sales that are power tools and equipment, bought as households and trades add to their kit. */
+    public const DURABLE_DEMAND_SHARE = 0.40;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */

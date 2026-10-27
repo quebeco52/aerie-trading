@@ -801,6 +801,18 @@ readonly class MacroStateDTO
     }
 
     /**
+     * The rate, a year, at which the output gap as it reaches an order book the given number of years behind is moving.
+     * Each published lag closes on the quarter-smoothed gap at its own time constant, so the rate is the gap's distance
+     * from the lag over that time; a delay shorter than the shortest published reads that one.
+     */
+    public function laggedOutputGapChange(float $lagYears): float
+    {
+        $lagYears = max(min(MovingAverages::DEMAND_TRANSMISSION_LAGS), $lagYears);
+
+        return ($this->outputGapEma - $this->laggedOutputGap($lagYears)) / $lagYears;
+    }
+
+    /**
      * Calendar quarter index [0..3] implied by elapsed simulation time. Derived rather than published:
      * it is not a macro series any institution reports, so it draws no district conduit. This is the quarter
      * now; an earnings report filed now covers the one before (EarningsEngine::coveredCalendarQuarter).

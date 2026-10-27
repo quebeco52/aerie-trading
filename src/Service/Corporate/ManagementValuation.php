@@ -30,7 +30,6 @@ final class ManagementValuation
             $equityRates['costOfEquity'],
             $equityRates['equityReturn'],
             SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime),
-            $macroState->outputGap,
             $health->leveredBeta,
             $macroState->tipsBreakeven,
             Sectors::baselineIndustryPe($stock->getIndustry()),

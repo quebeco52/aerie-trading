@@ -41,6 +41,8 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
      * with near-perfect price comparison.
      */
     public const OPERATING_CYCLICALITY = 1.30;
+    /** Share of first-party sales in durables (electronics, home goods) whose purchase waits on income. */
+    public const DURABLE_DEMAND_SHARE = 0.40;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 1.20;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */

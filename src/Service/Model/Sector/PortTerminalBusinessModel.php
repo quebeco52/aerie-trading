@@ -38,6 +38,8 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
      * streams apply.
      */
     public const OPERATING_CYCLICALITY = 1.00;
+    /** Share of throughput that is durable goods and equipment, moving with what buyers add to their stocks. */
+    public const DURABLE_DEMAND_SHARE = 0.30;
     /**
      * Own-price elasticity of demand: a terminal fee is a few per cent of a box's landed cost, so volume barely answers
      * it.

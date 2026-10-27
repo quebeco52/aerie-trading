@@ -601,10 +601,12 @@ class EarningsEngine
 
         $counterfactuals = [];
         foreach (MacroDriverAttribution::counterfactualStates($ctx->strategy, $ctx->macroState) as $field => $state) {
-            $macroPhysics = $ctx->strategy->getMacroPhysics(clone $ctx->macroPhysicsBasis, $state);
+            $basis = clone $ctx->macroPhysicsBasis;
+            $macroPhysics = $ctx->strategy->getMacroPhysics($basis, $state);
             $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
             $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);
             $macroDemandShift = $macroPhysics['macro_demand_shift']
+                + $ctx->strategy->resolveSpendingAdjustmentShift($basis, $state)
                 + $ctx->rivalShareDrain
                 - ($ctx->strategy->getPriceElasticityOfDemand() * ($pricingPowerMultiplier - $inputCostMultiplier));
 

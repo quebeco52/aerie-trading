@@ -23,9 +23,6 @@ final class Valuation
     /** Baseline long-term stable GDP growth rate for Gordon Growth valuation. */
     public const DEFAULT_PERPETUAL_GROWTH_RATE = 0.02;
 
-    // --- Fundamental Growth Transmission ---
-    /** Share of the output gap that reaches a firm's real growth rate, before its beta scales the cyclical exposure. */
-    public const CYCLICAL_GROWTH_PASS_THROUGH = 0.50;
     /** Absolute floor on intrinsic fundamental P/E multiple. */
     public const MIN_INTRINSIC_PE = 4.0;
     /** Absolute ceiling on intrinsic fundamental P/E multiple. */
@@ -182,26 +179,23 @@ final class Valuation
 
     /**
      * Nominal expected growth used to strike a fair-value multiple, the same transmission for everyone
-     * who strikes one: secular real growth, the cyclical part scaled by beta, then inflation in full for the
-     * nominal rate. The inflation is the one the discount rate carries, the ten-year breakeven, not the latest
-     * print: a perpetuity grows at what is expected over its life. No firm outgrows the economy forever (Damodaran,
-     * Investment Valuation, ch. 12): the sector's secular excess over trend fades, and is priced at its perpetual
-     * equivalent. The cycle is transitory and passes both ways.
+     * who strikes one: secular real growth, then inflation in full for the nominal rate. The inflation is the one the
+     * discount rate carries, the ten-year breakeven, not the latest print: a perpetuity grows at what is expected over
+     * its life. No firm outgrows the economy forever (Damodaran, Investment Valuation, ch. 12): the sector's secular
+     * excess over trend fades, and is priced at its perpetual equivalent. The cycle adds no perpetual growth: a boom's
+     * earnings reach value through the filed return, which fades, and its gap closes.
      *
      * Management and the market MUST read the same figure, or buybacks, issuance and M&A are struck against a
      * different multiple from the one the market prices.
      */
     public static function calculateExpectedNominalGrowth(
         float $secularGrowth,
-        float $outputGap,
-        float $beta,
         float $inflation,
         float $discountRate,
     ): float {
         // The secular excess over trend keeps fading (SECULAR_EXCESS_HALF_LIFE_YEARS), so it is priced at its
         // perpetual equivalent rather than as permanent or as nothing.
-        $realGrowth = TimeSeries::persistentEquivalentGrowth($secularGrowth, MacroConstants::TREND_REAL_GROWTH, $discountRate - $inflation)
-            + ($outputGap * self::CYCLICAL_GROWTH_PASS_THROUGH * $beta);
+        $realGrowth = TimeSeries::persistentEquivalentGrowth($secularGrowth, MacroConstants::TREND_REAL_GROWTH, $discountRate - $inflation);
 
         // Nominal growth is real growth plus inflation (Fisher): the cash flows are discounted at a nominal rate,
         // so growing them at less than full inflation is the inflation illusion of Modigliani & Cohn (1979). The
@@ -477,7 +471,6 @@ final class Valuation
         float $hurdleRate,
         float $trueReturn,
         float $secularGrowth,
-        float $outputGap,
         float $beta,
         float $inflation,
         ?float $sectorMultiple,
@@ -486,7 +479,7 @@ final class Valuation
         float $catchUpGrowth = 0.0,
     ): float {
         $expectedGrowth = Valuation::calculateFundableGrowth(
-            Valuation::calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $inflation, $hurdleRate),
+            Valuation::calculateExpectedNominalGrowth($secularGrowth, $inflation, $hurdleRate),
             $trueReturn,
             $payoutRatio,
             $inflation,

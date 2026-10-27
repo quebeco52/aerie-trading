@@ -129,7 +129,8 @@ final class PriceVolProbe
             $jS = max(FinancialConstants::MIN_JUMP_LOG_RETURN, min(FinancialConstants::MAX_JUMP_LOG_RETURN, log($ctx->marketJumpMultiplier) * $beta));
         }
         $ma = log(1.0 + $ctx->maShock);
-        $pol = log((float) $r['policy_repricing']);
+        // The policy repricing; on the d2/d2b arms (the fair-value pass-through, not kept) the revision passed in.
+        $pol = isset($r['fair_value_news']) ? (float) $r['fair_value_news'] : log((float) ($r['policy_repricing'] ?? 1.0));
         $rem = log($p1 / $p0) - $jI - $jS - $ma - $pol;
 
         $maxLog = log(1.0 + MarketEngine::MAX_DAILY_PRICE_CIRCUIT_BREAKER) * sqrt($dt * FinancialConstants::TRADING_DAYS_PER_YEAR);
@@ -177,8 +178,10 @@ final class PriceVolProbe
                 'sysDiff' => ($beta * $b->diffusionMarketVol) ** 2, 'sysJ' => $b->systemicJumpVariance,
                 'ownJ' => $ownJ, 'ownJc' => min($ownJ, $cap), 'imp' => $imp, 'impc' => min($imp, $cap),
                 'ann' => $ann, 'annc' => min($ann, $cap), 'fundV' => max(0.0, $ctx->fundImpactVariance),
+                // The quarter-read revision variance of the d2b arm; zero on any other tree.
+                'rev' => property_exists($ctx, 'revisionVariance') ? max(0.0, $ctx->revisionVariance) : 0.0,
                 'theta' => $b->theta, 'idioVar' => $b->idiosyncraticVar, 'mvol' => $ctx->marketVol,
-                'lambda' => $lambda, 'kappa' => $b->kappa, 'brkB' => $brk !== 0.0 ? 1.0 : 0.0, 'floorB' => $vi <= 0.2 * $sigma * $sigma + 1e-12 ? 1.0 : 0.0,
+                'lambda' => $lambda, 'kappa' => $b->kappa, 'brkB' => $brk !== 0.0 ? 1.0 : 0.0, 'capHit' => $b->ownSourceVariance >= $vi * 0.8 * (1.0 - 1e-9) && $vi > 0.0 ? 1.0 : 0.0, 'floorB' => $vi <= 0.2 * $sigma * $sigma + 1e-12 ? 1.0 : 0.0,
             ],
         ];
     }

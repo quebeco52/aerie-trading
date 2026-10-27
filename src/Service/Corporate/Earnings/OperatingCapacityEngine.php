@@ -136,7 +136,8 @@ final class OperatingCapacityEngine
         // The firm as the macro physics first reads it, kept so the drivers can be measured on it afterwards.
         $ctx->macroPhysicsBasis = clone $stock;
         $macroPhysics = $strategy->getMacroPhysics($stock, $macroState);
-        $macroDemandShift = $macroPhysics['macro_demand_shift'];
+        // The cycle's level as the model reads it, and the change its durable lines spend on top.
+        $macroDemandShift = $macroPhysics['macro_demand_shift'] + $strategy->resolveSpendingAdjustmentShift($stock, $macroState);
         $pricingPowerMultiplier = $macroPhysics['pricing_power_multiplier'];
         // Input cost level; models that carry inflation inside their own physics leave it at the price level.
         $inputCostMultiplier = (float) ($macroPhysics['input_cost_multiplier'] ?? $pricingPowerMultiplier);

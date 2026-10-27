@@ -22,6 +22,12 @@ final class ValuationHarnessTest extends BoardRun
     private array $fv = [];
     /** @var array<string, ?float> */
     private array $coe = [];
+    /** @var array<string, array{0: float, 1: int}> per name: sum of squared split-adjusted tick log returns, n */
+    private array $rv = [];
+    /** @var array{0: float, 1: int} board float-weighted price return: sum of squares, n */
+    private array $rvIndex = [0.0, 0];
+    /** @var array<string, array{0: ?float, 1: ?float}> StockTracker yield-exposure EMA (cov, var) at years 5/10/20 */
+    private array $bhat = [];
     /** @var array<string, int> deal events by type */
     private array $deals = [];
     /** @var array<string, float> split-adjusted price index (product of split ratios applied) */
@@ -69,11 +75,28 @@ final class ValuationHarnessTest extends BoardRun
             $shares = (float) $s->getSharesOutstanding();
             [$lp, $lsh] = $this->last[$tk] ?? [0.0, 0.0];
             $this->last[$tk] = [$price, $shares];
+            if ($lsh > 0.0 && $lp > 0.0 && $price > 0.0 && $this->tick > $this->tpy) {
+                $r0 = $shares / $lsh;
+                $sp = (($r0 >= 1.5 && abs($r0 - round($r0)) < 1e-6) || ($r0 > 0.0 && $r0 <= 0.67 && abs(1.0 / $r0 - round(1.0 / $r0)) < 1e-6)) ? $r0 : 1.0;
+                $lr = log($price * $sp / $lp);
+                $this->rv[$tk] = [($this->rv[$tk][0] ?? 0.0) + $lr * $lr, ($this->rv[$tk][1] ?? 0) + 1];
+            }
             if ($lsh > 0.0) {
                 $r = $shares / $lsh;
                 if (($r >= 1.5 && abs($r - round($r)) < 1e-6) || ($r > 0.0 && $r <= 0.67 && abs(1.0 / $r - round(1.0 / $r)) < 1e-6)) {
                     $this->adj[$tk] = ($this->adj[$tk] ?? 1.0) * $r;
                 }
+            }
+        }
+        if ($this->tick > $this->tpy) {
+            $br = log(1.0 + (float) ($result['board_price_return'] ?? 0.0));
+            $this->rvIndex = [$this->rvIndex[0] + $br * $br, $this->rvIndex[1] + 1];
+        }
+        foreach ([5, 10, 20] as $yr) {
+            if ($this->tick === $yr * $this->tpy && $this->tracker !== null && property_exists($this->tracker, 'yieldRevisionCovariance')) {
+                // The d2/d2b trackers' yield exposure moments, read by name: the kept tracker has none.
+                $vars = \Closure::bind(fn () => get_object_vars($this), $this->tracker, \App\Service\Market\Pricing\StockTracker::class)();
+                $this->bhat[(string) $yr] = [$vars['yieldRevisionCovariance'], $vars['yieldMoveVariance']];
             }
         }
         $q = max(1, intdiv($this->tpy, 4));
@@ -110,7 +133,7 @@ final class ValuationHarnessTest extends BoardRun
         $out = getenv('VAL_OUT');
         if ($out) {
             file_put_contents($out, json_encode(['tpy' => $this->tpy, 'names' => PriceVolProbe::NAMES, 'unmatched' => $this->probe?->unmatched,
-                'sector' => array_map(static fn ($s) => $s->getSector(), $this->stocks), 'deals' => $this->deals, 'rows' => $this->rows]));
+                'sector' => array_map(static fn ($s) => $s->getSector(), $this->stocks), 'deals' => $this->deals, 'rv' => $this->rv, 'rvIndex' => $this->rvIndex, 'bhat' => $this->bhat, 'audit' => ($this->probe?->result() ?? [])['audit'] ?? [], 'rows' => $this->rows]));
         }
     }
 }

@@ -36,6 +36,8 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
      * industrial output; captive track networks limit switching.
      */
     public const OPERATING_CYCLICALITY = 1.00;
+    /** Share of carloads that are durable goods and building materials, moving with what buyers add to their stocks. */
+    public const DURABLE_DEMAND_SHARE = 0.30;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.40;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */

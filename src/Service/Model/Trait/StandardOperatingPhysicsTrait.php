@@ -372,11 +372,28 @@ trait StandardOperatingPhysicsTrait
      * The lag is the economy's, not the firm's: every firm with the same delay meets the same cycle, so the macro
      * publishes it (MovingAverages::DEMAND_TRANSMISSION_LAGS) and the model only reads it. Mid-downturn a
      * long-lag builder is still working through a boom-era book while a spot seller is already in the slump. At
-     * zero lag the helper returns the macro series untouched.
+     * zero lag the helper returns the quarter-smoothed gap, the demand a quarter's sales meet.
      */
     public function resolveLaggedOutputGap(MacroStateDTO $macroState): float
     {
         return $macroState->laggedOutputGap($this->getDemandLagYears());
+    }
+
+    /**
+     * The demand the firm's durable lines gain or lose while the cycle moves: buyers hold durables, equipment and
+     * advertising in step with their income, so they spend the change in the stock they want on top of its upkeep
+     * (the stock-adjustment accelerator). The change is the rate the gap the firm meets is moving at, which its own
+     * lagged gap gives exactly, a spot seller's read at the shortest lag published; it averages zero over the cycle.
+     */
+    public function resolveSpendingAdjustmentShift(Stock $stock, MacroStateDTO $macroState): float
+    {
+        $share = (float) static::DURABLE_DEMAND_SHARE;
+        if ($share === 0.0) {
+            return 0.0;
+        }
+
+        return $share * (float) static::DURABLE_STOCK_ADJUSTMENT_MULTIPLE * $this->getOperatingCyclicality($stock)
+            * $macroState->laggedOutputGapChange($this->getDemandLagYears());
     }
 
     // --- FX Exposure ---

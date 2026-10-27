@@ -494,11 +494,11 @@ abstract class BoardRun extends KernelTestCase
         $fs = App\Service\Market\Pricing\FairValue::fundamentalStateFor($ctx);
 
         return ['x_rf' => (float) ($m->policyRate ?? 0.0), 'x_erp' => (float) ($m->equityRiskPremium ?? 0.0), 'x_gap' => (float) ($m->outputGap ?? 0.0),
-            'x_infl' => (float) ($m->inflation ?? 0.0), 'x_beta' => $ctx->beta, 'x_coe' => $ctx->liveCostOfEquity, 'x_roicTtm' => $ctx->roicTtm,
+            'x_infl' => (float) ($m->inflation ?? 0.0), 'x_beta' => $ctx->beta, 'x_coe' => $ctx->liveCostOfEquity, 'x_roicTtm' => $ctx->trailingReturn ?? ($ctx->roicTtm ?? null),
             'x_roicBase' => $ctx->baselineRoic, 'x_longRun' => (float) ($ctx->longRunReturn ?? 0.0), 'x_sec' => $ctx->secularGrowth,
             'x_payout' => $ctx->targetPayoutRatio, 'x_sectorPE' => $ctx->baselineIndustryPE, 'x_acc' => $ctx->accrualsRatio, 'x_eps' => (float) $stock->getEarningsPerShare(),
             'x_vol' => $ctx->currentVolatility, 'x_bvps' => $ctx->bookValuePerShare, 'x_icps' => $ctx->investedCapitalPerShare, 'x_rps' => $ctx->revenuePerShare,
-            'x_fv' => (float) $fs['perceived_fair_value'], 'x_pull' => (float) $fs['dynamic_reversion'], 'x_policy' => (float) $fs['policy_repricing'],
+            'x_fv' => (float) $fs['perceived_fair_value'], 'x_pull' => (float) $fs['dynamic_reversion'], 'x_policy' => (float) ($fs['policy_repricing'] ?? 1.0),
             'x_growthAn' => (float) $fs['analyst_targets']['growth_analyst'], 'x_valueAn' => (float) $fs['analyst_targets']['value_analyst'],
             'x_incomeAn' => (float) $fs['analyst_targets']['income_analyst']];
     }

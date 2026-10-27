@@ -23,4 +23,19 @@ g = log(P/F), its persistence and its attribution to price channels.
 - `d1.py <seeds> A B`: predictability, the architect's gate (yearly slope of d log F + D/F - CoE on log(E/F), split
   non-financial / financial), gap sd and half-life, board (cap, P/E, vol, defaults, B-or-worse, buybacks, issuance,
   deals), quarter-1 fair-value jumps, NaN checks; paired B - A.
+- `d2` / `d2b` arms ran on working trees that were not kept (see valuation_evidence.md); their runs and scripts stay
+  for comparison. `d2` arm = working tree (D2: fair-value revision passed into the price; Probe `pol` = r['fair_value_news'], older trees
+  fall back to the policy repricing). The harness also logs per-name daily split-adjusted realised vol (`rv`), index
+  vol (`rvIndex`), StockTracker's yield exposure EMA at years 5/10/20 (`bhat`), and the probe audit (`capHit` = own-source
+  variance at the 80% cap, `ann` = announcement variance). `d2.py <seeds> A B` = d1.py per seed + those, the revision's
+  annual variance and var(g) share, and board E/P and log(P/F) R2.
+- `d2b` arm = working tree (D2 + no output-gap term in perpetual growth + revision variance on its own quarter-window
+  EMA; probe audit `rev`). `d3.py <seeds> A B C`: three arms (d1.py + d2.py measures, median revision variance) with
+  paired C - A and C - B, board E/P / log(P/F) R2, and the correlation of the board's annual d log F and d log P with
+  the change in the output gap (quarter-log `gap`).
+- `c1` arm = BASE tree a8207c15 + the cycle-fix patch alone (patch -p1 in the archived tree), compared with `d3.py 1-4 d1 d2b c1`.
+- `f1` arm = working tree (cycle fix + F1 durable demand). `recession.py <seeds> A B` (META=<architect meta.json>):
+  revenue/EBIT/NI betas on the annual gap change by group (F1 models, order-book cyclicals, other), recession episodes
+  (board gap down >= 3 pp) with peak-to-trough NI and trough lag, growth, beat rate (revenue vs expected), board NI vs
+  price lead-lag.
 - Runtime ~30 s per seed-decade with the probe.

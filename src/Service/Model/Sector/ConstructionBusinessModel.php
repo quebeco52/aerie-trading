@@ -40,6 +40,8 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
      * are cyclical; public works are not.
      */
     public const OPERATING_CYCLICALITY = 1.20;
+    /** Share of work that is new building rather than upkeep, which owners defer as income growth slows. */
+    public const DURABLE_DEMAND_SHARE = 0.50;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */

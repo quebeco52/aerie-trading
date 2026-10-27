@@ -51,6 +51,8 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
      * garments with fashion substitution.
      */
     public const OPERATING_CYCLICALITY = 1.20;
+    /** Share of sales buyers time with their income: a semi-durable wardrobe whose replacement waits out a slump. */
+    public const DURABLE_DEMAND_SHARE = 0.30;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 1.00;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */

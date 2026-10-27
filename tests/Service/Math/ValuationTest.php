@@ -313,23 +313,19 @@ class ValuationTest extends TestCase
         $this->assertGreaterThan(149.0, $updatedConfidentSignal);
     }
 
-    public function testExpectedNominalGrowthCarriesTheCycleAndPricesTheSecularExcessAsItFades(): void
+    public function testExpectedNominalGrowthPricesTheSecularExcessAsItFades(): void
     {
         $trend = MacroConstants::TREND_REAL_GROWTH;
-        // Boom: trend secular growth + half of a 2% gap at beta 1, plus 2% inflation. The cycle is transitory and
-        // passes.
-        $this->assertEqualsWithDelta($trend + 0.01 + 0.02, Valuation::calculateExpectedNominalGrowth($trend, 0.02, 1.0, 0.02, 0.09), 1e-12);
-        // Bust at the same beta takes the same amount off.
-        $this->assertEqualsWithDelta($trend - 0.01 + 0.02, Valuation::calculateExpectedNominalGrowth($trend, -0.02, 1.0, 0.02, 0.09), 1e-12);
+        $this->assertEqualsWithDelta($trend + 0.02, Valuation::calculateExpectedNominalGrowth($trend, 0.02, 0.09), 1e-12);
         // No sector outgrows the economy forever: an excess over trend fades at the secular half-life, so a 10% secular
         // rate is priced at its perpetual equivalent, above trend and well below 10% (Fuller & Hsia 1984).
-        $priced = Valuation::calculateExpectedNominalGrowth(0.10, 0.0, 1.0, 0.02, 0.09) - 0.02;
+        $priced = Valuation::calculateExpectedNominalGrowth(0.10, 0.02, 0.09) - 0.02;
         $spread = 0.09 - 0.02 - $trend;
         $fade = M_LN2 / FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS;
         $this->assertEqualsWithDelta($trend + ((0.10 - $trend) * $spread / ($spread + $fade)), $priced, 1e-12);
         $this->assertGreaterThan($trend, $priced);
         $this->assertLessThan($trend + (0.5 * (0.10 - $trend)), $priced);
-        $this->assertSame(0.0, Valuation::calculateExpectedNominalGrowth(-0.10, 0.0, 1.0, 0.0, 0.09));
+        $this->assertSame(0.0, Valuation::calculateExpectedNominalGrowth(-0.10, 0.0, 0.09));
     }
 
     /**
@@ -347,13 +343,13 @@ class ValuationTest extends TestCase
 
     public function testManagementAndTheMarketStrikeTheSameFairValueMultiple(): void
     {
-        $growth = Valuation::calculateFundableGrowth(Valuation::calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.09), 0.18, 0.40, 0.025);
+        $growth = Valuation::calculateFundableGrowth(Valuation::calculateExpectedNominalGrowth(0.03, 0.025, 0.09), 0.18, 0.40, 0.025);
         $market = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04, Valuation::sectorHurdleShift(0.09, 1.2, 0.025));
-        $management = Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.40);
+        $management = Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 1.2, 0.025, 22.0, 0.04, 0.40);
 
         $this->assertSame($market, $management);
         // A payout that leaves too little to fund the outlook lowers management's multiple exactly as the market's.
-        $this->assertLessThan($management, Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95));
+        $this->assertLessThan($management, Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 1.2, 0.025, 22.0, 0.04, 0.95));
         // The Sloan discount is inside the shared figure, floored at the distressed multiple.
         $clean = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.0, Valuation::sectorHurdleShift(0.09, 1.2, 0.025));
         $this->assertEqualsWithDelta($clean - 0.04 * Valuation::ACCRUALS_ANOMALY_PE_PENALTY_SCALE, $market, 1e-12);
@@ -375,9 +371,9 @@ class ValuationTest extends TestCase
     {
         $target = MacroConstants::TARGET_INFLATION;
 
-        self::assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + $target, Valuation::calculateExpectedNominalGrowth(MacroConstants::TREND_REAL_GROWTH, 0.0, 1.0, $target, 0.09), 1e-12);
+        self::assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + $target, Valuation::calculateExpectedNominalGrowth(MacroConstants::TREND_REAL_GROWTH, $target, 0.09), 1e-12);
         // Above target too: no firm's priced growth loses real growth to inflation its earnings pass through.
-        self::assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + 0.04, Valuation::calculateExpectedNominalGrowth(MacroConstants::TREND_REAL_GROWTH, 0.0, 1.0, 0.04, 0.09), 1e-12);
+        self::assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH + 0.04, Valuation::calculateExpectedNominalGrowth(MacroConstants::TREND_REAL_GROWTH, 0.04, 0.09), 1e-12);
     }
 
     /** The flexible accelerator: demand growth plus a share of the log capital gap, never a negative build. */
@@ -464,10 +460,10 @@ class ValuationTest extends TestCase
         $this->assertEqualsWithDelta($capped + $catchUp, Valuation::calculateFundableGrowth(0.045, 0.15, 0.90, 0.02, $catchUp), 1e-12);
         $this->assertSame(0.0, Valuation::calculateFundableGrowth(0.0, 0.15, 1.0, 0.0, -0.01), 'growth is never negative');
 
-        $growth = Valuation::calculateFundableGrowth(Valuation::calculateExpectedNominalGrowth(0.03, 0.01, 1.2, 0.025, 0.09), 0.18, 0.95, 0.025, $catchUp);
+        $growth = Valuation::calculateFundableGrowth(Valuation::calculateExpectedNominalGrowth(0.03, 0.025, 0.09), 0.18, 0.95, 0.025, $catchUp);
         $market = Valuation::calculateQualityAdjustedFairValuePE(0.09, 0.18, $growth, 22.0, 0.04, Valuation::sectorPriorYieldShift(0.09, 1.2, 0.025, $catchUp));
-        $this->assertSame($market, Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95, $catchUp));
-        $this->assertGreaterThan(Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 0.01, 1.2, 0.025, 22.0, 0.04, 0.95), $market, 'a firm behind its market is worth more');
+        $this->assertSame($market, Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 1.2, 0.025, 22.0, 0.04, 0.95, $catchUp));
+        $this->assertGreaterThan(Valuation::calculateManagementFairValuePE(0.09, 0.18, 0.03, 1.2, 0.025, 22.0, 0.04, 0.95), $market, 'a firm behind its market is worth more');
     }
 
     /**

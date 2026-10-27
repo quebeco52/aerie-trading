@@ -33,6 +33,8 @@ class TechBusinessModel extends StandardCorporateBusinessModel
      * and ad spend are cyclical; seats churn slowly.
      */
     public const OPERATING_CYCLICALITY = 1.20;
+    /** Share of sales that are customers' equipment and project budgets, deferred as their earnings growth slows. */
+    public const DURABLE_DEMAND_SHARE = 0.50;
     /** Own-price elasticity of demand: volume lost per unit of real price increase. */
     public const PRICE_ELASTICITY_OF_DEMAND = 0.60;
     /** Share of an idiosyncratic revenue gain taken from same-industry peers rather than won from a larger market. */

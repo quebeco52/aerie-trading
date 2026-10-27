@@ -195,6 +195,12 @@ interface OperatingStrategyInterface
     /** The output gap as it has actually reached the firm: the macro's published lag at DEMAND_LAG_YEARS. */
     public function resolveLaggedOutputGap(MacroStateDTO $macroState): float;
 
+    /**
+     * The demand the firm's durable lines gain or lose while the cycle moves (DURABLE_DEMAND_SHARE), as a fraction of
+     * expected revenue beside getMacroPhysics()'s macro_demand_shift.
+     */
+    public function resolveSpendingAdjustmentShift(Stock $stock, MacroStateDTO $macroState): float;
+
     /** Share of revenue whose competitiveness moves with the trade-weighted exchange rate (FX_REVENUE_EXPOSURE). */
     public function getFxRevenueExposure(): float;
 

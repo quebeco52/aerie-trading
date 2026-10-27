@@ -206,7 +206,6 @@ final class FairValue
             $macro,
             $macroState,
             $hurdleRate,
-            $outputGap,
             $beta,
             $secularGrowth,
             $baselineIndustryPE,
@@ -229,7 +228,7 @@ final class FairValue
             $catchUpGrowth = Valuation::capacityCatchUpGrowth($capacityGap, CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED, $hurdleRate - $macro->tipsBreakeven)
                 + Valuation::capacityCatchUpGrowth($capacitySpare, CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED, $hurdleRate - $macro->tipsBreakeven);
             $expectedGrowth = Valuation::calculateFundableGrowth(
-                Valuation::calculateExpectedNominalGrowth($secularGrowth, $outputGap, $beta, $macro->tipsBreakeven, $hurdleRate),
+                Valuation::calculateExpectedNominalGrowth($secularGrowth, $macro->tipsBreakeven, $hurdleRate),
                 $equityReturn,
                 $targetPayoutRatio,
                 $macro->tipsBreakeven,
