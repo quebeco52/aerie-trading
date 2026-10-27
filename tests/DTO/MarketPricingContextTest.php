@@ -60,13 +60,13 @@ class MarketPricingContextTest extends TestCase
     {
         $macroState = new MacroStateDTO();
         $firm = $this->firm('SOFT', 'Software - Infrastructure');
-        $before = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm;
+        $before = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->trailingReturn;
 
         $firm->setPreAnnouncedShortfall(1_500_000_000.0);
-        $this->assertSame($before, MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm, 'A reported-only shortfall is no economic news.');
+        $this->assertSame($before, MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->trailingReturn, 'A reported-only shortfall is no economic news.');
 
         $firm->setPreAnnouncedEconomicShortfall(1_000_000_000.0);
-        $after = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->roicTtm;
+        $after = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->trailingReturn;
 
         $capital = \App\Data\Company\Sectors::strategyFor($firm->getIndustry())->getEvaluationCapital((float) $firm->getTotalEquity(), $firm->getInvestedCapital());
         $this->assertGreaterThan(0.0, $capital);
@@ -89,7 +89,8 @@ class MarketPricingContextTest extends TestCase
 
         $this->assertSame(0.14, $context->baselineRoic);
         $this->assertSame(0.16, $context->currentRoic);
-        $this->assertSame(0.15, $context->roicTtm);
+        $this->assertSame(0.16, $context->trailingReturn, 'valued on the return it filed, not its return state');
+        $this->assertSame(0.14, $context->longRunReturn, 'its filed returns revert to the level it was seeded to earn until it has filed its own');
     }
 
     public function testASpheresBookIsMarkedToTheBoardItHolds(): void

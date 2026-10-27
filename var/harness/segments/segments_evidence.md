@@ -610,3 +610,14 @@ y40 0 / 0 / 0.12 per seed; largest entrant 0.56 / 0.53 / 0.54. Held at y40 built
 3.9 / 3.9. Board vs prefix: step2b P/E -0.96 (t -2.2), capex/revenue -0.011 (t -2.1); step2c P/E -0.85 (t -2.0);
 step2d shortage share +1.03 pt (se 0.30, t 3.5); all else |t| < 1.8. Identities exact. Sold-segment leftovers now
 only zeroed target / market plus margin, turnover, outlook (43 / 46 / 72); venture_start, builds, pays gone.
+
+## 2026-10-27: do entered lines ride the parent? (existing 45-year runs, prefix and step2d; ride.py)
+
+    python3 var/harness/segments/ride.py 1-8 prefix step2d > ride_45y.out
+
+Line revenue x 4 / ledger record capacity (proxy; record capacity is booked on revenue shares, so it partly follows
+the line): prefix p50 0.975, p90 1.11, p99 1.37, max 2.04; step2d 0.990 / 1.13 / 1.39 / 2.17 (DIPR electrical
+equipment, WEAV / JDAW software infrastructure). 4-quarter log growth correlation, ventures with >= 12 points:
+with the industry's incumbents median +0.07 / +0.05, with the parent's other lines +0.44 / +0.53; parent above
+incumbents in 90% / 93% of ventures. Entered lines / board revenue: prefix 1.4% (y20), 3.7% (y40); step2d 1.0%,
+1.5%; firms with entered lines above 20% of revenue per seed 2.1 / 4.5 vs 0.6 / 0.6.

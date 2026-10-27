@@ -7,6 +7,7 @@ namespace App\Service\Corporate;
 use App\Data\Company\Sectors;
 use App\DTO\DebtHealthDTO;
 use App\DTO\MacroStateDTO;
+use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Corporate\Segment\SegmentBooks;
@@ -21,9 +22,9 @@ use App\Service\Model\BusinessModelInterface;
  */
 final class ManagementValuation
 {
-    public static function fairValuePE(BusinessModelInterface $strategy, Stock $stock, float $trueReturn, DebtHealthDTO $health, MacroStateDTO $macroState): float
+    public static function fairValuePE(BusinessModelInterface $strategy, Stock $stock, DebtHealthDTO $health, MacroStateDTO $macroState): float
     {
-        $equityRates = self::equityRates($strategy, $stock, $trueReturn, $health, $macroState);
+        $equityRates = self::equityRates($strategy, $stock, $health, $macroState);
 
         return Valuation::calculateManagementFairValuePE(
             $equityRates['costOfEquity'],
@@ -54,18 +55,23 @@ final class ManagementValuation
      * book (Ohlson 1995), so a quarter's loss or windfall moves it only as far as it moves the persistent part of the
      * firm's return. A firm with no book has no earnings to price.
      */
-    public static function normalizedEps(BusinessModelInterface $strategy, Stock $stock, float $trueReturn, DebtHealthDTO $health, MacroStateDTO $macroState): float
+    public static function normalizedEps(BusinessModelInterface $strategy, Stock $stock, DebtHealthDTO $health, MacroStateDTO $macroState): float
     {
-        $equityReturn = self::equityRates($strategy, $stock, $trueReturn, $health, $macroState)['equityReturn'];
+        $equityReturn = self::equityRates($strategy, $stock, $health, $macroState)['equityReturn'];
 
         return $equityReturn * (float) $stock->getTotalEquity() / max(1.0, (float) $stock->getSharesOutstanding());
     }
 
-    /** @return array{costOfEquity: float, equityReturn: float} */
-    private static function equityRates(BusinessModelInterface $strategy, Stock $stock, float $trueReturn, DebtHealthDTO $health, MacroStateDTO $macroState): array
+    /**
+     * The cost of equity and the return on equity the board values its stock at: the same recent filed return and
+     * level it reverts to that the market values it on (MarketPricingContext::trailingReturn(), anchorReturn()), or
+     * buybacks and deals would trade against the market's own mispricing.
+     *
+     * @return array{costOfEquity: float, equityReturn: float}
+     */
+    private static function equityRates(BusinessModelInterface $strategy, Stock $stock, DebtHealthDTO $health, MacroStateDTO $macroState): array
     {
-        $longRunReturn = $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null;
-        $valuationReturn = $strategy->getValuationReturn($trueReturn, $longRunReturn, $health->costOfEquity);
+        $valuationReturn = $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), MarketPricingContext::anchorReturn($stock, $strategy), $health->costOfEquity);
 
         return $strategy->getEquityValuationRates($stock, $valuationReturn, $health, $macroState->corporateTaxRate);
     }

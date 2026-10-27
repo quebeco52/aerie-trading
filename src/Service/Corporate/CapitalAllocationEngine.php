@@ -407,10 +407,10 @@ class CapitalAllocationEngine
 
         // The multiple values equity, so it is struck at the cost of equity on the return on equity, as the
         // market strikes it (MarketEngine); the spread above stays ROIC against the hurdle, an EVA test.
-        $fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
+        $fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $ctx->health, $ctx->macroState);
         // Cheap is judged on the earnings the multiple is struck on: on a quarter's run rate a commodity boom made the
         // stock look cheapest at the top of the cycle, and a loss priced it as dear as it could be.
-        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
+        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $ctx->health, $ctx->macroState);
         $isPricedBelowItsMultiple = $normalizedEps > 0.0 && ($ctx->currentPrice / $normalizedEps) < ($fairValuePE + 3.0);
         $multipleDiscount = $normalizedEps > 0.0 ? max(0.0, ($fairValuePE - ($ctx->currentPrice / $normalizedEps)) / max(1.0, $fairValuePE)) : 0.0;
 

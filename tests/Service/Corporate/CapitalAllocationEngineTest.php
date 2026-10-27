@@ -1075,7 +1075,10 @@ class CapitalAllocationEngineTest extends TestCase
         $repurchased = function (float $price): float {
             $stock = $this->buildDistributor('BOOM');
             $stock->setCorporateTreasury('0');
+            // It files a 30% return and was seeded to earn it, so the board values it there.
             $stock->setRoicTtm('0.30');
+            $stock->setCurrentRoic('0.30');
+            $stock->setBaselineRoic('0.30');
             $engine = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(true)));
             $result = $engine->allocateCapital($stock, 400.00, 1.00, $price, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), actualTotalNetIncome: 1000000.0);
 

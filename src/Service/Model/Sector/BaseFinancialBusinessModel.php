@@ -61,6 +61,11 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.18 a year). */
     public const ROIC_REVERSION_SPEED = 0.18;
+    /**
+     * Share of the gap between a lender's filed return and its own long-run level still there a year on: 0.45, as a
+     * credit cycle's losses and recoveries wash through a loan book faster than an operating firm's rents fade.
+     */
+    public const RETURN_PERSISTENCE = 0.45;
 
     // --- Capital Cycle ---
     /** Share of construction in progress completed into plant each quarter (100%): branches and systems, no build. */
@@ -497,6 +502,7 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
         $oldBaselineRoe = (float) $acquirer->getBaselineRoe();
         $blendedBaselineRoe = (($oldCapitalBase * $oldBaselineRoe) + ($purchasePrice * $effectiveTargetRoic)) / $totalNewCapital;
         $acquirer->setBaselineRoe((string) max(0.01, $blendedBaselineRoe));
+        $this->blendAnchorReturn($acquirer, $oldCapitalBase, $purchasePrice, $effectiveTargetRoic, $totalNewCapital);
     }
 
     public function calculateDivestedEquity(Stock $seller, float $divestedFraction, float $currentEquity, float $currentDebt, float $treasury, float $investedCapital, float $lostDebt): float

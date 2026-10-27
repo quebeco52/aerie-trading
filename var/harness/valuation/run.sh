@@ -7,8 +7,10 @@ H=$(cd "$(dirname "$0")" && pwd)
 PROJ=$(cd "$H/../../.." && pwd)
 mkdir -p "$H/runs"
 case "$1" in
-  head) BASEV="" ;;
-  *) echo "usage: run.sh head <seed>" >&2; exit 2 ;;
+  head) BASEV="" ;;  # working tree
+  base) BASEV=${BASE:?set BASE=<tree>} ;;  # BASE tree (git archive + vendor symlink)
+  d1) BASEV="" ;;  # working tree with fix D1 (filed returns)
+  *) echo "usage: run.sh head|base|d1 <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" VAL_OUT="$H/runs/$1-$2.val.json" \

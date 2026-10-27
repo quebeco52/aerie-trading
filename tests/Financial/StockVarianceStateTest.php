@@ -42,7 +42,7 @@ final class StockVarianceStateTest extends TestCase
             macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045, outputGap: 0.0),
             bookValuePerShare: 40.0,
             currentRoic: 0.12,
-            roicTtm: 0.12,
+            trailingReturn: 0.12,
             baselineIndustryPE: 15.0,
             revenuePerShare: 50.0,
             priorMarketVol: $priorMarketVol,

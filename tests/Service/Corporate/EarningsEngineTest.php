@@ -4220,6 +4220,27 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * Each report files the returns the firm is valued on, both of the return it filed, not its operating return state:
+     * the level its returns revert to, which opens at the return it was seeded to earn and moves over
+     * ANCHOR_RETURN_EMA_YEARS, and its recent year, which opens at the quarter's return.
+     */
+    public function testEachReportFilesTheReturnsTheFirmIsValuedOn(): void
+    {
+        $stock = $this->buildMatureIndustrial('VALR');
+        $stock->setBaselineRoic('0.0500');
+        $stock->setRoicTtm('0.01');
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04);
+
+        $this->earningsEngine->calculate($stock, $macroState, EarningsEngine::resolveReportingTick('VALR', 252));
+
+        $filed = (float) $stock->getCurrentRoic();
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $this->assertNotEqualsWithDelta(Sectors::strategyFor($stock->getIndustry())->getTrueReturn($stock), $filed, 1e-3, 'the fixture needs a filed return apart from the state');
+        $this->assertEqualsWithDelta(0.05 + ((1.0 - exp(-0.25 / EarningsEngine::ANCHOR_RETURN_EMA_YEARS)) * ($filed - 0.05)), $momentum[EarningsEngine::STATE_ANCHOR_RETURN] ?? null, 1e-9);
+        $this->assertEqualsWithDelta($filed, $momentum[EarningsEngine::STATE_TRAILING_RETURN] ?? null, 1e-9);
+    }
+
+    /**
      * Each report rolls the firm's long-run return toward its trailing return over LONG_RUN_RETURN_EMA_YEARS, so the
      * valuation's anchor is a measured level, not the lore baseline.
      */

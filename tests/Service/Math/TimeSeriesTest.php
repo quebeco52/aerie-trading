@@ -182,6 +182,15 @@ class TimeSeriesTest extends TestCase
         $this->assertEqualsWithDelta($fading, $equivalentGap / $rate, 1e-12);
         $this->assertSame(0.12, TimeSeries::persistentEquivalentReturn(0.12, 0.12, $rate));
         $this->assertEqualsWithDelta(0.12, TimeSeries::persistentEquivalentReturn(0.30, 0.12, 0.0), 1e-15);
+
+        // At any persistence: a lender's gap, which keeps 45% a year, is worth less than an operating firm's.
+        foreach ([0.45, 0.62] as $persistence) {
+            $fading = 0.0;
+            for ($year = 1; $year <= 400; $year++) {
+                $fading += $gap * ($persistence ** $year) / ((1.0 + $rate) ** $year);
+            }
+            $this->assertEqualsWithDelta($fading, (TimeSeries::persistentEquivalentReturn(0.12 + $gap, 0.12, $rate, $persistence) - 0.12) / $rate, 1e-12, "persistence {$persistence}");
+        }
     }
 
     /**

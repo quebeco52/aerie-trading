@@ -130,7 +130,7 @@ class AgentMarketDynamicsTest extends TestCase
                 macroState: $macro,
                 bookValuePerShare: 40.0,
                 currentRoic: 0.12,
-                roicTtm: 0.12,
+                trailingReturn: 0.12,
                 baselineIndustryPE: 15.0,
                 revenuePerShare: 50.0,
                 businessModel: 'none',

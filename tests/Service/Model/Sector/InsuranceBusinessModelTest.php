@@ -461,10 +461,10 @@ class InsuranceBusinessModelTest extends TestCase
         $baselineMargin = 0.12; // 12% sustainable operating margin (float yield + benign underwriting)
         $baselineRoic = 0.10;
 
-        // The trailing ROE's gap to capacity (1.50 x 0.12 = 0.18) is kept at its persistent-equivalent share at a 10%
-        // cost of equity (Ohlson 1995; Fama & French 2000).
+        // The recent ROE's gap to capacity (1.50 x 0.12 = 0.18) is kept at its persistent-equivalent share at a 10%
+        // cost of equity and a lender's persistence (Ohlson 1995).
         $rate = 0.10;
-        $kept = TimeSeries::persistentEquivalentReturn(1.0, 0.0, $rate);
+        $kept = TimeSeries::persistentEquivalentReturn(1.0, 0.0, $rate, InsuranceBusinessModel::RETURN_PERSISTENCE);
         $this->assertGreaterThan(0.0, $kept);
         $this->assertLessThan(0.30, $kept, 'A good or bad year is not capitalized as permanent.');
 
@@ -738,7 +738,7 @@ class InsuranceBusinessModelTest extends TestCase
         // invested either way. Measured on underwriting alone this firm re-rated on every rate cycle.
         $withdrawn = $model->calculateStructuralRoic(0.14, $baselineReturn, $fullCapacityRevenue * (2.0 / 3.0), $bookValuePerShare, $baselineMargin, 0.10);
         $underwritingLost = (InsuranceBusinessModel::KENNEY_CAPACITY_RATIO * (1.0 / 3.0)) * $baselineMargin;
-        $this->assertEqualsWithDelta(0.14 - ($underwritingLost * (1.0 - TimeSeries::persistentEquivalentReturn(1.0, 0.0, 0.10))), $withdrawn, 1e-12);
+        $this->assertEqualsWithDelta(0.14 - ($underwritingLost * (1.0 - TimeSeries::persistentEquivalentReturn(1.0, 0.0, 0.10, InsuranceBusinessModel::RETURN_PERSISTENCE))), $withdrawn, 1e-12);
     }
 
     /**

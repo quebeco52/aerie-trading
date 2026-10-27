@@ -58,7 +58,7 @@ final class FairValue
             $ctx->beta,
             $ctx->costOfDebt,
             $ctx->reversionSpeed,
-            $ctx->roicTtm,
+            $ctx->trailingReturn,
             $ctx->macroState->policyRate ?? 0.04,
             $ctx->bookValuePerShare,
             $ctx->dividendPerShare,
@@ -95,7 +95,7 @@ final class FairValue
      * @param float|null $costOfDebt     The firm's pre-tax marginal borrowing rate; null prices it at the 10Y plus the
      *                                   IG spread.
      * @param float $reversionSpeed      The baseline speed at which the stock reverts to fair value.
-     * @param float $roicTtm             The Trailing Twelve Month ROIC (or ROE).
+     * @param float $trailingReturn      The firm's recent filed return (ROIC, or ROE for a lender).
      * @param float $riskFreeRate        The central bank's policy rate.
      * @param float $bookValuePerShare   The equity value per share.
      * @param float $dividendPerShare    The absolute quarterly dividend per share.
@@ -128,7 +128,7 @@ final class FairValue
         float $beta,
         ?float $costOfDebt,
         float $reversionSpeed,
-        float $roicTtm,
+        float $trailingReturn,
         float $riskFreeRate,
         float $bookValuePerShare,
         float $dividendPerShare,
@@ -170,7 +170,7 @@ final class FairValue
         // Structural ROIC is determined by the business model strategy, allowing sectors like Insurance
         // to smooth out extreme catastrophic volatility and price based on through-the-cycle baseline capacity.
         $structuralRoic = $strategy->calculateStructuralRoic(
-            $strategy->getValuationReturn($roicTtm, $longRunReturn, $liveCostOfEquity),
+            $strategy->getValuationReturn($trailingReturn, $longRunReturn, $liveCostOfEquity),
             $baselineRoic,
             $revenuePerShare,
             $bookValuePerShare,

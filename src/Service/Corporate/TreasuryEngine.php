@@ -668,10 +668,10 @@ class TreasuryEngine
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
-        $fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
+        $fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $ctx->health, $ctx->macroState);
         // The price is judged on the earnings the multiple is struck on: on a quarter's run rate, a loss made any price
         // look like a bubble and the firm sold stock into its own bad news.
-        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $trueReturn, $ctx->health, $ctx->macroState);
+        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $ctx->health, $ctx->macroState);
         $currentPE = $normalizedEps > 0.0 ? $ctx->currentPrice / $normalizedEps : 0.0;
 
         // The shares outstanding now, after any buyback this quarter; the context's count is the opening one.

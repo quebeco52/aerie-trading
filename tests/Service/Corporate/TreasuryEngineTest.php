@@ -656,7 +656,10 @@ class TreasuryEngineTest extends TestCase
 
             $stock = $this->createSolventCorporate();
             $stock->setSharesOutstanding('100000000');
+            // It files a 30% return and was seeded to earn it, so the board values it there.
             $stock->setRoicTtm('0.30');
+            $stock->setCurrentRoic('0.30');
+            $stock->setBaselineRoic('0.30');
             $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: $price, actualAnnualEps: -1.0);
             $ctx->newShares = 100_000_000.0;
 

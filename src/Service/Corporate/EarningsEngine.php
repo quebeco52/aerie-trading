@@ -26,6 +26,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
+use App\Service\Model\BusinessModelInterface;
 use App\Service\News\MarketEventPublisher;
 use App\Service\News\NarrativeEngine;
 use App\Service\News\WireFormat;
@@ -170,10 +171,24 @@ class EarningsEngine
 
     // --- Profitability Persistence (Fama & French 2000; Ohlson 1995) ---
     /**
-     * Time constant in years of each firm's measured long-run return, the level its profitability reverts to: five
+     * Time constant in years of each firm's measured long-run return, its operating return through the cycle: five
      * years, the span Damodaran normalizes earnings over.
      */
     public const LONG_RUN_RETURN_EMA_YEARS = 5.0;
+    /**
+     * Time constant in years of the level a firm's filed returns revert to, which it is valued on: twenty years, as a
+     * firm's own level is most of how its returns differ from its rivals' and moves only slowly, so a long average
+     * forecasts the returns it goes on to file better than a short one.
+     */
+    public const ANCHOR_RETURN_EMA_YEARS = 20.0;
+    /** Time constant in years of each firm's recent filed return, the good or bad year it is valued on: one. */
+    public const TRAILING_RETURN_EMA_YEARS = 1.0;
+    /** Carried stream-state key: the level the firm's filed returns revert to (ANCHOR_RETURN_EMA_YEARS). */
+    public const STATE_ANCHOR_RETURN = self::CARRIED_STATE_PREFIX . 'anchor_return';
+    /**
+     * Carried stream-state key: the firm's recent filed return (TRAILING_RETURN_EMA_YEARS), which its valuation fades.
+     */
+    public const STATE_TRAILING_RETURN = self::CARRIED_STATE_PREFIX . 'trailing_return';
 
     /** The quarter's operating side: capacity, revenue and the cost base. */
     private readonly OperatingCapacityEngine $operations;
@@ -450,6 +465,28 @@ class EarningsEngine
         $totalCostRatio = 1.0 - (float) $stock->getOperatingMargin();
 
         return max(0.01, min(0.99, $totalCostRatio * (1.0 - $stock->getFixedCostRatio())));
+    }
+
+    /**
+     * The returns a firm is valued on, both of what it filed rather than its operating return state, which is pulled
+     * toward the required return whether or not the business earns it: the level its filed returns revert to, opening
+     * at the return it was seeded to earn, and its recent year (MarketPricingContext::trailingReturn()).
+     */
+    private function fileValuationReturns(Stock $stock, BusinessModelInterface $strategy): void
+    {
+        $filed = $strategy->isFinancial() ? $stock->getCurrentRoe() : $stock->getCurrentRoic();
+        if ($filed === null) {
+            return;
+        }
+
+        $momentum = $stock->getEarningsMomentumZ() ?? [];
+        $seeded = $strategy->isFinancial() ? $stock->getBaselineRoe() : $stock->getBaselineRoic();
+        $anchor = $momentum[self::STATE_ANCHOR_RETURN] ?? ($seeded !== null ? (float) $seeded : null);
+        $trailing = $momentum[self::STATE_TRAILING_RETURN] ?? null;
+        $stock->setEarningsMomentumZ([
+            self::STATE_ANCHOR_RETURN => TimeSeries::ewmaLevel($anchor !== null ? (float) $anchor : null, (float) $filed, FinancialConstants::QUARTER_YEARS, self::ANCHOR_RETURN_EMA_YEARS),
+            self::STATE_TRAILING_RETURN => TimeSeries::ewmaLevel($trailing !== null ? (float) $trailing : null, (float) $filed, FinancialConstants::QUARTER_YEARS, self::TRAILING_RETURN_EMA_YEARS),
+        ] + $momentum);
     }
 
     private function checkReportingEligibility(Stock $stock, int $tickCount, int $ticksPerYear): bool
@@ -921,7 +958,7 @@ class EarningsEngine
             $ctx->specialCharges * (1.0 - $ctx->corporateTaxRate),
         );
 
-        // The firm's long-run return, the level its profitability reverts to and its valuation anchors on.
+        // The firm's long-run return, its operating return through the cycle.
         $priorLongRun = $stock->getLongRunReturn();
         $stock->setLongRunReturn((string) TimeSeries::ewmaLevel(
             $priorLongRun !== null ? (float) $priorLongRun : null,
@@ -929,6 +966,7 @@ class EarningsEngine
             FinancialConstants::QUARTER_YEARS,
             self::LONG_RUN_RETURN_EMA_YEARS,
         ));
+        $this->fileValuationReturns($stock, $ctx->strategy);
 
         $this->testGoodwillForImpairment($ctx);
 

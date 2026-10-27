@@ -7,7 +7,9 @@ namespace App\DTO;
 use App\Data\Company\Sectors;
 use App\Entity\Stock;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Model\BusinessModelInterface;
 
 /**
  * Context object holding all state required to calculate the next market price tick.
@@ -33,7 +35,8 @@ class MarketPricingContext
         public float $bookValuePerShare = 0.0,
         public float $maShock = 0.0,
         public float $currentRoic = 0.10,
-        public float $roicTtm = 0.10,
+        /** The firm's recent filed return (EarningsEngine::STATE_TRAILING_RETURN), which fair value fades back. */
+        public float $trailingReturn = 0.10,
         public float $dividendPerShare = 0.0,
         public float $baselineIndustryPE = 20.0,
         public float $revenuePerShare = 0.0,
@@ -91,7 +94,7 @@ class MarketPricingContext
          *                           empty for a firm with none.
          */
         public array $policyBasesPerShare = [],
-        /** The firm's measured long-run return (Stock::$longRunReturn); null values it on its trailing return. */
+        /** The level the firm's filed returns revert to (anchorReturn()); null values it on its recent return. */
         public ?float $longRunReturn = null,
         /**
          * Cash per share beyond what the business needs to run, valued at face beside it; zero for a financial, whose
@@ -155,10 +158,7 @@ class MarketPricingContext
             bookValuePerShare: $anchorStakes->resolveMarkedBookValuePerShare($stock) ?? (float) $stock->getBookValuePerShare(),
             maShock: $maShock,
             currentRoic: $strategy->getEffectiveReturn($stock),
-            // A guided cost squeeze is next quarter's miss, known now: it comes off the trailing return the report will
-            // book it to, so fair value hears it at the same persistence weight the report gives it. Accruals reversing
-            // in the same warning move only the reported number, which the true return never carried.
-            roicTtm: $strategy->getTrueReturn($stock) - ($stock->getPreAnnouncedEconomicShortfall() / max(1.0, $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()))),
+            trailingReturn: self::trailingReturn($stock, $strategy),
             dividendPerShare: (float) $stock->getLastDividend(),
             baselineIndustryPE: Sectors::baselineIndustryPe($stock->getIndustry()),
             revenuePerShare: (float) $stock->getTotalRevenue() / $shares,
@@ -184,7 +184,7 @@ class MarketPricingContext
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),
             priorMarketVol: $priorMarketVol,
             costOfDebt: $health->rawMetrics->currentMarketRate,
-            longRunReturn: $stock->getLongRunReturn() !== null ? (float) $stock->getLongRunReturn() : null,
+            longRunReturn: self::anchorReturn($stock, $strategy),
             excessCashPerShare: $excessCash / $shares,
             capacityGap: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0),
             capacitySpare: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_SPARE] ?? 0.0),
@@ -197,5 +197,34 @@ class MarketPricingContext
                 'utilityRateGrant' => $strategy->annualUtilityTariffBase($stock) / $shares,
             ], static fn(float $base): bool => $base !== 0.0),
         );
+    }
+
+    /**
+     * The level a firm's filed returns revert to, which the market and its own board value it on
+     * (EarningsEngine::STATE_ANCHOR_RETURN); before its first report under that key, the return it was seeded to earn.
+     * Null for a firm with neither.
+     */
+    public static function anchorReturn(Stock $stock, BusinessModelInterface $strategy): ?float
+    {
+        $anchor = ($stock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_ANCHOR_RETURN] ?? null;
+        $seeded = $strategy->isFinancial() ? $stock->getBaselineRoe() : $stock->getBaselineRoic();
+
+        return $anchor !== null ? (float) $anchor : ($seeded !== null ? (float) $seeded : null);
+    }
+
+    /**
+     * The recent return a firm is valued on, by the market and by its own board alike: its recent filed return
+     * (EarningsEngine::STATE_TRAILING_RETURN), or before its first report under that key the return it last filed, or
+     * its operating return state where it has filed none. A guided cost squeeze is next quarter's miss, known now: it
+     * comes off the return the report will book it to, so it is heard at the same persistence weight the report gives
+     * it. Accruals reversing in the same warning move only the reported number, which the filed return never carried.
+     */
+    public static function trailingReturn(Stock $stock, BusinessModelInterface $strategy): float
+    {
+        $trailing = ($stock->getEarningsMomentumZ() ?? [])[EarningsEngine::STATE_TRAILING_RETURN] ?? null;
+        $filed = $strategy->isFinancial() ? $stock->getCurrentRoe() : $stock->getCurrentRoic();
+        $recent = $trailing !== null ? (float) $trailing : ($filed !== null ? (float) $filed : $strategy->getTrueReturn($stock));
+
+        return $recent - ($stock->getPreAnnouncedEconomicShortfall() / max(1.0, $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital())));
     }
 }

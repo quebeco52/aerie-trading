@@ -10,7 +10,8 @@ require_once __DIR__ . '/../price_vol/Probe.php';
  * (Probe.php, read-only) feeds each name's per-tick channel log returns and the engine's perceived fair value into
  * quarterly accumulators. At every quarter end (tick % (TPY/4) == 0) writes, per live name: split-adjusted price
  * index, price, perceived fair value per share, EPS as the stock carries it, shares, float-adjusted cap, and the
- * quarter's channel sums (15 columns, Probe::NAMES; dfv = d log fair value). VAL_OUT=<json>. Draws nothing.
+ * quarter's channel sums (15 columns, Probe::NAMES; dfv = d log fair value), then the engine's live cost of equity and
+ * a financial flag. Deal events counted by type. VAL_OUT=<json>. Draws nothing.
  */
 final class ValuationHarnessTest extends BoardRun
 {
@@ -19,6 +20,10 @@ final class ValuationHarnessTest extends BoardRun
     private array $acc = [];
     /** @var array<string, float> */
     private array $fv = [];
+    /** @var array<string, ?float> */
+    private array $coe = [];
+    /** @var array<string, int> deal events by type */
+    private array $deals = [];
     /** @var array<string, float> split-adjusted price index (product of split ratios applied) */
     private array $adj = [];
     /** @var array<string, array{0: float, 1: float}> */
@@ -34,7 +39,8 @@ final class ValuationHarnessTest extends BoardRun
         }
         if ($this->tracker !== null) {
             $this->probe = PriceVolProbe::install($this->tracker, 0, [1]);
-            $this->probe->sink = function (string $tk, array $c, float $fv): void {
+            $this->probe->sink = function (string $tk, array $c, float $fv, ?float $coe = null): void {
+                $this->coe[$tk] = $coe;
                 $a = $this->acc[$tk] ?? array_fill(0, count($c), 0.0);
                 foreach ($c as $i => $v) {
                     $a[$i] += $v;
@@ -84,10 +90,19 @@ final class ValuationHarnessTest extends BoardRun
                 (float) $s->getEarningsPerShare(), (float) $s->getSharesOutstanding(),
                 \App\Service\Market\Index\IndexCommittee::floatAdjustedCap($s),
                 ...($this->acc[$tk] ?? array_fill(0, 15, 0.0)),
+                $this->coe[$tk] ?? null, $s->getSector() === 'Financial Services' || \App\Data\Company\Sectors::strategyFor((string) $s->getIndustry())->isFinancial() ? 1.0 : 0.0,
             ];
         }
         $this->acc = [];
         $this->rows[] = [round($this->currentTime, 4), $snap];
+    }
+
+    protected function onEvent(\App\Entity\StockEvent $event): void
+    {
+        $d = (string) $event->getDescription();
+        if (preg_match('/ executed a \$/', $d)) {
+            $this->deals[$event->getEventType()] = ($this->deals[$event->getEventType()] ?? 0) + 1;
+        }
     }
 
     protected function onEnd(): void
@@ -95,7 +110,7 @@ final class ValuationHarnessTest extends BoardRun
         $out = getenv('VAL_OUT');
         if ($out) {
             file_put_contents($out, json_encode(['tpy' => $this->tpy, 'names' => PriceVolProbe::NAMES, 'unmatched' => $this->probe?->unmatched,
-                'sector' => array_map(static fn ($s) => $s->getSector(), $this->stocks), 'rows' => $this->rows]));
+                'sector' => array_map(static fn ($s) => $s->getSector(), $this->stocks), 'deals' => $this->deals, 'rows' => $this->rows]));
         }
     }
 }

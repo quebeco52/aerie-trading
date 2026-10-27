@@ -295,9 +295,9 @@ class AcquisitionEngine
         $ctx->hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $ctx->economicSpread = $ctx->trueReturn - $ctx->hurdleRate;
 
-        $ctx->fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $ctx->trueReturn, $ctx->health, $ctx->macroState);
+        $ctx->fairValuePE = ManagementValuation::fairValuePE($ctx->strategy, $stock, $ctx->health, $ctx->macroState);
         // Overvalued on the earnings the multiple is struck on.
-        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $ctx->trueReturn, $ctx->health, $ctx->macroState);
+        $normalizedEps = ManagementValuation::normalizedEps($ctx->strategy, $stock, $ctx->health, $ctx->macroState);
         $ctx->currentPE = $normalizedEps > 0.0 ? $ctx->price / $normalizedEps : 0.0;
         $ctx->bookValuePerShare = max(0.01, $ctx->equity / max(1.0, $ctx->shares));
         $ctx->priceToBook = $ctx->price / $ctx->bookValuePerShare;

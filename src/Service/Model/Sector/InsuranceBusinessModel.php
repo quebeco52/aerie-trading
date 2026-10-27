@@ -1401,9 +1401,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         $structuralRoe = ($effectiveTurnover * $baselineMargin) + $investmentLeg;
 
-        // The trailing ROE's gap to through-the-cycle capacity is valued at its persistent-equivalent share, the same
-        // Ohlson / Fama-French fade every other firm's trailing return gets (TimeSeries::persistentEquivalentReturn).
-        return max(self::MIN_STRUCTURAL_ROE_FLOOR, TimeSeries::persistentEquivalentReturn($roicTtm, $structuralRoe, $discountRate));
+        // The recent ROE's gap to through-the-cycle capacity is valued at its persistent-equivalent share, at the
+        // persistence a lender's returns show, as every other firm's recent return is (TimeSeries::
+        // persistentEquivalentReturn).
+        return max(self::MIN_STRUCTURAL_ROE_FLOOR, TimeSeries::persistentEquivalentReturn($roicTtm, $structuralRoe, $discountRate, static::RETURN_PERSISTENCE));
     }
 
     /**

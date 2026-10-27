@@ -146,6 +146,11 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     public const ROIC_REVERSION_SPEED = 0.20;
     /** Excess return over the required return the moat sustains: none. */
     public const MOAT_SPREAD = 0.000;
+    /**
+     * Share of the gap between a firm's filed return and its own long-run level still there a year on: 0.62, as
+     * profitability closes about 38% of it a year (Fama & French 2000), which the engine's operating firms show too.
+     */
+    public const RETURN_PERSISTENCE = 1.0 - \App\Service\Math\TimeSeries::PROFITABILITY_MEAN_REVERSION_RATE;
     /** Speed of the variable margin's reversion to its structural level (4.0 a year). */
     public const MARGIN_REVERSION_SPEED = 4.0;
     /**
