@@ -838,17 +838,20 @@ class InitialMarket
             // over the refiner's own barrel revenue. Break-even near an $11.6 crack, as Valero ran in 2020.
             'operating_margin' => 0.075,
             'public_float' => 0.90,
-            // The District's only refiner, its market all of the District's fuel: opens at a third of it.
+            // The District's only refiner, its market the District's fuel and the mainland coast it ships to: opens at
+            // about a quarter of it.
             'sam_ratio' => 1.20,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.055,
             'credit_spread' => 0.0120,
             'depreciation_rate' => 0.08,
-            'corporate_treasury' => 20_500_000_000.00,
-            'total_equity'      => 320_500_000_000.00,
+            // An export refinery, sized like Singapore's or Korea's: product sales open near 10% of GDP, against 2-3%
+            // for a refiner serving only its home market.
+            'corporate_treasury' => 15_000_000_000.00,
+            'total_equity'      => 235_000_000_000.00,
             'customer_deposits' => 0.00,
-            'wholesale_debt'    => 100_000_000_000.00,
-            'retained_earnings' => 40_000_000_000.00,
+            'wholesale_debt'    => 75_000_000_000.00,
+            'retained_earnings' => 30_000_000_000.00,
         ],
         [
             'ticker' => 'GULL',

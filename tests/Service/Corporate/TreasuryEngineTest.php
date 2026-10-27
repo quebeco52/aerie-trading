@@ -16,6 +16,7 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\MathUtility;
+use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
 use App\Service\Model\Sector\InvestmentBankBusinessModel;
 use App\Service\Model\Sector\ShadowBankBusinessModel;
@@ -1342,7 +1343,7 @@ class TreasuryEngineTest extends TestCase
      */
     public function testAFundClosedAtCapacityBorrowsNothingToExpand(): void
     {
-        $borrow = function (string $industry, \App\Service\Model\BusinessModelInterface $strategy): float {
+        $borrow = function (string $industry, BusinessModelInterface $strategy): float {
             $stock = new Stock();
             $stock->setTicker('FUND');
             $stock->setIndustry($industry);
@@ -1423,6 +1424,97 @@ class TreasuryEngineTest extends TestCase
         $this->assertEqualsWithDelta($budget, $deploy($budget, false)->organicCapex, 1e-6, 'Cash-funded plant stops at the budget.');
         $this->assertGreaterThan(0.0, $deploy(null, true)->organicCapex, 'Borrowing used to force the proceeds into plant.');
         $this->assertEqualsWithDelta(0.0, $deploy(0.0, true)->organicCapex, 1e-9, 'With demand met, borrowed cash builds nothing.');
+    }
+
+    /**
+     * Fund the plant the earnings engine chose to build in a quarter whose own funds fell short of it.
+     *
+     * @return array{ctx: CapitalAllocationContext, built: float, borrowed: float}
+     */
+    private function fundPlant(BusinessModelInterface $strategy, float $budget, float $spareCash, bool $canBorrow, float $price = 50.0): array
+    {
+        $stock = new Stock();
+        $stock->setTicker('PLNT');
+        $stock->setTotalEquity('1000000000.00');
+        $stock->setWholesaleDebt('200000000.00');
+        $stock->setSharesOutstanding('100000000');
+
+        $ctx = $this->createAllocationContext($stock, stockCompensation: 0.0, currentPrice: $price);
+        $ctx->strategy = $strategy;
+        $ctx->newTreasury = $strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt) + $spareCash;
+        $stock->setCorporateTreasury((string) $ctx->newTreasury);
+        $ctx->expansionBudget = $budget;
+        if (!$canBorrow) {
+            $ctx->health = DebtHealthBuilder::from($ctx->health)->withDebtIssuance(false)->build();
+        }
+
+        $this->corporateMetrics->method('calculateLiveInvestedCapital')->willReturn(1_000_000_000.0);
+        $this->corporateMetrics->method('calculateMarketSaturationPenalty')->willReturn(0.0);
+        $this->corporateMetrics->method('calculateMarginalReturn')->willReturn(0.0);
+
+        $borrowed = 0.0;
+        $debtEngine = $this->createStub(DebtEngine::class);
+        $debtEngine->method('rollMaturities')->willReturn(new MaturityRollDTO());
+        $debtEngine->method('issueDebt')->willReturnCallback(static function (Stock $issuer, float $amount) use (&$borrowed): void {
+            $borrowed += $amount;
+        });
+        $built = 0.0;
+        $capExEngine = $this->createStub(CapExEngine::class);
+        $capExEngine->method('allocateGrowthCapEx')->willReturnCallback(static function (Stock $owner, float $amount) use (&$built): void {
+            $built += $amount;
+        });
+        $engine = new TreasuryEngine($this->corporateMetrics, $debtEngine, $capExEngine, $this->mathUtility);
+        mt_srand(3); // seeded once every mock is built (see setUp)
+        $engine->executeCorporateStrategy($ctx);
+
+        return ['ctx' => $ctx, 'built' => $built, 'borrowed' => $borrowed];
+    }
+
+    /**
+     * Plant the earnings engine chose to build and could not pay for from the quarter's funds is built whatever the
+     * treasury's own appetite: from spare cash first, the rest borrowed, and all of it reported as capex. A firm the
+     * market will not lend to builds what its cash covers and no more.
+     */
+    public function testPlannedPlantIsPaidFromSpareCashThenBorrowed(): void
+    {
+        $budget = 50_000_000.0;
+        $funded = $this->fundPlant(new StandardCorporateBusinessModel(), $budget, 10_000_000.0, true);
+
+        $this->assertEqualsWithDelta($budget, $funded['built'], 1e-6, 'the whole plan is queued as construction');
+        $this->assertEqualsWithDelta(40_000_000.0, $funded['borrowed'], 1e-6, 'only what spare cash does not cover is borrowed');
+        $this->assertEqualsWithDelta($budget, $funded['ctx']->organicCapex, 1e-6, 'and it reaches the cash flow statement');
+        $this->assertEqualsWithDelta(0.0, $funded['ctx']->expansionBudget ?? 0.0, 1e-6);
+
+        $shut = $this->fundPlant(new StandardCorporateBusinessModel(), $budget, 10_000_000.0, false);
+        $this->assertEqualsWithDelta(10_000_000.0, $shut['built'], 1e-6, 'without lenders, its cash is what it builds');
+        $this->assertSame(0.0, $shut['borrowed']);
+        $this->assertEqualsWithDelta(100_000_000.0, (float) $shut['ctx']->stock->getSharesOutstanding(), 1e-6, 'a firm that retains its earnings sells no stock to build');
+    }
+
+    /**
+     * A pass-through distributes what it earns, so what its lenders will not fund it raises in shares, at the offer
+     * discount, while the offer clears book value per share. Below book it builds what its cash covers.
+     */
+    public function testAPassThroughSellsSharesForThePlantItsDebtCannotFund(): void
+    {
+        $passThrough = new class extends StandardCorporateBusinessModel {
+            public function getMinimumDistributionRatio(): float
+            {
+                return 0.90;
+            }
+        };
+        $budget = 50_000_000.0;
+        $offer = 50.0 * (1.0 - TreasuryEngine::SEASONED_EQUITY_OFFER_DISCOUNT);
+
+        $raised = $this->fundPlant($passThrough, $budget, 10_000_000.0, false);
+        $this->assertEqualsWithDelta($budget, $raised['built'], 1e-6);
+        $this->assertEqualsWithDelta(40_000_000.0, $raised['ctx']->equityRaised, 1e-6);
+        $this->assertEqualsWithDelta(100_000_000.0 + (40_000_000.0 / $offer), $raised['ctx']->newShares, 1.0, 'the dilution reaches the share count the engine writes back');
+
+        // Book is $10 a share: an offer at $8.80 would sell the holders' plant to new ones below what it cost.
+        $belowBook = $this->fundPlant($passThrough, $budget, 10_000_000.0, false, 9.0);
+        $this->assertEqualsWithDelta(10_000_000.0, $belowBook['built'], 1e-6);
+        $this->assertSame(0.0, $belowBook['ctx']->equityRaised);
     }
 
     private function createAllocationContext(Stock $stock, float $stockCompensation, float $currentPrice = 50.0, float $actualAnnualEps = 4.0): CapitalAllocationContext

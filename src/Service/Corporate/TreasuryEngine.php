@@ -123,6 +123,9 @@ class TreasuryEngine
         // treasury reaches for borrowing: a run is paid out of the book, and the book takes the loss.
         $this->liquidateEarningAssetsForCash($ctx, 0.0);
 
+        // PLANT THE EARNINGS ENGINE CHOSE TO BUILD AND COULD NOT PAY FOR FROM THE QUARTER'S FUNDS
+        $this->fundPlannedPlant($ctx);
+
         // DEBT MANAGEMENT (MACRO TOLERANCE)
         $this->processDebtExpansion($ctx);
 
@@ -274,6 +277,71 @@ class TreasuryEngine
             $amount = WireFormat::money($proceeds);
             $loss = WireFormat::money($carryingValueSold - $proceeds);
             $ctx->events[] = ['description' => "Sold {$amount} of securities and loans below carrying value to meet withdrawals, realizing a {$loss} loss."];
+        }
+    }
+
+    /**
+     * Builds the plant the earnings engine planned, passed its return gate and could not pay for from the quarter's
+     * funds, in the pecking order (Myers & Majluf 1984): spare cash above the operating floor first, then borrowing
+     * within the debt capacity. A pass-through that must distribute what it earns raises the rest in shares, while the
+     * offer clears book value per share; an issue below book would dilute the holders the plant is built for.
+     */
+    private function fundPlannedPlant(CapitalAllocationContext $ctx): void
+    {
+        $budget = $ctx->expansionBudget;
+        if ($budget === null || $budget <= 0.0 || $ctx->strategy->isFinancial()) {
+            return;
+        }
+
+        $stock = $ctx->stock;
+        $minOperatingCash = $ctx->strategy->calculateMinOperatingCash($ctx->operatingBase, $ctx->customerDeposits, $ctx->wholesaleDebt);
+        $unfunded = static fn(): float => max(0.0, $budget - max(0.0, $ctx->newTreasury - $minOperatingCash));
+
+        if ($unfunded() > 0.0 && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom) {
+            $preBuybackEquity = (float) $stock->getTotalEquity() + $ctx->quarterlyNetIncome + $ctx->stockCompensation - $ctx->totalPaid;
+            $rate = $ctx->health->rawMetrics->currentMarketRate;
+            $capacity = $ctx->strategy->calculateDebtExpansionCapacity(
+                $preBuybackEquity,
+                $ctx->wholesaleDebt + $ctx->customerDeposits,
+                $ctx->wholesaleDebt,
+                $ctx->health,
+                $rate,
+                $ctx->health->rawMetrics->ebit,
+                $ctx->health->rawMetrics->depreciation,
+            );
+            $borrowed = min($unfunded(), max(0.0, $capacity));
+            if ($borrowed > 0.0) {
+                $this->debtEngine->issueDebt($stock, $borrowed, $rate);
+                $ctx->wholesaleDebt = (float) $stock->getWholesaleDebt();
+                $ctx->newTreasury += $borrowed;
+                $ctx->debtIssued += $borrowed;
+            }
+        }
+
+        $shares = (float) $stock->getSharesOutstanding();
+        $offeringPrice = $ctx->currentPrice * (1.0 - self::SEASONED_EQUITY_OFFER_DISCOUNT);
+        $raise = $unfunded();
+        if ($raise > 0.0 && $ctx->strategy->getMinimumDistributionRatio() > 0.0 && $shares > 0.0
+            && $offeringPrice >= (float) $stock->getTotalEquity() / $shares) {
+            $sharesIssued = $raise / $offeringPrice;
+            $stock->setSharesOutstanding((string) ($shares + $sharesIssued));
+            // Sold into the market at the 10b-18 pace, as any offering's stock is.
+            $stock->addCorporateFlowBacklog(-$sharesIssued);
+            $ctx->newShares = (float) $stock->getSharesOutstanding();
+            $ctx->newTreasury += $raise;
+            $ctx->equityRaised += $raise;
+            $stock->setTotalEquity(\bcadd($this->formatBc($stock->getTotalEquity()), $this->formatBc($raise), 4));
+            if (self::isNewsworthy($stock, $raise)) {
+                $ctx->events[] = ['description' => 'Sold ' . WireFormat::money($raise) . ' of new shares into the market to fund development.'];
+            }
+        }
+
+        $spend = min($budget, max(0.0, $ctx->newTreasury - $minOperatingCash));
+        if ($spend > 0.0) {
+            $this->capExEngine->allocateGrowthCapEx($stock, $spend);
+            $ctx->newTreasury -= $spend;
+            $ctx->organicCapex += $spend;
+            $ctx->expansionBudget = $budget - $spend;
         }
     }
 
@@ -479,7 +547,7 @@ class TreasuryEngine
             }
 
             if ($expansionSpend > 0) {
-                $ctx->organicCapex = $expansionSpend;
+                $ctx->organicCapex += $expansionSpend;
                 $ctx->newTreasury -= $expansionSpend;
 
                 if ($ctx->strategy->isFinancial() && $stock->hasEarningAssetLedger()) {
