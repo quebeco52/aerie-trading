@@ -38,7 +38,8 @@ use App\Service\Model\ModelParameters;
  *      spread level (a lagged, saturating gain), and **credit losses** as issuers default.
  * - Deals are NOT modelled here. AcquisitionEngine already runs conglomerate acquisitions end to
  *   end: hazard from ManagementProfile::acquisitionBias(), price from hubrisPremium(), funded against real
- *   leverage and cash tests and booked as a CONGLOMERATE EXPANSION. A revenue multiplier standing in for an
+ *   leverage and cash tests, and announced as a CONGLOMERATE EXPANSION when it takes the group into a new
+ *   industry. A revenue multiplier standing in for an
  *   acquisition here would be the same behaviour counted twice, which that engine has already been bitten
  *   by once (see its style_priced flag). What remains is the one-sided operating event: a subsidiary
  *   writedown, which is a restructuring charge rather than a deal.

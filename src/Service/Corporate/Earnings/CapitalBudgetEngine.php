@@ -482,12 +482,7 @@ final class CapitalBudgetEngine
             } else {
                 $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
                 $capitalGap = $this->industryShareLedger?->resolveSegmentCapacityGap($stock, $segment, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($strategy, $stock)) ?? 0.0;
-                // Plant a venture still has under construction is plant it has for its market, so it is not built
-                // twice.
-                $installed = $books['plant'] * $plantBase;
-                if (($pending[$segment] ?? 0.0) > 0.0 && $installed > 0.0) {
-                    $capitalGap -= log1p($pending[$segment] / $installed);
-                }
+                $capitalGap = self::gapAfterPipeline($capitalGap, $pending[$segment] ?? 0.0, $books['plant'] * $plantBase);
                 $books['capital_gap'] = $capitalGap;
                 $books['gap'] = $capitalGap - log(max(OperatingCapacityEngine::MIN_CAPACITY_UTILIZATION, $books['load']));
                 $books['return'] = self::segmentReturnOnPlant($ctx, $books);
@@ -699,6 +694,15 @@ final class CapitalBudgetEngine
     }
 
     /**
+     * The log gap between the plant a market calls for and the plant in service, less the plant already under
+     * construction for it: what is being built is plant the firm has for its market, so it is not ordered twice.
+     */
+    public static function gapAfterPipeline(float $capitalGap, float $underConstruction, float $inService): float
+    {
+        return $underConstruction > 0.0 && $inService > 0.0 ? $capitalGap - log1p($underConstruction / $inService) : $capitalGap;
+    }
+
+    /**
      * Growth plant the quarter's demand calls for, by the flexible accelerator in error-correction form: the
      * plant grows with the nominal demand its sector sees and closes a share of the gap between the plant the
      * firm's share of trend demand implies and the plant it runs (Chenery 1952; speed from Bloom, Bond & Van
@@ -717,11 +721,11 @@ final class CapitalBudgetEngine
 
         $stock = $ctx->stock;
         $trendNominalGrowth = max(0.0, $ctx->strategy->getFadedSecularGrowthRate($stock, $ctx->macroState->totalTime) + max(0.0, $ctx->macroState->inflationEma));
-        $capitalGap = $this->industryShareLedger?->resolveTrendCapacityGap(
-            $stock,
-            $ctx->macroState,
-            IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock),
-        ) ?? 0.0;
+        $capitalGap = self::gapAfterPipeline(
+            $this->industryShareLedger?->resolveTrendCapacityGap($stock, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($ctx->strategy, $stock)) ?? 0.0,
+            CorporateMetrics::constructionOutOfService($ctx->investedCapital, $stock->getTotalCipAmount()),
+            $ctx->revenueGeneratingCapital,
+        );
         $plantGrowth = Valuation::flexibleAcceleratorGrowth($trendNominalGrowth, $capitalGap, self::CAPITAL_ERROR_CORRECTION_SPEED);
         // Plant idled in a glut comes back as demand does, so the gap the market prices is against the plant in use.
         $stock->setEarningsMomentumZ([self::STATE_CAPACITY_GAP => $capitalGap - log(max(OperatingCapacityEngine::MIN_CAPACITY_UTILIZATION, $ctx->plantLoad))] + ($stock->getEarningsMomentumZ() ?? []));

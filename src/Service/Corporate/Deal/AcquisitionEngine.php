@@ -108,6 +108,12 @@ class AcquisitionEngine
      */
     public const MA_LARGEST_PRIVATE_SHARE = 0.10;
 
+    // --- Deal Types (the announcement's headline) ---
+    /** A purchase in an industry the buyer already serves: a firm bought from that market's fringe. */
+    public const STRATEGIC_ACQUISITION = 'STRATEGIC ACQUISITION';
+    /** A purchase that takes the buyer into an industry it did not serve. */
+    public const CONGLOMERATE_EXPANSION = 'CONGLOMERATE EXPANSION';
+
     // --- Deal Sizing Limits (named in the deal announcement) ---
     /** The acquirer's cash, borrowing room or shares times the fraction it chose to spend. */
     public const LIMIT_BUYING_POWER = 'buying power';
@@ -310,16 +316,16 @@ class AcquisitionEngine
         $config = match (true) {
             // Empire builders fund acquisitions via available debt capacity, falling through to cash if covenants bind.
             $ctx->isEmpireBuilder && $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->totalBuyingPower > self::MA_EMPIRE_BUILDER_MIN_POWER => [
-                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => self::MA_EMPIRE_BUILDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true,
+                'prob' => self::MA_EMPIRE_BUILDER_PROB, 'spend' => self::MA_EMPIRE_BUILDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType(self::CONGLOMERATE_EXPANSION), 'use_leverage' => true, 'use_stock' => false, 'style_priced' => true,
             ],
             $ctx->isOvervalued => [
                 'prob' => self::MA_OVERVALUED_PROB, 'spend' => self::MA_OVERVALUED_SPEND, 'type' => 'STOCK-FOR-STOCK MERGER', 'use_leverage' => false, 'use_stock' => true,
             ],
             $ctx->isMegaHoarder => [
-                'prob' => self::MA_MEGA_HOARDER_PROB, 'spend' => self::MA_MEGA_HOARDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false,
+                'prob' => self::MA_MEGA_HOARDER_PROB, 'spend' => self::MA_MEGA_HOARDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType(self::CONGLOMERATE_EXPANSION), 'use_leverage' => false, 'use_stock' => false,
             ],
             $ctx->isHoarder => [
-                'prob' => self::MA_HOARDER_PROB, 'spend' => self::MA_HOARDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType('CONGLOMERATE EXPANSION'), 'use_leverage' => false, 'use_stock' => false,
+                'prob' => self::MA_HOARDER_PROB, 'spend' => self::MA_HOARDER_SPEND, 'type' => $ctx->strategy->getAcquisitionType(self::CONGLOMERATE_EXPANSION), 'use_leverage' => false, 'use_stock' => false,
             ],
             $ctx->health->canIssueDebt && $ctx->health->hasLeverageHeadroom && $ctx->normalizedDebtUtilization < self::MA_LOW_UTIL_THRESHOLD && $ctx->totalBuyingPower > self::MA_LBO_MIN_POWER && $ctx->costOfNewBorrowing < self::MA_LOW_RATE_CEILING => [
                 'prob' => self::MA_LOW_LEVERAGE_PROB, 'spend' => self::MA_LOW_LEVERAGE_SPEND, 'type' => $ctx->strategy->getAcquisitionType('LEVERAGED BUYOUT'), 'use_leverage' => true, 'use_stock' => false,
@@ -350,7 +356,7 @@ class AcquisitionEngine
             $ctx->dealExecuted = true;
         } elseif ($fallbackHazard > 0.0 && $draw < $primaryHazard + ((1.0 - $primaryHazard) * $fallbackHazard)) {
             $config = [
-                'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => self::MA_CASH_FALLBACK_SPEND, 'type' => 'STRATEGIC ACQUISITION', 'use_leverage' => false, 'use_stock' => false,
+                'prob' => self::MA_CASH_FALLBACK_PROB, 'spend' => self::MA_CASH_FALLBACK_SPEND, 'type' => self::STRATEGIC_ACQUISITION, 'use_leverage' => false, 'use_stock' => false,
             ];
             $ctx->dealExecuted = true;
         }
@@ -891,7 +897,10 @@ class AcquisitionEngine
             $ctx->segment === Segments::MAIN => '',
             default => ' for its ' . lcfirst(SegmentBooks::label($ctx->acquirer, $ctx->segment)) . ' business',
         };
-        $desc = "{$ctx->acquirer->getName()} executed a {$purchasePrice} {$ctx->config['type']} of {$ctx->target['name']}{$into}. " . $this->describeDealTerms($ctx);
+        // A deal that keeps the buyer in the industries it already serves buys a firm from their fringe, whatever the
+        // appetite that drove it: only one that takes it into a new industry is an expansion of the group.
+        $type = $ctx->config['type'] === self::CONGLOMERATE_EXPANSION && $ctx->entry === null ? self::STRATEGIC_ACQUISITION : $ctx->config['type'];
+        $desc = "{$ctx->acquirer->getName()} executed a {$purchasePrice} {$type} of {$ctx->target['name']}{$into}. " . $this->describeDealTerms($ctx);
 
         // The announcement return is the deal's NPV over the acquirer's market value before it (Moeller,
         // Schlingemann & Stulz 2004 measure acquirer returns in exactly these dollar terms). Limited
@@ -899,7 +908,7 @@ class AcquisitionEngine
         $marketCap = max(1.0, $ctx->price * $ctx->shares);
         $ctx->eventShock = max(-100.0, ($ctx->synergyValueCreation / $marketCap) * 100.0);
 
-        $event = $this->marketEvent->publish($ctx->acquirer, $ctx->config['type'], $desc, $ctx->eventShock, dealShareOfValue: $ctx->purchasePrice / $marketCap);
+        $event = $this->marketEvent->publish($ctx->acquirer, $type, $desc, $ctx->eventShock, dealShareOfValue: $ctx->purchasePrice / $marketCap);
 
         return [
             'event' => $event,

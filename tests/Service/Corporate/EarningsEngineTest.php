@@ -228,6 +228,37 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * Plant under construction runs nothing yet, so it is missing from capacity, but it is plant the firm has for its
+     * market: a firm with a tenth of its capital in construction files the same shortfall to its market as one with
+     * none, rather than ordering the same plant twice.
+     */
+    public function testPlantUnderConstructionIsNotOrderedTwice(): void
+    {
+        $filedGap = function (float $constructionShare): float {
+            $this->mathUtility = new MathUtility();
+            $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger(new InMemoryIndustryShareStore()));
+            mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+            $stock = $this->buildMatureIndustrial('PIPE');
+            $stock->setTotalRevenue('0');
+            $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+            $ticksPerYear = 252;
+
+            $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('PIPE', $ticksPerYear), $ticksPerYear);
+            $stock->setCipBalance((string) ($constructionShare * $stock->getInvestedCapital()));
+            $engine->calculate($stock, $macro, 63 + EarningsEngine::resolveReportingTick('PIPE', $ticksPerYear), $ticksPerYear);
+
+            return ($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0;
+        };
+
+        $running = $filedGap(0.0);
+        $building = $filedGap(0.10);
+
+        $this->assertEqualsWithDelta($running, $building, 0.005, 'the plant being built closes the gap it leaves in capacity');
+        $this->assertSame(1.0, CapitalBudgetEngine::gapAfterPipeline(1.0, 0.0, 100.0));
+        $this->assertEqualsWithDelta(log(1.1) - log1p(0.1), CapitalBudgetEngine::gapAfterPipeline(log(1.1), 10.0, 100.0), 1e-15);
+    }
+
+    /**
      * Demand, not the seeded reinvestment rate, sets how much plant a firm builds: one that would reinvest a single
      * percent of its earnings power keeps up with its market exactly as one that would reinvest ninety. Before, the
      * low reinvester fell behind its market for good and the industry ran short.

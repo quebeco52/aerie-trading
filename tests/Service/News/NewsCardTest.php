@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\News;
 
 use App\Data\Company\Sectors;
+use App\Service\Corporate\Deal\AcquisitionEngine;
 use App\Service\News\EventPresenter;
 use App\Service\News\NewsCard;
 use App\Service\News\PresentableEvent;
@@ -108,7 +109,8 @@ class NewsCardTest extends TestCase
             }
             $source = (string) file_get_contents($file->getPathname());
             preg_match_all("/->publish\\(\\s*[^,]+,\\s*'([^']+)'/", $source, $published);
-            preg_match_all("/'type' => '([A-Z][A-Z -]+)'/", str_contains($file->getFilename(), 'AcquisitionEngine') ? $source : '', $configured);
+            // The acquisition engine names its deal types as constants and offers them through its config rows.
+            preg_match_all("/(?:'type' => |const [A-Z_]+ = )'([A-Z][A-Z -]+)'/", str_contains($file->getFilename(), 'AcquisitionEngine') ? $source : '', $configured);
             foreach ([...$published[1], ...$configured[1]] as $type) {
                 $types[$type] = true;
             }
@@ -126,12 +128,16 @@ class NewsCardTest extends TestCase
     public static function dealTypes(): iterable
     {
         $source = (string) file_get_contents(dirname(__DIR__, 3) . '/src/Service/Corporate/Deal/AcquisitionEngine.php');
-        preg_match_all("/getAcquisitionType\\('([^']+)'\\)/", $source, $defaults);
+        preg_match_all("/getAcquisitionType\\((?:'([^']+)'|self::([A-Z_]+))\\)/", $source, $defaults, PREG_SET_ORDER);
+        $defaults = array_unique(array_map(
+            static fn(array $match): string => ($match[2] ?? '') !== '' ? (string) constant(AcquisitionEngine::class . '::' . $match[2]) : $match[1] ?? '',
+            $defaults,
+        ));
 
         $seen = [];
         foreach (Sectors::INDUSTRY_METRICS as $metrics) {
             $model = $metrics['business_model'] ?? 'none';
-            foreach (array_unique($defaults[1]) as $default) {
+            foreach ($defaults as $default) {
                 $type = Sectors::getBusinessModelStrategy($model)->getAcquisitionType($default);
                 if (!isset($seen["{$model}:{$type}"])) {
                     $seen["{$model}:{$type}"] = true;

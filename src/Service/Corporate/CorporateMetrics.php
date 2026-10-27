@@ -130,10 +130,15 @@ class CorporateMetrics
      */
     public static function revenueGeneratingCapital(float $investedCapital, float $constructionInProgress, float $goodwill): float
     {
-        $capital = abs($investedCapital);
-        $cipDeduction = min($capital * self::MAX_CIP_CAPITAL_DEDUCTION_RATIO, max(0.0, $constructionInProgress));
+        return max(0.0, abs($investedCapital) - self::constructionOutOfService($investedCapital, $constructionInProgress) - max(0.0, $goodwill));
+    }
 
-        return max(0.0, $capital - $cipDeduction - max(0.0, $goodwill));
+    /**
+     * The construction revenueGeneratingCapital() leaves out of capacity: all of it, up to its capped share of capital.
+     */
+    public static function constructionOutOfService(float $investedCapital, float $constructionInProgress): float
+    {
+        return min(abs($investedCapital) * self::MAX_CIP_CAPITAL_DEDUCTION_RATIO, max(0.0, $constructionInProgress));
     }
 
     /**

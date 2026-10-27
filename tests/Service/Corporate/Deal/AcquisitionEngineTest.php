@@ -565,6 +565,8 @@ class AcquisitionEngineTest extends TestCase
         $hubristic->setManagementStyle(ManagementStyle::EmpireBuilder);
         $hubristicResult = $this->engine->evaluatePrivateAcquisition($hubristic, $this->healthyMacro(), 1.0);
         $this->assertIsArray($hubristicResult);
+        // An empire builder's appetite bought a firm in its own market, and the news calls it that.
+        $this->assertSame(AcquisitionEngine::STRATEGIC_ACQUISITION, $hubristicResult['event']['type']);
 
         $disciplinedGoodwillRate = ((float) $disciplined->getGoodwill() - $openingGoodwill) / (float) $disciplinedResult['spent'];
         $hubristicGoodwillRate = ((float) $hubristic->getGoodwill() - $openingGoodwill) / (float) $hubristicResult['spent'];
