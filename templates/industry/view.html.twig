@@ -32,7 +32,7 @@
 						{{ ui.figure('Under construction', latest.building|pct(1), {note: 'of the plant standing'}) }}
 					{% endif %}
 					{% if industry.outlook %}
-						{{ ui.figure('Demand outlook', industry.outlook.level|figure('index', 2), {tone: (industry.outlook.level - 1)|signed_class, note: '1.00 when trading opened', tip: 'What industry data lead the market to expect of demand for the whole industry in the long run, against what it expected when trading opened.'}) }}
+						{{ ui.figure('Demand outlook', industry.outlook.level|figure('index', 2), {tone: (industry.outlook.level - 1)|round(2)|signed_class, note: '1.00 when trading opened', tip: 'What industry data lead the market to expect of demand for the whole industry in the long run, against what it expected when trading opened.'}) }}
 					{% endif %}
 				</dl>
 			{% endblock %}
@@ -60,10 +60,10 @@
 					<li>Plant under construction is <span class="font-mono text-on-surface">{{ latest.building|pct(1) }}</span> of the plant standing{% if industry.buildingYearAgo is not null %}, against <span class="font-mono text-on-surface">{{ industry.buildingYearAgo|pct(1) }}</span> a year earlier{% endif %}. It adds to supply when it opens.</li>
 				{% endif %}
 				{% if industry.mover and industry.mover.shareChange|abs >= 0.005 %}
-					<li><a href="/stock/{{ industry.mover.ticker }}" class="font-mono text-on-surface hover:text-primary">{{ industry.mover.ticker }}</a> has {{ industry.mover.shareChange > 0 ? 'gained' : 'lost' }} <span class="font-mono {{ industry.mover.shareChange|signed_class }}">{{ industry.mover.shareChange|abs|pp(1) }}</span> of the listed companies' sales in three years, the largest move among them.</li>
+					<li><a href="/stock/{{ industry.mover.ticker }}" class="font-mono text-on-surface hover:text-primary">{{ industry.mover.ticker }}</a> has {{ industry.mover.shareChange > 0 ? 'gained' : 'lost' }} <span class="font-mono {{ industry.mover.shareChange|round(3)|signed_class }}">{{ industry.mover.shareChange|abs|pp(1) }}</span> of the listed companies' sales in three years, the largest move among them.</li>
 				{% endif %}
 				{% if industry.outlook and industry.outlook.revision is not null %}
-					<li>Industry data last {{ industry.outlook.revision < 0 ? 'cut' : 'raised' }} the long-run demand outlook by <span class="font-mono {{ industry.outlook.revision|signed_class }}">{{ industry.outlook.revision|abs|pct(1) }}</span>, to <span class="font-mono text-on-surface">{{ industry.outlook.level|figure('index', 2) }}</span>. Companies plan their plant for this demand.</li>
+					<li>Industry data last {{ industry.outlook.revision < 0 ? 'cut' : 'raised' }} the long-run demand outlook by <span class="font-mono {{ industry.outlook.revision|round(3)|signed_class }}">{{ industry.outlook.revision|abs|pct(1) }}</span>, to <span class="font-mono text-on-surface">{{ industry.outlook.level|figure('index', 2) }}</span>. Companies plan their plant for this demand.</li>
 				{% endif %}
 				{% if industry.failed > 0 %}
 					<li>{{ industry.failed }} listed {{ industry.failed == 1 ? 'company' : 'companies' }} in it {{ industry.failed == 1 ? 'has' : 'have' }} failed.</li>
@@ -121,7 +121,7 @@
 									<th scope="row" class="py-1.5 text-left font-normal"><a href="/stock/{{ company.ticker }}" class="hover:text-primary"><span class="font-mono font-semibold text-on-surface">{{ company.ticker }}</span> <span class="text-on-surface-variant">{{ company.name }}</span></a></th>
 									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ company.marketValue|format_large('$') }}</td>
 									<td class="py-1.5 text-right font-mono tabular-nums {{ company.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ company.share is null ? '—' : company.share|pct(1) }}</td>
-									<td class="py-1.5 text-right font-mono tabular-nums {{ company.shareChange is null ? 'text-on-surface-faint' : company.shareChange|signed_class }}">{{ company.shareChange is null ? '—' : company.shareChange|pp(1, true) }}</td>
+									<td class="py-1.5 text-right font-mono tabular-nums {{ company.shareChange is null ? 'text-on-surface-faint' : company.shareChange|round(3)|signed_class }}">{{ company.shareChange is null ? '—' : company.shareChange|pp(1, true) }}</td>
 								</tr>
 							{% endfor %}
 						</tbody>

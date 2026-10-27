@@ -2,7 +2,7 @@ import { setupChartDefaults } from '../utils/chart-config.js';
 import { readPageData } from '../utils/page-data.js';
 import { showLoading, showError, hideStatus } from '../utils/fetch-status.js';
 import { setupChartGridFilters, setupExpandableCards } from '../utils/chart-grid.js';
-import { initPriceChart, queueLivePricePoints, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
+import { initPriceChart, queueLivePricePoints, refreshChartEvents, resizePriceChart, destroyPriceChart } from '../stock/price-chart.js';
 import { initEtfChart, updateEtfPie, resizeEtfChart, destroyEtfChart } from '../stock/etf-chart.js';
 import { updatePriceUI, resetPriceHistoryState } from '../stock/stats-updater.js';
 import { renderEvents } from '../stock/events-feed.js';
@@ -132,6 +132,8 @@ function initStockPage() {
 
         if (payload.events && payload.events.length > 0) {
             renderEvents(payload.events, ticker);
+            // A story about this company goes on the price chart too; the chart reads which ones it shows.
+            if (payload.events.some(evt => evt.ticker === ticker)) refreshChartEvents();
         }
     };
     document.addEventListener('market:frame', marketFrameHandler);

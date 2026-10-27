@@ -15,6 +15,11 @@ let volumeSeries = null;
 let chartEvents = null;
 /** The figures under the cursor (chart-readout.js). */
 let chartReadout = null;
+/** The pending re-read of the stories after one landed live. */
+let eventsRefreshTimer = null;
+/** The axis second the loaded history's newest row is dated at, and the live clock's reading when it was loaded. */
+let historyAnchorTime = 0;
+let simTimeAtLoad = 0;
 let chartStyle = 'area';
 let chartField = 'price';
 let lastBar = null;
@@ -55,6 +60,9 @@ const TRIM_BATCH = 8000;
  * one-year line already scrolls about a pixel per paint, so a higher rate buys sub-pixel steps.
  */
 const LIVE_PAINTS_PER_SECOND = 30;
+
+/** Wait after a live story for this company before the chart re-reads its stories, so one burst costs one read. */
+const EVENTS_REFRESH_DELAY_MS = 1500;
 
 /** How far, in bars, the view may start past the first bar and still count as showing it. */
 const HISTORY_START_SLACK = 0.5;
@@ -286,6 +294,8 @@ export async function loadPriceHistory(range) {
 
         currentSimTime = chartData[chartData.length - 1].time;
         lastChartPointTime = currentSimTime;
+        historyAnchorTime = anchorTime;
+        simTimeAtLoad = currentSimTime;
 
         if (chartEvents && chartField === 'price') {
             chartEvents.load(currentTicker, range, anchorTime, chartData.map(point => point.time), SECONDS_PER_SIM_YEAR);
@@ -475,6 +485,21 @@ function trimSeriesIfNeeded() {
     }
 }
 
+/**
+ * Re-reads the company's stories after one lands on the live feed. They are dated as the loaded history was, moved on
+ * by the ticks drawn since: the newest history row has moved on with them.
+ */
+export function refreshChartEvents() {
+    if (!chartEvents || chartField !== 'price') return;
+    clearTimeout(eventsRefreshTimer);
+    eventsRefreshTimer = setTimeout(() => {
+        eventsRefreshTimer = null;
+        if (!chartEvents || chartField !== 'price' || chartData.length === 0) return;
+        const anchorTime = historyAnchorTime + (currentSimTime - simTimeAtLoad);
+        chartEvents.load(currentTicker, currentRange, anchorTime, chartData.map(point => point.time), SECONDS_PER_SIM_YEAR, true);
+    }, EVENTS_REFRESH_DELAY_MS);
+}
+
 /** The rendering of the price now drawn: the line or the candles. */
 function drawnSeries() {
     return chartStyle === 'candles' ? candleSeries : areaSeries;
@@ -524,6 +549,8 @@ export function destroyPriceChart() {
         try { chartResizeObserver.disconnect(); } catch (e) {}
         chartResizeObserver = null;
     }
+    clearTimeout(eventsRefreshTimer);
+    eventsRefreshTimer = null;
     if (chartEvents) {
         chartEvents.destroy();
         chartEvents = null;

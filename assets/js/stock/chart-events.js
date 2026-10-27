@@ -182,12 +182,16 @@ export function attachChartEvents(chart, host, series) {
     return {
         /**
          * Loads the stories for `range` and pins each to the bar nearest its age; `anchorTime` is the axis second the
-         * newest bar was dated from, `barTimes` the bars' times ascending. Stories outside the drawn span are dropped.
+         * newest history row is dated at, `barTimes` the bars' times ascending. Stories older than the first bar are
+         * dropped; one newer than the last, landed while the live bar is open, goes on that bar. A `refresh` keeps the
+         * markers drawn until the new set arrives, where a new range clears them at once.
          */
-        async load(ticker, range, anchorTime, barTimes, secondsPerYear) {
+        async load(ticker, range, anchorTime, barTimes, secondsPerYear, refresh = false) {
             const load = ++loadCount;
-            groups = new Map();
-            render([]);
+            if (!refresh) {
+                groups = new Map();
+                render([]);
+            }
             if (barTimes.length === 0) return;
             let stories = [];
             try {
@@ -199,10 +203,10 @@ export function attachChartEvents(chart, host, series) {
             if (load !== loadCount || !Array.isArray(stories)) return;
 
             const first = barTimes[0];
-            const last = barTimes[barTimes.length - 1];
+            groups = new Map();
             stories.forEach(story => {
                 const time = anchorTime - Math.round((Number(story.age) || 0) * secondsPerYear);
-                if (time < first || time > last) return;
+                if (time < first) return;
                 const bar = nearestTime(barTimes, time);
                 const side = BELOW_TONES.has(story.tone) ? 'below' : 'above';
                 const id = `${bar}:${side}`;
