@@ -42,6 +42,12 @@ trait StandardValuationTrait
         return 0.0;
     }
 
+    /** An operating company's own news is news about the margin it earns. */
+    public function carriesFranchise(): bool
+    {
+        return true;
+    }
+
     /**
      * The consensus fair value: earnings value and book value blended at the model's book weight, declared through
      * getFairValueBookWeight(). The dividend is not a further input: what a firm pays out leaves the firm, and for a

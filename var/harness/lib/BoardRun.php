@@ -230,6 +230,9 @@ abstract class BoardRun extends KernelTestCase
             }
         }
 
+        // The industry outlook salts its draws from entropy unless one is written first: 1000 + SEED, so two runs of one
+        // seed draw the same outlooks (a topic's onStart may write its own).
+        $c->get(App\Service\Corporate\Industry\IndustryShareStoreInterface::class)->writeOutlooks(['salt' => 1000 + $this->seed, 'quarter' => -1, 'industries' => []]);
         $this->onStart();
 
         for ($tick = 1; $tick <= $ticks; $tick++) {

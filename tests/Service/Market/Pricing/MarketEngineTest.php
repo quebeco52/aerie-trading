@@ -10,6 +10,7 @@ use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\PolicyCapitalization;
 use App\Service\Market\Pricing\VarianceBudget;
+use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -517,6 +518,9 @@ class MarketEngineTest extends TestCase
 
         $stepping = new MarketEngine(new MathUtility());
         $step = $stepping->calculateNextPrice($context);
+        // The step's own franchise news moved its fair value; struck at the power it left, the strike is the same.
+        $context->franchisePower = $step['franchise_power'];
+        $strike = $this->engine->strikeFairValue($context);
         $this->assertEqualsWithDelta($step['perceived_fair_value'], $strike['perceived_fair_value'], 1e-9);
         $this->assertEqualsWithDelta($step['analyst_targets'], $strike['analyst_targets'], 1e-9);
     }
@@ -597,6 +601,9 @@ class MarketEngineTest extends TestCase
                 priorMarketVol: 0.15,
                 bookValuePerShare: 50.0,
                 liveCostOfEquity: 0.09,
+                // No margin for franchise news to move: given a zero draw its news and its noise cancel in the price
+                // but not in fair value, and this pins the drift alone.
+                baselineMargin: 0.0,
             );
             // Fair value reads the price weakly, so strike it where it reproduces itself and the pull is exactly zero.
             $fair = 100.0;
@@ -741,7 +748,7 @@ class MarketEngineTest extends TestCase
      */
     public function testAFinancialsBookLegIsStruckOnTangibleBook(): void
     {
-        $valueAnalyst = fn(float $roe, ?float $tangibleBook, string $model = 'commercial_bank'): float => $this->engine->calculateNextPrice(new MarketPricingContext(
+        $valueAnalyst = fn(float $roe, ?float $tangibleBook, string $model = 'commercial_bank'): float => $this->engine->strikeFairValue(new MarketPricingContext(
             currentPrice: 50.0,
             currentVolatility: 0.2,
             longTermVolatility: 0.2,
@@ -832,4 +839,139 @@ class MarketEngineTest extends TestCase
             generateExponential: static fn(float $rate): float => $sizes->generateExponential($rate),
         );
     }
+
+    /** A context with a structural margin for franchise power to shift, stepped a trading day; no jump. */
+    private function franchiseContext(float $franchisePower, string $businessModel = 'none', float $baselineMargin = 0.20, float $dt = 1.0 / 252.0, float $bookValuePerShare = 40.0, float $investedCapitalPerShare = 45.0): MarketPricingContext
+    {
+        return new MarketPricingContext(
+            currentPrice: 60.0,
+            currentVolatility: 0.30,
+            longTermVolatility: 0.30,
+            dt: $dt,
+            lambda: 0.0,
+            macroState: new MacroStateDTO(policyRate: 0.04, equityRiskPremium: 0.045),
+            bookValuePerShare: $bookValuePerShare,
+            currentRoic: 0.15,
+            trailingReturn: 0.15,
+            revenuePerShare: 50.0,
+            businessModel: $businessModel,
+            liveCostOfEquity: 0.10,
+            baselineRoic: 0.15,
+            baselineMargin: $baselineMargin,
+            investedCapitalPerShare: $investedCapitalPerShare,
+            franchisePower: $franchisePower,
+        );
+    }
+
+    /** The step's franchise news: its share of the own diffusion, split from the draw by a draw hashed from it. */
+    private static function franchiseNews(MarketPricingContext $context, float $z): float
+    {
+        $independent = Distributions::standardNormalQuantile(MathUtility::hashedUniform(0, 'franchise-news:' . bin2hex(pack('e', $z))));
+
+        return VarianceBudget::forStep($context)->idiosyncraticVolatility() * sqrt((1.0 - MarketEngine::SECTOR_FACTOR_VARIANCE_SHARE) * $context->dt)
+            * Distributions::conditionalComponent($z, $independent, MarketEngine::FRANCHISE_NEWS_SHARE);
+    }
+
+    /**
+     * At no franchise, the news moves fair value by itself to first order, and the power it moves is the one fair
+     * value is struck on: struck again at the new power, fair value is where the step left it.
+     */
+    public function testFranchiseNewsMovesFairValueByItsShareOfTheOwnDiffusion(): void
+    {
+        $z = 1.7;
+        $this->mathUtilityMock->script(generateStandardNormal: $z);
+        $context = $this->franchiseContext(0.0);
+        $before = $this->engine->strikeFairValue($context)['perceived_fair_value'];
+
+        $result = $this->engine->calculateNextPrice($context);
+
+        $news = self::franchiseNews($context, $z);
+        $this->assertEqualsWithDelta($news, log($result['perceived_fair_value'] / $before), 0.02 * abs($news) + 1e-6);
+        $this->assertGreaterThan(0.0, $result['franchise_power'] * $news, 'the power moves with the news');
+
+        $restruck = $this->engine->strikeFairValue($this->franchiseContext($result['franchise_power']))['perceived_fair_value'];
+        $this->assertEqualsWithDelta($result['perceived_fair_value'], $restruck, 1e-9);
+    }
+
+    /**
+     * The news moves the power by the same amount whatever the power already is; fair value takes it at the power's
+     * elasticity, which falls as the margin thins, so a franchise under bad news never takes fair value to its floor.
+     */
+    public function testNewsMovesThePowerEvenlyAndValueByItsElasticity(): void
+    {
+        $z = -2.5;
+        $step = function (float $power) use ($z): array {
+            $this->mathUtilityMock->script(generateStandardNormal: $z);
+            $context = $this->franchiseContext($power);
+            $faded = $power * exp(-MarketEngine::FRANCHISE_FADE_SPEED * $context->dt);
+            $result = $this->engine->calculateNextPrice($context);
+
+            return ['shift' => $result['franchise_power'] - $faded, 'move' => log($result['perceived_fair_value'] / $this->engine->strikeFairValue($context)['perceived_fair_value']), 'value' => $result['perceived_fair_value']];
+        };
+
+        $atZero = $step(0.0);
+        $deep = $step(-4.0);
+        $this->assertEqualsWithDelta($atZero['shift'], $deep['shift'], 1e-12);
+        $this->assertLessThan(0.25 * abs($atZero['move']), abs($deep['move']), 'a franchise already worn thin has little left to lose');
+        $this->assertGreaterThan(1.0, $deep['value'], 'fair value keeps the business without its franchise');
+    }
+
+    /** With no news, the power halves over its half-life. */
+    public function testWithoutNewsThePowerFadesAtItsHalfLife(): void
+    {
+        $this->mathUtilityMock->script(generateStandardNormal: 2.0);
+        $context = $this->franchiseContext(0.4, 'investment_company', 0.20, MarketEngine::FRANCHISE_HALF_LIFE_YEARS);
+
+        $this->assertEqualsWithDelta(0.2, $this->engine->calculateNextPrice($context)['franchise_power'], 1e-12);
+    }
+
+    /** A trust's own news is its holdings': its power and fair value take none of it. */
+    public function testATrustCarriesNoFranchise(): void
+    {
+        $this->mathUtilityMock->script(generateStandardNormal: 2.0);
+        $context = $this->franchiseContext(0.0, 'investment_company');
+
+        $result = $this->engine->calculateNextPrice($context);
+
+        $this->assertSame(0.0, $result['franchise_power']);
+        $this->assertEqualsWithDelta($this->engine->strikeFairValue($context)['perceived_fair_value'], $result['perceived_fair_value'], 1e-9);
+    }
+
+    /** An own jump is no franchise news: fair value does not take it. */
+    public function testAnOwnJumpLeavesTheFranchiseAlone(): void
+    {
+        $step = function (float $jump): array {
+            $this->mathUtilityMock->script(generateStandardNormal: 0.4, calculateSVJJJumps: ['price_multiplier' => $jump, 'var_jump' => 0.0, 'shock_pct' => null]);
+            $result = $this->engine->calculateNextPrice($this->franchiseContext(0.1));
+
+            return [$result['franchise_power'], $result['perceived_fair_value']];
+        };
+
+        $this->assertSame($step(1.0), $step(0.7));
+    }
+
+    /**
+     * Equity news is operating news levered: a firm whose equity return moves three times its operating return moves
+     * its power a third as far on the same draw, while its fair value still takes the news. A lender's return is struck
+     * on its equity already, so its balance sheet does not scale the map.
+     */
+    public function testEquityNewsMovesTheFranchiseAtTheLeverageFairValueIsStruckOn(): void
+    {
+        $z = 1.3;
+        $step = function (string $model, float $investedCapital) use ($z): array {
+            $this->mathUtilityMock->script(generateStandardNormal: $z);
+            $context = $this->franchiseContext(0.0, $model, 0.20, 1.0 / 252.0, 30.0, $investedCapital);
+            $result = $this->engine->calculateNextPrice($context);
+
+            return ['power' => $result['franchise_power'], 'move' => log($result['perceived_fair_value'] / $this->engine->strikeFairValue($context)['perceived_fair_value'])];
+        };
+
+        $unlevered = $step('none', 30.0);
+        $levered = $step('none', 90.0);
+        $this->assertEqualsWithDelta(1.0 / 3.0, $levered['power'] / $unlevered['power'], 0.02, 'a third the operating news');
+        $this->assertEqualsWithDelta($unlevered['move'], $levered['move'], 0.1 * abs($unlevered['move']), 'the equity takes the news either way');
+
+        $this->assertEqualsWithDelta($step('commercial_bank', 30.0)['power'], $step('commercial_bank', 90.0)['power'], 1e-12);
+    }
+
 }

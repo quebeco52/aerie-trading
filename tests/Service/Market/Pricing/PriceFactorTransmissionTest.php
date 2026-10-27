@@ -215,7 +215,8 @@ final class PriceFactorTransmissionTest extends TestCase
                 liveCostOfEquity: 0.10,
                 baselineRoic: 0.15,
             );
-            $fairValue = $this->engine->calculateNextPrice($context(60.0))['perceived_fair_value'];
+            // The fair value the step's drift reads, struck before its own news moves it.
+            $fairValue = $this->engine->strikeFairValue($context(60.0))['perceived_fair_value'];
             $price = $fairValue * $priceOverFairValue;
             $result = $this->engine->calculateNextPrice($context($price));
 

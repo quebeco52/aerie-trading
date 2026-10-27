@@ -61,4 +61,10 @@ interface ValuationStrategyInterface
      * volatility would raise the volatility that widened it, with no damping in the loop.
      */
     public function getStructuralValuationDiscount(MacroStateDTO $macroState): float;
+
+    /**
+     * Whether the firm's own news is news about the margin it earns (Stock::$franchisePower). A trust's own news is
+     * its holdings', which reach its value through their own prices, so it carries none.
+     */
+    public function carriesFranchise(): bool;
 }

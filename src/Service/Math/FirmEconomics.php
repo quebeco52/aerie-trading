@@ -69,6 +69,49 @@ final class FirmEconomics
     }
 
     /**
+     * The operating margin a firm earns once its franchise power shifts the log-odds of its structural margin: a firm
+     * at margin m with power p earns m e^p / (1 - m + m e^p). Close to m e^p on a thin margin, it can neither turn
+     * negative nor reach the whole of revenue, whatever the news. A margin outside (0, 1) is left as it is.
+     */
+    public static function franchiseMargin(float $structuralMargin, float $franchisePower): float
+    {
+        if ($structuralMargin <= 0.0 || $structuralMargin >= 1.0) {
+            return $structuralMargin;
+        }
+        $odds = $structuralMargin / (1.0 - $structuralMargin) * exp($franchisePower);
+
+        return $odds / (1.0 + $odds);
+    }
+
+    /** Operating profit at a franchise power over profit at the structural margin; one where no margin is defined. */
+    public static function franchiseProfitMultiple(float $structuralMargin, float $franchisePower): float
+    {
+        return $structuralMargin > 0.0 && $structuralMargin < 1.0 ? self::franchiseMargin($structuralMargin, $franchisePower) / $structuralMargin : 1.0;
+    }
+
+    /** The franchise power at which a structural margin becomes a target margin: franchiseMargin()'s inverse. */
+    public static function franchisePowerForMargin(float $structuralMargin, float $margin): float
+    {
+        if ($structuralMargin <= 0.0 || $structuralMargin >= 1.0 || $margin <= 0.0 || $margin >= 1.0) {
+            return 0.0;
+        }
+
+        return log($margin / (1.0 - $margin)) - log($structuralMargin / (1.0 - $structuralMargin));
+    }
+
+    /**
+     * The return a franchise margin adds on the capital a firm is measured on: the profit it adds a year, after tax,
+     * over that capital.
+     *
+     * @param float $annualProfit The operating profit the franchise adds, a year.
+     * @param float $capital      The capital the return is measured on (invested capital, or equity for a lender).
+     */
+    public static function franchiseReturn(float $annualProfit, float $taxRate, float $capital): float
+    {
+        return $annualProfit * (1.0 - $taxRate) / max(1.0, abs($capital));
+    }
+
+    /**
      * What new plant in one of a company's businesses earns at the price its industry pays today: the company's return
      * scaled by how much more (or less) that business earns on each unit of plant, its margin times its turnover over
      * the company's, plus the after-tax margin its industry's price adds on the revenue that plant turns over.

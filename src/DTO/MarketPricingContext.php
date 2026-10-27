@@ -108,6 +108,8 @@ class MarketPricingContext
          * the gap (CapitalBudgetEngine::STATE_CAPACITY_SPARE); zero for any other.
          */
         public float $capacitySpare = 0.0,
+        /** The shift the firm's own news has given the log-odds of its structural margin (Stock::$franchisePower). */
+        public float $franchisePower = 0.0,
     ) {}
 
     /**
@@ -188,6 +190,7 @@ class MarketPricingContext
             excessCashPerShare: $excessCash / $shares,
             capacityGap: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0),
             capacitySpare: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_SPARE] ?? 0.0),
+            franchisePower: (float) ($stock->getFranchisePower() ?? 0.0),
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

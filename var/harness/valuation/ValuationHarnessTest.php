@@ -12,6 +12,11 @@ require_once __DIR__ . '/../price_vol/Probe.php';
  * index, price, perceived fair value per share, EPS as the stock carries it, shares, float-adjusted cap, and the
  * quarter's channel sums (15 columns, Probe::NAMES; dfv = d log fair value), then the engine's live cost of equity and
  * a financial flag. Deal events counted by type. VAL_OUT=<json>. Draws nothing.
+ *
+ * Also per quarter, under keys of their own so the rows above keep their shape: 'agent_rows', the momentum agents'
+ * capital share by name (Brock-Hommes shares off each name's fitness and the market's style) with its board median,
+ * mean and max; and 'franchise_rows', each name's franchise power as [power, 0.0] (the second slot, once a belief gap,
+ * kept for the readers' shape).
  */
 final class ValuationHarnessTest extends BoardRun
 {
@@ -36,6 +41,10 @@ final class ValuationHarnessTest extends BoardRun
     private array $last = [];
     /** @var list<array{0: float, 1: array<string, list<float>>}> */
     private array $rows = [];
+    /** @var list<array{t: float, mom_med: ?float, mom_mean: ?float, mom_max: ?float, mom: array<string, float>}> */
+    private array $agentRows = [];
+    /** @var list<array{0: float, 1: array<string, array{0: float, 1: float}>}> */
+    private array $franchiseRows = [];
 
     protected function onStart(): void
     {
@@ -64,7 +73,7 @@ final class ValuationHarnessTest extends BoardRun
         }
         $this->probe->tick = $this->tick;
         $this->probe->macro = $this->currentMacro;
-        $this->probe->queue = array_values(array_filter($this->stocks, static fn ($s) => !$s->isBankrupt()));
+        $this->probe->queue = array_values(array_filter($this->stocks, static fn($s) => !$s->isBankrupt()));
     }
 
     protected function afterStocks(array $result): void
@@ -95,7 +104,7 @@ final class ValuationHarnessTest extends BoardRun
         foreach ([5, 10, 20] as $yr) {
             if ($this->tick === $yr * $this->tpy && $this->tracker !== null && property_exists($this->tracker, 'yieldRevisionCovariance')) {
                 // The d2/d2b trackers' yield exposure moments, read by name: the kept tracker has none.
-                $vars = \Closure::bind(fn () => get_object_vars($this), $this->tracker, \App\Service\Market\Pricing\StockTracker::class)();
+                $vars = Closure::bind(fn() => get_object_vars($this), $this->tracker, App\Service\Market\Pricing\StockTracker::class)();
                 $this->bhat[(string) $yr] = [$vars['yieldRevisionCovariance'], $vars['yieldMoveVariance']];
             }
         }
@@ -111,16 +120,55 @@ final class ValuationHarnessTest extends BoardRun
             $snap[$tk] = [
                 (float) $s->getPrice() * ($this->adj[$tk] ?? 1.0), (float) $s->getPrice(), $this->fv[$tk] ?? 0.0,
                 (float) $s->getEarningsPerShare(), (float) $s->getSharesOutstanding(),
-                \App\Service\Market\Index\IndexCommittee::floatAdjustedCap($s),
+                App\Service\Market\Index\IndexCommittee::floatAdjustedCap($s),
                 ...($this->acc[$tk] ?? array_fill(0, 15, 0.0)),
-                $this->coe[$tk] ?? null, $s->getSector() === 'Financial Services' || \App\Data\Company\Sectors::strategyFor((string) $s->getIndustry())->isFinancial() ? 1.0 : 0.0,
+                $this->coe[$tk] ?? null, $s->getSector() === 'Financial Services' || App\Data\Company\Sectors::strategyFor((string) $s->getIndustry())->isFinancial() ? 1.0 : 0.0,
             ];
         }
         $this->acc = [];
         $this->rows[] = [round($this->currentTime, 4), $snap];
+        $this->agentRows[] = ['t' => round($this->currentTime, 4)] + $this->momentumShares(array_keys($snap));
+        $franchise = [];
+        // A BASE tree from before the franchise has no such state; it logs none.
+        foreach (method_exists(App\Entity\Stock::class, 'getFranchisePower') ? array_keys($snap) : [] as $tk) {
+            $franchise[$tk] = [(float) ($this->stocks[$tk]->getFranchisePower() ?? 0.0), 0.0];
+        }
+        $this->franchiseRows[] = [round($this->currentTime, 4), $franchise];
     }
 
-    protected function onEvent(\App\Entity\StockEvent $event): void
+    /**
+     * The momentum agents' share of competing capital in each name, as AgentFlowEngine sizes it: the population's
+     * shares off the name's fitness crowded by the market's style. Read through the tracker's private engine.
+     *
+     * @param list<string> $tickers
+     * @return array{mom_med: ?float, mom_mean: ?float, mom_max: ?float, mom: array<string, float>}
+     */
+    private function momentumShares(array $tickers): array
+    {
+        $empty = ['mom_med' => null, 'mom_mean' => null, 'mom_max' => null, 'mom' => []];
+        if ($this->tracker === null) {
+            return $empty;
+        }
+        $flow = Closure::bind(fn() => $this->agentFlow, $this->tracker, App\Service\Market\Pricing\StockTracker::class)();
+        [$population, $store, $style] = Closure::bind(fn() => [$this->population, $this->stateStore, $this->style], $flow, App\Service\Market\Agent\AgentFlowEngine::class)();
+        $shares = [];
+        foreach ($tickers as $tk) {
+            $fitness = ($store->read($tk) ?? [])['fitness'] ?? [];
+            if ($fitness !== []) {
+                $shares[$tk] = (float) ($population->shares($population->crowdedFitness($fitness, $style))['momentum'] ?? 0.0);
+            }
+        }
+        if ($shares === []) {
+            return $empty;
+        }
+        $sorted = array_values($shares);
+        sort($sorted);
+        $n = count($sorted);
+
+        return ['mom_med' => $n % 2 === 1 ? $sorted[intdiv($n, 2)] : ($sorted[$n / 2 - 1] + $sorted[$n / 2]) / 2.0, 'mom_mean' => array_sum($sorted) / $n, 'mom_max' => $sorted[$n - 1], 'mom' => $shares];
+    }
+
+    protected function onEvent(App\Entity\StockEvent $event): void
     {
         $d = (string) $event->getDescription();
         if (preg_match('/ executed a \$/', $d)) {
@@ -129,7 +177,7 @@ final class ValuationHarnessTest extends BoardRun
     }
 
     /** MACRO_OUT rows also carry the discount-rate inputs fair value reads and the market factor's state. */
-    protected function macroRow(array $row, \App\DTO\MacroStateDTO $m): array
+    protected function macroRow(array $row, App\DTO\MacroStateDTO $m): array
     {
         return $row + [
             'y10' => $m->yield10y, 'credit' => $m->macroCreditSpread, 'tips' => $m->tipsBreakeven,
@@ -143,7 +191,8 @@ final class ValuationHarnessTest extends BoardRun
         $out = getenv('VAL_OUT');
         if ($out) {
             file_put_contents($out, json_encode(['tpy' => $this->tpy, 'names' => PriceVolProbe::NAMES, 'unmatched' => $this->probe?->unmatched,
-                'sector' => array_map(static fn ($s) => $s->getSector(), $this->stocks), 'deals' => $this->deals, 'rv' => $this->rv, 'rvIndex' => $this->rvIndex, 'bhat' => $this->bhat, 'audit' => ($this->probe?->result() ?? [])['audit'] ?? [], 'rows' => $this->rows]));
+                'sector' => array_map(static fn($s) => $s->getSector(), $this->stocks), 'deals' => $this->deals, 'rv' => $this->rv, 'rvIndex' => $this->rvIndex, 'bhat' => $this->bhat, 'audit' => ($this->probe?->result() ?? [])['audit'] ?? [], 'rows' => $this->rows,
+                'agent_rows' => $this->agentRows, 'franchise_rows' => $this->franchiseRows]));
         }
     }
 }

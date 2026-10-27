@@ -602,6 +602,14 @@ class Stock
     private ?float $announcementVarianceEma = 0.0;
 
     /**
+     * The shift the firm's own news has given the log-odds of its structural operating margin
+     * (FirmEconomics::franchiseMargin()): fair value carries it as news lands, the cost base books it, and it fades
+     * (MarketEngine::FRANCHISE_FADE_SPEED).
+     */
+    #[ORM\Column(type: 'float', nullable: true, options: ['default' => 0.0])]
+    private ?float $franchisePower = 0.0;
+
+    /**
      * @var float|null Exponentially weighted realized variance of the name's TOTAL return, annualized.
      *
      * What the tape actually printed, as opposed to `currentVolatility`, which is the instantaneous state
@@ -1758,6 +1766,18 @@ class Stock
     public function getAnnouncementVarianceEma(): ?float
     {
         return $this->announcementVarianceEma;
+    }
+
+    public function setFranchisePower(?float $franchisePower): static
+    {
+        $this->franchisePower = $franchisePower;
+
+        return $this;
+    }
+
+    public function getFranchisePower(): ?float
+    {
+        return $this->franchisePower;
     }
 
     public function setRealizedVarianceEma(?float $realizedVarianceEma): static

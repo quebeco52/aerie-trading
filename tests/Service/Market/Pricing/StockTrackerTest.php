@@ -101,7 +101,7 @@ class StockTrackerTest extends TestCase
             'shock' => null, // No market shock
             'next_volatility' => 0.21,
             'analyst_targets' => [],
-            'perceived_fair_value' => 100.0, 'market_repricing' => 1.0,
+            'perceived_fair_value' => 100.0, 'market_repricing' => 1.0, 'franchise_power' => 0.012,
         ]);
 
         $this->earningsEngineMock->method('calculate')->willReturn(null); // No earnings report
@@ -130,6 +130,7 @@ class StockTrackerTest extends TestCase
         // Verify the Doctrine entity was properly mutated
         $this->assertEquals('105', $stock->getPrice());
         $this->assertEquals('0.21', $stock->getCurrentVolatility());
+        $this->assertSame(0.012, $stock->getFranchisePower(), 'the franchise power the step moved is the one the next report books');
     }
 
     public function testUpdateStocksWithMarketShockAndHistoryRecording(): void
@@ -141,7 +142,7 @@ class StockTrackerTest extends TestCase
             'shock' => -10.0, // Simulate a 10% drop shock
             'next_volatility' => 0.50,
             'analyst_targets' => [],
-            'perceived_fair_value' => 100.0, 'market_repricing' => 1.0,
+            'perceived_fair_value' => 100.0, 'market_repricing' => 1.0, 'franchise_power' => 0.0,
         ]);
 
         $this->earningsEngineMock->method('calculate')->willReturn(null);
@@ -185,7 +186,7 @@ class StockTrackerTest extends TestCase
         $stock = $this->createDummyStock();
         $this->marketEngineMock->method('calculateNextPrice')->willReturn([
             'price' => 100.0, 'shock' => null, 'next_volatility' => 0.20,
-            'analyst_targets' => ['growth_analyst' => 100.0], 'perceived_fair_value' => 100.0, 'market_repricing' => $marketRepricing,
+            'analyst_targets' => ['growth_analyst' => 100.0], 'perceived_fair_value' => 100.0, 'market_repricing' => $marketRepricing, 'franchise_power' => 0.0,
         ]);
         $strikes = 0;
         $this->marketEngineMock->method('strikeFairValue')->willReturnCallback(function () use (&$strikes): array {
@@ -257,7 +258,7 @@ class StockTrackerTest extends TestCase
             industryOutlook: new IndustryOutlook($store, new CorporateMetrics()),
         );
         $this->marketEngineMock->method('calculateNextPrice')->willReturn([
-            'price' => 100.0, 'shock' => null, 'next_volatility' => 0.20, 'analyst_targets' => [], 'perceived_fair_value' => 100.0, 'market_repricing' => 1.0,
+            'price' => 100.0, 'shock' => null, 'next_volatility' => 0.20, 'analyst_targets' => [], 'perceived_fair_value' => 100.0, 'market_repricing' => 1.0, 'franchise_power' => 0.0,
         ]);
         $this->earningsEngineMock->method('calculate')->willReturn(null);
         $this->corporateActionEngineMock->method('processSplits')->willReturn(['price' => 100.0, 'shares' => 1000, 'event' => null]);

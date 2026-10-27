@@ -366,6 +366,7 @@ class StockTracker
         ));
         $tick->price = $tick->pricing['price'];
         $tick->volatility = $tick->pricing['next_volatility'];
+        $stock->setFranchisePower($tick->pricing['franchise_power']);
 
         if ($tick->pricing['shock'] !== null) {
             $board->events[] = $this->eventService->publish($stock, 'SHOCK', EventPresenter::shockHeadline($stock->getName() . ' shares', $tick->pricing['shock']), $tick->pricing['shock']);

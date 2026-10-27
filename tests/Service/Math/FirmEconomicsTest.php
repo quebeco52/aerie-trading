@@ -441,4 +441,26 @@ class FirmEconomicsTest extends TestCase
         $this->assertEqualsWithDelta(0.12 * 2.0, FirmEconomics::returnOnSegmentPlant(0.12, 0.10, 1.0, 0.40, 0.5, 1.0, 0.21), 1e-12);
         $this->assertEqualsWithDelta(0.12 + (0.79 * 0.5 * -0.1), FirmEconomics::returnOnSegmentPlant(0.12, 0.10, 0.5, 0.10, 0.5, 0.9, 0.21), 1e-12, 'a glut takes its cut');
     }
+
+    public function testAFranchiseMarginAddsItsAfterTaxProfitOnTheCapitalTheReturnIsMeasuredOn(): void
+    {
+        $this->assertEqualsWithDelta(0.02 * 400.0 * 0.79 / 250.0, FirmEconomics::franchiseReturn(0.02 * 400.0, 0.21, 250.0), 1e-12);
+        $this->assertEqualsWithDelta(-8.0 * 0.79 / 250.0, FirmEconomics::franchiseReturn(-8.0, 0.21, -250.0), 1e-12, 'measured on the size of the capital');
+    }
+
+    /**
+     * Franchise power shifts the log-odds of the margin: no power leaves it, a thin margin moves by about e^p, and no
+     * power however large or small takes it out of (0, 1). The inverse recovers the power.
+     */
+    public function testFranchisePowerShiftsTheMarginsLogOddsAndCannotTurnItNegative(): void
+    {
+        $this->assertEqualsWithDelta(0.12, FirmEconomics::franchiseMargin(0.12, 0.0), 1e-15);
+        $this->assertEqualsWithDelta(0.02 * exp(0.5), FirmEconomics::franchiseMargin(0.02, 0.5), 0.002);
+        $this->assertGreaterThan(0.0, FirmEconomics::franchiseMargin(0.09, -12.0), 'bad news thins a margin, it never turns it into a loss');
+        $this->assertLessThan(1.0, FirmEconomics::franchiseMargin(0.55, 12.0));
+        $this->assertEqualsWithDelta(0.12 / (0.12 + (0.88 * exp(0.7))), FirmEconomics::franchiseMargin(0.12, -0.7), 1e-15);
+        $this->assertEqualsWithDelta(-0.7, FirmEconomics::franchisePowerForMargin(0.12, FirmEconomics::franchiseMargin(0.12, -0.7)), 1e-12);
+        $this->assertEqualsWithDelta(FirmEconomics::franchiseMargin(0.3, 0.4) / 0.3, FirmEconomics::franchiseProfitMultiple(0.3, 0.4), 1e-15);
+        $this->assertSame(1.0, FirmEconomics::franchiseProfitMultiple(0.0, 0.4), 'no margin, no franchise on it');
+    }
 }

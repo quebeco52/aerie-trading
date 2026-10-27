@@ -78,6 +78,7 @@ class OrderFlowImpactWiringTest extends TestCase
                     'dynamic_reversion' => 0.0,
                     'policy_repricing' => $policyRepricing !== null ? $policyRepricing() : 1.0,
                     'market_repricing' => 1.0,
+                    'franchise_power' => 0.0,
                 ];
             },
         );

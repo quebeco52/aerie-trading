@@ -210,6 +210,7 @@ class AcquisitionEngineTest extends TestCase
         $stock = $this->buildLedgeredAcquirer('ADDI', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
         $stock->setManagementStyle(ManagementStyle::Steward);
         $stock->setAssetTurnover('1.5000');
+        $stock->setFranchisePower(0.3);
 
         $revenueCapital = static fn(Stock $s): float => CorporateMetrics::revenueGeneratingCapital(
             $s->getInvestedCapital(),
@@ -219,6 +220,9 @@ class AcquisitionEngineTest extends TestCase
         $operatingIncome = static fn(Stock $s): float => $revenueCapital($s) * (float) $s->getAssetTurnover() * (float) $s->getOperatingMargin();
 
         $before = $operatingIncome($stock);
+        $franchiseProfit = static fn(Stock $s): float => $revenueCapital($s) * (float) $s->getAssetTurnover()
+            * (\App\Service\Math\FirmEconomics::franchiseMargin((float) $s->getOperatingMargin(), (float) $s->getFranchisePower()) - (float) $s->getOperatingMargin());
+        $franchiseBefore = $franchiseProfit($stock);
         $result = $this->engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
         $this->assertIsArray($result);
 
@@ -229,6 +233,9 @@ class AcquisitionEngineTest extends TestCase
         $acquiredOperatingIncome = (float) $result['spent'] * $effectiveTargetRoic / (1.0 - $taxRate);
 
         $this->assertEqualsWithDelta($before + $acquiredOperatingIncome, $operatingIncome($stock), max(1.0, $before * 1e-9));
+        // A private business bought brings no franchise: the buyer's edge is the same profit spread over more revenue.
+        $this->assertLessThan(0.3, (float) $stock->getFranchisePower());
+        $this->assertEqualsWithDelta($franchiseBefore, $franchiseProfit($stock), max(1.0, $franchiseBefore * 1e-9));
     }
 
     /**

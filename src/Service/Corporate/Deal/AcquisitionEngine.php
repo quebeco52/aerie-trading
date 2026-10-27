@@ -17,6 +17,7 @@ use App\Service\Corporate\Segment\EntryMarkets;
 use App\Service\Corporate\Segment\SegmentBookOpener;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentEntry;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
@@ -716,6 +717,11 @@ class AcquisitionEngine
         $blendedMargin = (($oldStructuralRevenue * $oldOperatingMargin) + $acquiredOperatingIncome)
             / max(1.0, $oldStructuralRevenue + $acquiredRevenue);
         $stock->setOperatingMargin((string) max(0.01, $blendedMargin));
+        // A private business bought brings no franchise of its own: the buyer's edge is the same profit on more
+        // revenue, a smaller shift on the blended margin.
+        $franchiseProfit = $oldStructuralRevenue * (FirmEconomics::franchiseMargin($oldOperatingMargin, (float) ($stock->getFranchisePower() ?? 0.0)) - $oldOperatingMargin);
+        $newMargin = (float) $stock->getOperatingMargin();
+        $stock->setFranchisePower(FirmEconomics::franchisePowerForMargin($newMargin, $newMargin + ($franchiseProfit / max(1.0, $oldStructuralRevenue + $acquiredRevenue))));
 
         // Turnover is revenue per dollar of operating capital. Only the net identifiable assets join that base:
         // the premium over them is goodwill and runs no plant (null until the engine seeds the turnover).

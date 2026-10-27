@@ -9,6 +9,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Model\ModelParam;
@@ -99,7 +100,15 @@ trait StandardBaseModelTrait
             : 0.0;
         // Saturation erodes the excess return above the required one, never the required return itself.
         $effectiveMoat = max(0.0, $this->getMoatSpread() - $saturationPenalty);
-        $blended += TimeSeries::calculateReversionPull($blended, $requiredReturn, $this->getReversionSpeed() / $trailingBlendWeight, $effectiveMoat);
+        // The margin the firm's own news has given it is earned on the same capital, so the return reverts to it too;
+        // it fades on its own clock (MarketEngine::FRANCHISE_FADE_SPEED), not the moat's.
+        $structuralMargin = (float) $stock->getOperatingMargin();
+        $franchiseReturn = FirmEconomics::franchiseReturn(
+            (FirmEconomics::franchiseMargin($structuralMargin, (float) ($stock->getFranchisePower() ?? 0.0)) - $structuralMargin) * (float) $stock->getTotalRevenue(),
+            $macroState !== null ? $this->getEffectiveTaxRate($macroState->corporateTaxRate) : 0.0,
+            $saturationBase,
+        );
+        $blended += TimeSeries::calculateReversionPull($blended, $requiredReturn + $franchiseReturn, $this->getReversionSpeed() / $trailingBlendWeight, $effectiveMoat);
 
         return max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $blended));
     }

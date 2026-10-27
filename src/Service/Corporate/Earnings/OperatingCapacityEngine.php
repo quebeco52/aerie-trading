@@ -322,7 +322,11 @@ final class OperatingCapacityEngine
         // base follows the season, the rest (rent, depreciation, head office) carries evenly through the year.
         $seasonalShare = $strategy->getSeasonalFixedCostShare();
         $ctx->seasonalFixedCostFactor = 1.0 - $seasonalShare + ($seasonalShare * $ctx->seasonalFactor);
-        $ctx->fixedCosts = $structuralFixedCosts * $this->resolveCommittedCostScale($ctx) * $ctx->seasonalFixedCostFactor;
+        // The franchise the firm's own news has built or worn away is a cost edge on its structural revenue. It sits in
+        // the committed base, so the quarter books it as the margin the market priced whatever the cycle does to
+        // volume.
+        $ctx->franchiseCostSaving = (FirmEconomics::franchiseMargin($ctx->stableMargin, (float) ($stock->getFranchisePower() ?? 0.0)) - $ctx->stableMargin) * $ctx->structuralRevenue;
+        $ctx->fixedCosts = (($structuralFixedCosts * $this->resolveCommittedCostScale($ctx)) - $ctx->franchiseCostSaving) * $ctx->seasonalFixedCostFactor;
 
         $ctx->baselineVariableMargin = $structuralVariableCosts / $ctx->structuralRevenue;
     }
@@ -821,7 +825,8 @@ final class OperatingCapacityEngine
             return;
         }
 
-        $structuralFixedCosts = $ctx->fixedCosts / ($ctx->committedCostScale * $ctx->seasonalFixedCostFactor);
+        // Severance is owed on the staffed base, not on the franchise's edge over it.
+        $structuralFixedCosts = (($ctx->fixedCosts / $ctx->seasonalFixedCostFactor) + $ctx->franchiseCostSaving) / $ctx->committedCostScale;
         $charge = $ctx->committedCostCut
             * $structuralFixedCosts
             * $ctx->strategy->getLaborCostShare()

@@ -396,6 +396,44 @@ final class Valuation
     }
 
     /**
+     * Share of a permanent change in operating profit that a change fading at speed f is worth: discounted at r - g the
+     * fading one is worth 1 / (r - g + f) a unit, the permanent one 1 / (r - g). A franchise fading over a decade at a
+     * 5% cap rate is worth ~0.4 of the same profit held for good.
+     *
+     * @param float $capRate   The discount rate less growth, r - g.
+     * @param float $fadeSpeed The change's fade per year.
+     */
+    public static function fadingProfitShare(float $capRate, float $fadeSpeed): float
+    {
+        return $capRate > 0.0 ? $capRate / ($capRate + max(0.0, $fadeSpeed)) : 0.0;
+    }
+
+    /**
+     * Fair value as a multiple of its value without the franchise, when operating profit runs at a multiple of its
+     * structural level that fades: 1 + s (multiple - 1), s the fading share (fadingProfitShare()). Profit never turns
+     * negative on the franchise, so neither does the multiple.
+     */
+    public static function franchiseValueMultiple(float $fadingShare, float $profitMultiple): float
+    {
+        return 1.0 + ($fadingShare * ($profitMultiple - 1.0));
+    }
+
+    /**
+     * Equity value as a multiple of itself when the operating value under it moves by a multiple, at a leverage L (the
+     * rate equity return moves per unit of operating return): up, the levered identity 1 + L (multiple - 1); down,
+     * multiple^L, which leaves the same slope at one and, as limited liability does, never reaches zero.
+     *
+     * @param float $operatingMultiple The operating value over its value at no change.
+     * @param float $leverage          d(equity return) / d(operating return), at least one.
+     */
+    public static function leveredValueMultiple(float $operatingMultiple, float $leverage): float
+    {
+        $leverage = max(1.0, $leverage);
+
+        return $operatingMultiple >= 1.0 ? 1.0 + ($leverage * ($operatingMultiple - 1.0)) : max(0.0, $operatingMultiple) ** $leverage;
+    }
+
+    /**
      * The return a dividend tax adds to a stock's required return over the founding rate's, on the after-tax CAPM
      * (Brennan 1970): holders price after tax, so with the taxable share w of them the stock must earn
      * w (t_d - t_g) y / (1 - w t_g) more on a dividend yield y, the gains tax at its accrual equivalent. The founding

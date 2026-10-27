@@ -23,6 +23,7 @@ use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Ticker\TickCadence;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
 use App\Service\Math\Valuation;
@@ -470,14 +471,18 @@ class EarningsEngine
     /**
      * The returns a firm is valued on, both of what it filed rather than its operating return state, which is pulled
      * toward the required return whether or not the business earns it: the level its filed returns revert to, opening
-     * at the return it was seeded to earn, and its recent year (MarketPricingContext::trailingReturn()).
+     * at the return it was seeded to earn, and its recent year (MarketPricingContext::trailingReturn()). Both are filed
+     * without the return the franchise margin adds, which fair value carries on its own (FairValue).
+     *
+     * @param float $franchiseReturn The return the quarter's franchise margin added to the filed return.
      */
-    private function fileValuationReturns(Stock $stock, BusinessModelInterface $strategy): void
+    private function fileValuationReturns(Stock $stock, BusinessModelInterface $strategy, float $franchiseReturn): void
     {
         $filed = $strategy->isFinancial() ? $stock->getCurrentRoe() : $stock->getCurrentRoic();
         if ($filed === null) {
             return;
         }
+        $filed = (float) $filed - $franchiseReturn;
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $seeded = $strategy->isFinancial() ? $stock->getBaselineRoe() : $stock->getBaselineRoic();
@@ -968,7 +973,11 @@ class EarningsEngine
             FinancialConstants::QUARTER_YEARS,
             self::LONG_RUN_RETURN_EMA_YEARS,
         ));
-        $this->fileValuationReturns($stock, $ctx->strategy);
+        $this->fileValuationReturns($stock, $ctx->strategy, FirmEconomics::franchiseReturn(
+            $ctx->franchiseCostSaving * self::TTM_QUARTERS,
+            $ctx->corporateTaxRate,
+            $ctx->strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $ctx->investedCapital),
+        ));
 
         $this->testGoodwillForImpairment($ctx);
 

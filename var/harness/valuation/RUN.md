@@ -51,3 +51,7 @@ g = log(P/F), its persistence and its attribution to price channels.
 - `a1` arm = working tree with fix A on b15e4a54 (B committed): the market factor's unexpected log return reprices fair
   value by beta (MacroStateDTO::equityValuationShift, 5-year half-life), the drift earns its fade, beta levered on fair
   value without it. Base = `b1`. `crash.py a1 1-8` (crash_a1_8s.out) and `d2.py 1-8 b1 a1` (board E/P R2 at the end).
+- Momentum (10-27): `momentum.py <seeds> <arm> ...` = momentum 12-0/12-1, PEAD, news/noise slopes, E/P spread, gap sd,
+  vol, defaults, blow-ups, and from VAL_OUT `agent_rows` (momentum agents' share) and `franchise_rows` (franchise power,
+  belief gap). Arms in run.sh: `mbase`/`mbase2` = BASE tree b29b723f, `mom*` = working tree or `ovr-*` overlays of one
+  constant (rebuild an overlay from src after src edits). BoardRun fixes the outlook salt from 10-27, so arms pair on firms.

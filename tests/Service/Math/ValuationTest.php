@@ -505,4 +505,47 @@ class ValuationTest extends TestCase
         );
         $this->assertLessThan(0.0, Valuation::ventureValue(0.025, 0.03, 0.04, 0.0, 11.5, 0.0, 3.5), 'below a hurdle under long-run growth, still a loss');
     }
+
+    /**
+     * A change in profit fading at f is worth its share (r - g) / (r - g + f) of the same change held for good: the
+     * closed form against the fading, growing profit discounted month by month over two centuries.
+     */
+    public function testAFadingProfitIsWorthItsShareOfAPermanentOne(): void
+    {
+        $capRate = 0.05;
+        $fade = M_LN2 / 10.0;
+
+        $sum = 0.0;
+        $step = 1.0 / 12.0;
+        for ($t = $step / 2.0; $t < 200.0; $t += $step) {
+            $sum += exp(-($capRate + $fade) * $t) * $step;
+        }
+
+        $this->assertEqualsWithDelta($sum * $capRate, Valuation::fadingProfitShare($capRate, $fade), 1e-3);
+        $this->assertSame(1.0, Valuation::fadingProfitShare($capRate, 0.0), 'a change that never fades is worth all of it');
+        $this->assertSame(0.0, Valuation::fadingProfitShare(0.0, $fade));
+    }
+
+    /** Value scales by 1 + s (M - 1): no franchise is a multiple of one, and losing all profit leaves 1 - s. */
+    public function testTheFranchiseValueMultipleNeverTurnsNegative(): void
+    {
+        $this->assertSame(1.0, Valuation::franchiseValueMultiple(0.42, 1.0));
+        $this->assertEqualsWithDelta(1.0 + (0.42 * 0.5), Valuation::franchiseValueMultiple(0.42, 1.5), 1e-12);
+        $this->assertEqualsWithDelta(0.58, Valuation::franchiseValueMultiple(0.42, 0.0), 1e-12);
+    }
+
+    /**
+     * Levered equity takes an operating move at its leverage: the identity going up, a power going down with the same
+     * slope at one, so no operating loss short of all of it takes the equity to zero.
+     */
+    public function testLeveredEquityTakesTheOperatingMoveAtItsLeverageAndNeverReachesZero(): void
+    {
+        $this->assertSame(1.0, Valuation::leveredValueMultiple(1.0, 3.0));
+        $this->assertEqualsWithDelta(1.0 + (3.0 * 0.2), Valuation::leveredValueMultiple(1.2, 3.0), 1e-12);
+        $this->assertEqualsWithDelta(0.58 ** 3.0, Valuation::leveredValueMultiple(0.58, 3.0), 1e-12);
+        $this->assertGreaterThan(0.0, Valuation::leveredValueMultiple(0.58, 8.0), 'limited liability: never zero');
+        $slopeBelow = (1.0 - Valuation::leveredValueMultiple(1.0 - 1e-6, 3.0)) / 1e-6;
+        $this->assertEqualsWithDelta(3.0, $slopeBelow, 1e-4, 'the same slope either side of one');
+        $this->assertEqualsWithDelta(0.8, Valuation::leveredValueMultiple(0.8, 0.5), 1e-12, 'leverage below one is one');
+    }
 }

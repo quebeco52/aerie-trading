@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Market\Pricing;
 
 use App\DTO\MarketPricingContext;
+use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
+use App\Service\Math\Valuation;
 
 /**
  * Stock price step: a Kou double-exponential jump process with stochastic variance (SVJJ), a systematic loading on
@@ -37,6 +40,23 @@ class MarketEngine
      */
     public const SECTOR_FACTOR_VARIANCE_SHARE = 0.20;
 
+    // --- Franchise News ---
+    /**
+     * Half-life, in years, of the franchise power a firm's own news gives its margin: an edge rivals compete away over
+     * about a decade. Near the cap rate the fade keeps the power a unit of value news needs, and so its spread, least.
+     */
+    public const FRANCHISE_HALF_LIFE_YEARS = 10.0;
+    /** The franchise power's fade per year, ln 2 over its half-life (~0.069). */
+    public const FRANCHISE_FADE_SPEED = M_LN2 / self::FRANCHISE_HALF_LIFE_YEARS;
+    /**
+     * Share of the variance of a name's own diffusion, its sector factor aside, that is news about its franchise, which
+     * fair value follows; the rest is noise the pull reverses. Half keeps a typical name's franchise power within about
+     * e^(+/-0.5) of its structural margin after twenty years, where a larger share spreads a levered name's earnings
+     * far enough to raise defaults; with its reports, a little over half of a name's own variance is then cash-flow
+     * news (Vuolteenaho 2002 measures about two thirds).
+     */
+    public const FRANCHISE_NEWS_SHARE = 0.50;
+
     // --- Institutional & Market Architecture ---
     /**
      * Circuit breaker on the continuous diffusion, as the largest move of a single trading DAY; scaled by the square
@@ -52,7 +72,7 @@ class MarketEngine
      * Calculates the next stock price: diffusion on the market and sector factors, Kou jumps held to the variance
      * budget, stochastic variance, and a pull toward the multi-leg fair value.
      *
-     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, market_repricing: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value, the reversion speed that was applied, the policy news multiplier the price took and the market repricing fair value carries.
+     * @return array{price: float, shock: float|null, next_volatility: float, analyst_targets: array<string, float>, perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, market_repricing: float, franchise_power: float} The calculated next price, shock percentage, updated TOTAL volatility, analyst targets, fair value, the reversion speed that was applied, the policy news multiplier the price took, the market repricing fair value carries and the franchise power once this step's news has moved it.
      */
     public function calculateNextPrice(MarketPricingContext $ctx): array
     {
@@ -125,6 +145,12 @@ class MarketEngine
         // Pure Geometric Brownian Motion (GBM) Step
         $idiosyncraticShock = $this->mathUtility->generateStandardNormal();
 
+        // The step's franchise news moves fair value with the price, so the pull reverses only the noise beside it.
+        // The step's franchise news moves fair value with the price, so the pull reverses only the noise beside it.
+        $franchise = $this->stepFranchise($ctx, $budget, $idiosyncraticShock, $perceivedFairValue, $fundamentalState);
+        $franchiseRevision = $franchise['fair_value'] / $perceivedFairValue;
+        $perceivedFairValue = $franchise['fair_value'];
+
         // Calculate pure continuous price diffusion WITHOUT the linear gravity drift
         // The sector factor is the second common driver: without it two banks co-move only through their
         // betas, so a sector rotation is invisible in prices between reporting dates. The loading is a
@@ -150,7 +176,7 @@ class MarketEngine
         );
 
         // Calculate Analyst Targets for UI and Sentiment Display
-        $analystTargets = $fundamentalState['analyst_targets'];
+        $analystTargets = array_map(static fn(float $target): float => max(0.01, $target * $franchiseRevision), $fundamentalState['analyst_targets']);
 
         // Circuit breaker: clamp single-step move symmetrically in log space scaled by sqrt(dt).
         $stepDays = max(0.0, $dt) * FinancialConstants::TRADING_DAYS_PER_YEAR;
@@ -189,7 +215,41 @@ class MarketEngine
             'dynamic_reversion' => $dynamicReversion,
             'policy_repricing' => $fundamentalState['policy_repricing'],
             'market_repricing' => $fundamentalState['market_repricing'],
+            'franchise_power' => $franchise['power'],
         ];
+    }
+
+    /**
+     * The franchise power after one step, and fair value with it. A share of the name's own diffusion
+     * (FRANCHISE_NEWS_SHARE) is news about its franchise: its conditional share of the draw already taken
+     * (Distributions::conditionalComponent()), split by a draw hashed from it, so the price path and every other draw
+     * are those of a run without the split. Equity news is operating news levered: the power moves at the rate a unit
+     * of it moves fair value at no franchise, the fading share times d log(margin) / d power (1 - m) times the leverage
+     * fair value levers it by, and fair value then moves as the power's value does: in full near the structural
+     * margin, less as the margin nears either end. The power fades at FRANCHISE_FADE_SPEED.
+     *
+     * @param array{franchise_base: float, franchise_share: float, franchise_multiple: float, franchise_leverage: float} $fundamentalState
+     * @return array{power: float, fair_value: float}
+     */
+    private function stepFranchise(MarketPricingContext $ctx, VarianceBudget $budget, float $idiosyncraticShock, float $fairValue, array $fundamentalState): array
+    {
+        $faded = $ctx->franchisePower * exp(-self::FRANCHISE_FADE_SPEED * $ctx->dt);
+        $margin = $ctx->baselineMargin;
+        $valueElasticity = $fundamentalState['franchise_share'] * (1.0 - $margin) * $fundamentalState['franchise_leverage'];
+        if ($valueElasticity <= 0.0 || $margin <= 0.0 || $margin >= 1.0 || $ctx->dt <= 0.0) {
+            return ['power' => $faded, 'fair_value' => $fairValue];
+        }
+
+        $independent = Distributions::standardNormalQuantile(MathUtility::hashedUniform(0, 'franchise-news:' . bin2hex(pack('e', $idiosyncraticShock))));
+        $ownLoading = $budget->idiosyncraticVolatility() * sqrt((1.0 - self::SECTOR_FACTOR_VARIANCE_SHARE) * $ctx->dt);
+        $power = $faded + (($ownLoading * Distributions::conditionalComponent($idiosyncraticShock, $independent, self::FRANCHISE_NEWS_SHARE)) / $valueElasticity);
+
+        $multiple = Valuation::leveredValueMultiple(
+            Valuation::franchiseValueMultiple($fundamentalState['franchise_share'], FirmEconomics::franchiseProfitMultiple($margin, $power)),
+            $fundamentalState['franchise_leverage'],
+        );
+
+        return ['power' => $power, 'fair_value' => max(0.01, $fairValue + ($fundamentalState['franchise_base'] * ($multiple - $fundamentalState['franchise_multiple'])))];
     }
 
     /**

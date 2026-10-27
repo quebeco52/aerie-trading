@@ -7,6 +7,7 @@ namespace App\Service\Market\Pricing;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
 
@@ -48,7 +49,7 @@ final class FairValue
     /**
      * Fair value, pull speed, policy repricing and analyst targets struck on a pricing context.
      *
-     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array<string, float>, market_repricing: float}
+     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array<string, float>, market_repricing: float, franchise_base: float, franchise_share: float, franchise_multiple: float, franchise_leverage: float}
      */
     public static function fundamentalStateFor(MarketPricingContext $ctx): array
     {
@@ -81,6 +82,7 @@ final class FairValue
             $ctx->excessCashPerShare,
             $ctx->capacityGap,
             $ctx->capacitySpare,
+            $ctx->franchisePower,
         );
 
         // Value at the market's discount rate: the repricing the market factor has put on equities reaches the name by
@@ -89,6 +91,7 @@ final class FairValue
         $state['perceived_fair_value'] *= $repricing;
         $state['analyst_targets'] = array_map(static fn(float $target): float => $target * $repricing, $state['analyst_targets']);
         $state['market_repricing'] = $repricing;
+        $state['franchise_base'] *= $repricing;
 
         return $state;
     }
@@ -130,7 +133,8 @@ final class FairValue
      * @param float $excessCashPerShare  Cash beyond what the business needs to run, valued at face beside it.
      * @param float $capacityGap         Log of the plant the expected market calls for over the plant in use.
      * @param float $capacitySpare       A company with plant by segment: its segments' plant to spare, valued apart.
-     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array}
+     * @param float $franchisePower     The log-odds shift the firm's own news has given its structural margin.
+     * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array, franchise_base: float, franchise_share: float, franchise_multiple: float, franchise_leverage: float}
      */
     private static function evaluateFundamentalState(
         float $outputGap,
@@ -161,6 +165,7 @@ final class FairValue
         float $excessCashPerShare,
         float $capacityGap = 0.0,
         float $capacitySpare = 0.0,
+        float $franchisePower = 0.0,
     ): array {
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
@@ -333,6 +338,9 @@ final class FairValue
         };
 
         $legs = $strikeLegs($equityReturn, $trueStructuralEps);
+        // Capitalized on the same perpetual growth the multiple is struck on: the raw outlook can sit within a few
+        // basis points of the hurdle in an inflationary boom, and a gap spread over that would wipe out value.
+        $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - Valuation::perpetualGrowthRate($hurdleRate, $legs['expected_growth']));
 
         // The laws the market expects rather than the ones the trailing earnings carry (PolicyCapitalization), struck
         // into the earnings every leg is valued on, so a firm held at its book floor loses no more than the floor gives
@@ -340,10 +348,6 @@ final class FairValue
         // drift there.
         $policyRepricing = 1.0;
         if ($macroState !== null) {
-            // Capitalized on the same perpetual growth the multiple is struck on: the raw outlook can sit within a few
-            // basis points of the hurdle in an inflationary boom, and a policy gap spread over that would wipe out
-            // value.
-            $capRate = max(PolicyCapitalization::MIN_CAP_RATE, $hurdleRate - Valuation::perpetualGrowthRate($hurdleRate, $legs['expected_growth']));
             // The dividend its policy pays, as the income leg strikes it, over the value before the laws: the yield its
             // holders' tax is charged on. A dividend omitted for a quarter is still the policy's, and still taxed.
             $policyDividend = $legs['normalized_eps'] * min(1.0, $targetPayoutRatio * Valuation::dividendTaxPayoutScale($macroState->dividendTaxRate));
@@ -369,7 +373,18 @@ final class FairValue
                 : 1.0;
         }
 
-        $perceivedFairValue = max(0.01, $legs['fair_value'] + $excessCashPerShare);
+        // The franchise the firm's own news has given its margin, valued as it fades: a multiple of the legs, which are
+        // struck on filed returns with the franchise taken out (EarningsEngine::fileValuationReturns()), so it is
+        // counted once and shrinks with them in distress. Excess cash is no franchise's.
+        $franchiseShare = $strategy->carriesFranchise() ? Valuation::fadingProfitShare($capRate, MarketEngine::FRANCHISE_FADE_SPEED) : 0.0;
+        // The equity takes the operating franchise at the leverage the legs lever operating return into equity return
+        // by (the strategy's getEquityReturn(), on book invested capital over book equity): 1 for a lender, whose
+        // return is struck on its equity already.
+        $franchiseLeverage = $investedCapitalPerShare > 0.0 ? max(1.0, $strategy->getEquityReturn(1.0, $investedCapitalPerShare, $bookValuePerShare, 0.0)) : 1.0;
+        $franchiseMultiple = Valuation::leveredValueMultiple(Valuation::franchiseValueMultiple($franchiseShare, FirmEconomics::franchiseProfitMultiple($baselineMargin, $franchisePower)), $franchiseLeverage);
+        $franchiseBase = max(0.0, $legs['fair_value']);
+
+        $perceivedFairValue = max(0.01, ($franchiseBase * $franchiseMultiple) + $excessCashPerShare);
 
         // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
         // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained
@@ -382,10 +397,14 @@ final class FairValue
             'dynamic_reversion'    => $dynamicReversion,
             'policy_repricing'     => $policyRepricing,
             'analyst_targets'      => [
-                'growth_analyst' => max(0.01, $legs['earnings_value'] + $excessCashPerShare),
-                'income_analyst' => max(0.01, $legs['dividend_value'] + $excessCashPerShare),
-                'value_analyst'  => max(0.01, ($legs['book_value'] * self::VALUE_ANALYST_BOOK_MULT) + $excessCashPerShare),
+                'growth_analyst' => max(0.01, ($legs['earnings_value'] * $franchiseMultiple) + $excessCashPerShare),
+                'income_analyst' => max(0.01, ($legs['dividend_value'] * $franchiseMultiple) + $excessCashPerShare),
+                'value_analyst'  => max(0.01, ($legs['book_value'] * self::VALUE_ANALYST_BOOK_MULT * $franchiseMultiple) + $excessCashPerShare),
             ],
+            'franchise_base' => $franchiseBase,
+            'franchise_share' => $franchiseShare,
+            'franchise_multiple' => $franchiseMultiple,
+            'franchise_leverage' => $franchiseLeverage,
         ];
     }
 }

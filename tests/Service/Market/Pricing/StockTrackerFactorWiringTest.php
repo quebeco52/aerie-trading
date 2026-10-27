@@ -62,6 +62,7 @@ final class StockTrackerFactorWiringTest extends TestCase
                     'analyst_targets' => [],
                     'perceived_fair_value' => 100.0,
                     'market_repricing' => 1.0,
+                    'franchise_power' => 0.0,
                 ];
             },
         );

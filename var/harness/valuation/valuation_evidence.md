@@ -175,3 +175,16 @@ spiralled (fair value 226 -> 1996 in a year), and B-or-worse rose 1.4pp; leverin
 - Paired, n.s.: E/P slope, momentum, gate slopes, cap y20, P/E, vol (daily index and name, quarterly), issuance,
   deals; defaults -0.5 (t -1.5). B-or-worse +0.7pp (t 2.3): the Merton distance to default reads market equity, which
   now stays down through a bear market as real equity does.
+
+## Momentum: franchise news and slow analysts (10-27, 8 seeds x 20 y)
+
+    BASE=<scratchpad>/mbase bin/harness-batch var/harness/valuation/run.sh 1-8 mbase2 mom3 mom3w
+    python3 var/harness/valuation/momentum.py 1-8 mbase2 mom3 mom3w > momentum_paired_8s20y.out
+
+Paired on firms too from this round (BoardRun now fixes the outlook salt; earlier arms paired on the macro only).
+mbase2 = b29b723f; mom3 = franchise power (log-odds margin shift, 10y fade, news share .5, book-levered); mom3w = mom3
+with news share .65. mbase2 -> mom3 (paired, se): mom 12-1 -3.6% -> -0.7% (t 2.5), positive years 35 -> 49%; noise
+slope -.32 -> -.22; E/P spread 19.5 -> 14.5% (t -3.2); gap sd .173 -> .153; PEAD 1q x-rep 1.2 -> 0.6% (t -3.1); vol
+flat, index vol -.2pp; momentum agents' median share .473 -> .478; defaults .25 -> 1.1 per run (t 2.5, TERN 3 seeds).
+mom3w: momentum +2.0pp only, defaults +1.5 (t 4.6). Unpaired earlier arms: margin-points v1 (mom1) blew up at the
+fair-value floor; step 2 at s = .5 (mom3s) -1.6% with daily vol held, (mom3c, no rescale) +0.4% with median vol -1.4pp.

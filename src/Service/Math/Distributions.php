@@ -105,6 +105,22 @@ final class Distributions
     }
 
     /**
+     * One of two independent components of a standard normal draw, given the draw: with the component's variance share
+     * s and an independent standard normal u, s z + sqrt(s (1 - s)) u has variance s and is independent of the rest,
+     * z less it. The draw itself is unchanged, so a path split this way is the path unsplit.
+     *
+     * @param float $total       The standard normal draw being split.
+     * @param float $independent A standard normal independent of it.
+     * @param float $share       The component's share of the draw's variance, in [0, 1].
+     */
+    public static function conditionalComponent(float $total, float $independent, float $share): float
+    {
+        $share = max(0.0, min(1.0, $share));
+
+        return ($share * $total) + (sqrt($share * (1.0 - $share)) * $independent);
+    }
+
+    /**
      * Calculates the inverse of the standard normal cumulative distribution function (Probit function).
      * Uses Peter J. Acklam's high-precision rational approximation (maximum error < 1.15e-9).
      *

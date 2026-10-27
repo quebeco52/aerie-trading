@@ -16,7 +16,11 @@ case "$1" in
   d2b) BASEV="" ;;  # working tree: D2 + no cycle term in perpetual growth + revision variance on its own quarter-window EMA
   crash|b1|a1) BASEV=""  # crash: 98b7d96a; b1: + fix B (equity's riskless rate off the expected path); a1: + fix A (market moves reprice fair value, fading). Working tree with the quarterly macro rows (MACRO_OUT, BOARD_NI) for the crash anatomy
     rm -f "$H/runs/$1-$2.macro.jsonl"; export MACRO_OUT="$H/runs/$1-$2.macro.jsonl" BOARD_NI=1 ;;
-  *) echo "usage: run.sh head|base|d1|d2|d2b|c1|f1|crash|b1|a1 <seed>" >&2; exit 2 ;;
+  mbase) BASEV=${BASE:?set BASE=<tree>} ;;  # momentum: frozen tree of b29b723f (git archive + vendor symlink)
+  mom1|mom2) BASEV="" ;;  # momentum: working tree at the time, franchise in margin points (mom1) / as a log-odds power (mom2)
+  mbase2) BASEV=${BASE:?set BASE=<tree>} ;;  # mbase rerun with agent_rows / franchise_rows logging
+  mom3|chk) BASEV="" ;;  # working tree: leverage-elastic franchise news (one-constant arms were OVR overlays of MarketEngine)
+  *) echo "usage: run.sh head|base|d1|d2|d2b|c1|f1|crash|b1|a1|mbase|mbase2|mom1|mom2|mom3|chk <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" VAL_OUT="$H/runs/$1-$2.val.json" \

@@ -370,6 +370,12 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         return self::INTRINSIC_PB_MULTIPLE;
     }
 
+    /** A trust's own news is its holdings', which its marked book already carries, not a margin it earns. */
+    public function carriesFranchise(): bool
+    {
+        return false;
+    }
+
     /**
      * The discount control mechanism every closed-end board has and most of them use.
      *

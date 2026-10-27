@@ -209,4 +209,37 @@ class DistributionsTest extends TestCase
             $this->assertEqualsWithDelta($expectation, Distributions::normalKinkedPositivePart($slope, $kinkSlope, $kink, $intercept), 1e-6, $label);
         }
     }
+
+    /**
+     * Split by an independent normal, the component has its share of the variance, the rest has the remainder, the two
+     * are uncorrelated, and the draw is their sum.
+     */
+    public function testAConditionalComponentSplitsADrawIntoIndependentParts(): void
+    {
+        mt_srand(20261027);
+        $math = new MathUtility();
+        $share = 0.75;
+        $n = 200000;
+        $sumC = $sumR = $sumCC = $sumRR = $sumCR = 0.0;
+        for ($i = 0; $i < $n; $i++) {
+            $total = $math->generateStandardNormal();
+            $component = Distributions::conditionalComponent($total, $math->generateStandardNormal(), $share);
+            $rest = $total - $component;
+            $sumC += $component;
+            $sumR += $rest;
+            $sumCC += $component * $component;
+            $sumRR += $rest * $rest;
+            $sumCR += $component * $rest;
+        }
+        $varC = ($sumCC / $n) - (($sumC / $n) ** 2);
+        $varR = ($sumRR / $n) - (($sumR / $n) ** 2);
+        $cov = ($sumCR / $n) - (($sumC / $n) * ($sumR / $n));
+
+        $this->assertEqualsWithDelta($share, $varC, 0.01);
+        $this->assertEqualsWithDelta(1.0 - $share, $varR, 0.01);
+        $this->assertEqualsWithDelta(0.0, $cov / sqrt($varC * $varR), 0.01, 'the news and the noise are independent');
+        $this->assertSame(0.4, Distributions::conditionalComponent(0.4, 1.3, 1.0), 'all news is the draw itself');
+        $this->assertSame(0.0, Distributions::conditionalComponent(0.4, 1.3, 0.0));
+    }
+
 }
