@@ -170,6 +170,15 @@ enum ModelParam: string
     case GovernmentContractWeight = 'government_contract_weight';
     case RetainerWeight = 'retainer_weight';
     case ExpeditionaryWeight = 'expeditionary_weight';
+    case CashServicesWeight = 'cash_services_weight';
+    case VaultsWeight = 'vaults_weight';
+    case ScreeningWeight = 'screening_weight';
+    case InvestigationsWeight = 'investigations_weight';
+
+    // --- Correctional Services ---
+    case CustodyWeight = 'custody_weight';
+    case DetentionWeight = 'detention_weight';
+    case EscortTaggingWeight = 'escort_tagging_weight';
 
     // --- Shipping, Logistics & Transportation ---
     case SpotCharterWeight = 'spot_charter_weight';

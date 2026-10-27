@@ -4,6 +4,13 @@ standfirst: "Tickbird's terminals sit on most trading desks in the District, inc
 related: [LAKE, SWAN, ACC, SHRK, PENG]
 ---
 
+## The price of a price
+
+The premise of the business is simple: nobody can trade a share without knowing its price. Fund managers and investment
+banks like to believe they run the market. Few of them have tried it with the screen switched off, and Tickbird has
+never needed to offer them the chance. The terminal is the first thing a new desk orders and the last thing a closing
+one returns.
+
 ## Per screen
 
 Tickbird began as a price feed for the banks on Glasswater Row in the District's first years, when every dealing room

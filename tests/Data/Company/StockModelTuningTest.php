@@ -213,6 +213,8 @@ class StockModelTuningTest extends TestCase
             'law_firm' => [ModelParam::CorporateRetainerWeight, ModelParam::LitigationContingencyWeight, ModelParam::RestructuringAdvisoryWeight],
             'consulting' => [ModelParam::StrategyAdvisoryWeight, ModelParam::TechnologyProgrammeWeight, ModelParam::RiskRestructuringWeight, ModelParam::AuditTaxWeight],
             'grocery' => [ModelParam::GroceriesWeight, ModelParam::FuelForecourtsWeight],
+            'security' => [ModelParam::GovernmentContractWeight, ModelParam::RetainerWeight, ModelParam::ExpeditionaryWeight, ModelParam::CashServicesWeight, ModelParam::VaultsWeight, ModelParam::ScreeningWeight, ModelParam::InvestigationsWeight],
+            'correctional' => [ModelParam::CustodyWeight, ModelParam::DetentionWeight, ModelParam::EscortTaggingWeight],
             'nuclear_vendor' => [ModelParam::ReactorFuelWeight, ModelParam::PlantServicesWeight, ModelParam::NewBuildWeight],
             'space_systems' => [ModelParam::LaunchServicesWeight, ModelParam::GovernmentMissionsWeight],
             'airline' => [ModelParam::LeisurePassengerWeight, ModelParam::BusinessPassengerWeight, ModelParam::AirCargoWeight, ModelParam::LoyaltyMilesWeight],

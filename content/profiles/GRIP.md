@@ -37,17 +37,18 @@ before the fiscal year closes.
 
 ## Friends in the capital
 
-Gryphon's critics on the mainland call it a government department that pays a dividend. The company calls itself a
-partner to the services it equips. The two descriptions are closer than either side admits.
+Gryphon's critics on the mainland call it a government department that pays a dividend. Its admirers say its most
+effective weapon has never been a missile: it is the procurement process. The company slogan is "Superiority through
+overwhelming engineering", and nobody disputes the overwhelming part.
 
 Gryphon writes much of the technical specification that procurement agencies adopt for new programmes, so by the time a
 tender is issued it is often the only bidder qualified to meet it. Retired generals and former procurement officials sit
-on its board and its advisory councils, and its engineers leave to run the programme offices that buy from it, then come
-back. It funds security policy institutes on the mainland whose threat assessments are quoted in the budget debates that
-pay for its programmes. It also places its subcontracts with care: suppliers to its fighter programme are spread across
-most of the mainland's legislative districts, so a vote to cancel it is a vote against an employer in nearly every
-member's constituency. Cancelling a Gryphon programme has been attempted several times. The programmes have usually
-outlasted the legislators who tried.
+on its board, and its engineers leave to run the programme offices that buy from it, then come back. It funds security
+policy institutes on the mainland whose threat assessments are quoted in the budget debates that pay for its programmes.
+It also places its subcontracts with care: suppliers to its fighter programme are spread across most of the mainland's
+legislative districts, so a vote to cancel it is a vote against an employer in nearly every member's constituency.
+Cancelling a Gryphon programme has been attempted several times. The programmes have usually outlasted the legislators
+who tried.
 
 At home it keeps a lower profile. Nothing it needs is decided in the Diet, and it is one of the few large companies on
 the board that gives nothing to any party there.
@@ -67,7 +68,6 @@ do, since a crisis abroad brings export orders forward, and to drift lower on ta
 governments cut their budgets.
 
 The nearer risks are procedural. A stopgap budget on the mainland freezes new programme starts until the legislature
-agrees a full one. A refused export licence can take half the export book with it. A programme that runs over can have
-its progress payments withheld until the fault is fixed, which ties up cash at the worst moment, and a grounded aircraft
-type puts a whole line of spares and service revenue at risk. Gryphon's connections have softened each of these in the
-past. Its shareholders are paying for the assumption that they will again.
+agrees a full one. A refused export licence can take half the export book with it. An overrun can stop progress
+payments, and a grounded aircraft type puts a line of spares and service revenue at risk. Gryphon's connections have
+softened each of these in the past. Its shareholders are paying for the assumption that they will again.

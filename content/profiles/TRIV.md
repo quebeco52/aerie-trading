@@ -38,11 +38,13 @@ the film at the time.
 Head office prefers buying businesses to building them, and management is judged on growth more than on returns. In most
 years a large share of free cash flow goes on acquisitions, usually small makers of specialised products that become new
 divisions. No single purchase is large enough to matter, which is how investors have tended to excuse each one. Whether
-the total earns its cost is the main debate on the stock, and it is not one the company joins.
+the total earns its cost is the main debate on the stock, and it is not one the company joins. A former chairman's line,
+"Diversification is the ultimate defence", is printed inside the cover of every annual report. The desk has looked for
+it in the acquisitions schedule and not found it.
 
 ## What the desk is watching
 
-No division is large enough to move the group, so Three Rivers is among the least volatile industrials on the Aerie
-Exchange, with a beta of about 0.6. Earnings follow industrial output and public works budgets, at a distance. The risks
-are the ones diversification is meant to rule out: a product liability case large enough to cross divisions, or a long
-run of overpaying for growth.
+Glasswater Row describes Three Rivers as a cargo ship: slow to turn and very hard to sink. No division is large enough
+to move the group, so it is among the least volatile industrials on the Aerie Exchange, with a beta of about 0.6.
+Earnings follow industrial output and public works budgets, at a distance. The risks are the ones diversification is
+meant to rule out: a product liability case large enough to cross divisions, or a long run of overpaying for growth.

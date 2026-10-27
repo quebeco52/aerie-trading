@@ -40,6 +40,11 @@ use App\Service\Model\Strategy\OperatingStrategyInterface;
  * market (a branded good is mostly share; an oil producer's extra barrels are sold into a global pool and
  * barely touch a domestic peer). Both the booked gain and the absorbed drain are bounded per report.
  *
+ * Firms in one industry need not sell the same things: a cash carrier and an overseas contractor share an industry
+ * and nothing else. Each record carries the firm's revenue mix by line, and a peer takes a rival's gain in proportion
+ * to the revenue it sells in the rival's lines (the overlap of the two mixes), against everyone else's revenue
+ * counted the same way. A firm whose mix the ledger has not seen overlaps fully.
+ *
  * @phpstan-import-type ShareRecord from IndustryShareStoreInterface
  */
 class IndustryShareLedger
@@ -60,6 +65,10 @@ class IndustryShareLedger
      */
     public const MIN_INDUSTRY_CAPACITY_RATIO = 0.5;
 
+    // --- Revenue Mix ---
+    /** Prefix of the momentum keys a firm's report records each line's share of its revenue under (StreamContext). */
+    private const SHARE_KEY_PREFIX = 'share:';
+
     public function __construct(
         private readonly IndustryShareStoreInterface $store,
     ) {}
@@ -76,7 +85,7 @@ class IndustryShareLedger
             return 0.0;
         }
 
-        return $this->drainAt($industry, $ticker, max(1.0, (float) $stock->getTotalRevenue()), $tick, $ticksPerYear);
+        return $this->drainAt($industry, $ticker, max(1.0, (float) $stock->getTotalRevenue()), $tick, $ticksPerYear, ownMix: self::streamMix($stock));
     }
 
     /**
@@ -92,16 +101,17 @@ class IndustryShareLedger
         return $address === null ? 0.0 : $this->drainAt($address[0], $address[1], max(1.0, $segmentRevenue), $tick, $ticksPerYear, $tick);
     }
 
-    private function drainAt(string $industry, string $ticker, float $ownRevenue, int $tick, int $ticksPerYear, int $firstReadTick = -1): float
+    /** @param array<string, float>|null $ownMix The reading firm's revenue mix by line; null overlaps fully. */
+    private function drainAt(string $industry, string $ticker, float $ownRevenue, int $tick, int $ticksPerYear, int $firstReadTick = -1, ?array $ownMix = null): float
     {
         $records = $this->store->readIndustry($industry);
         $own = $records[$ticker] ?? null;
         $lastReadTick = (int) ($own['consumed_tick'] ?? $firstReadTick);
 
-        $totalRevenue = $ownRevenue;
+        $active = [];
         foreach ($records as $peerTicker => $record) {
             if ($peerTicker !== $ticker && $tick - $record['tick'] <= $ticksPerYear) {
-                $totalRevenue += max(0.0, $record['revenue']);
+                $active[$peerTicker] = $record;
             }
         }
 
@@ -112,11 +122,19 @@ class IndustryShareLedger
             }
             $peerRevenue = max(0.0, $record['revenue']);
             $rivalGainDollars = $peerRevenue * $record['gain'];
+            // What I and the rest of the roster sell in the rival's lines.
+            $ownCompeting = $ownRevenue * self::mixOverlap($ownMix, $record['mix'] ?? null);
+            $rosterCompeting = $ownCompeting;
+            foreach ($active as $otherTicker => $other) {
+                if ($otherTicker !== $peerTicker) {
+                    $rosterCompeting += max(0.0, $other['revenue']) * self::mixOverlap($other['mix'] ?? null, $record['mix'] ?? null);
+                }
+            }
             // Everyone else in the market the rival sells into: the rest of the roster, or the rest of its
             // addressable market where that is larger.
-            $othersRevenue = max(1.0, $totalRevenue - $peerRevenue, self::fringeRevenue($peerRevenue, (float) ($record['addressable_share'] ?? 0.0)));
+            $othersRevenue = max(1.0, $rosterCompeting, self::fringeRevenue($peerRevenue, (float) ($record['addressable_share'] ?? 0.0)));
             // My slice of what the rival took from everyone else, as a fraction of my own revenue.
-            $drain -= ($rivalGainDollars * ($ownRevenue / $othersRevenue)) / $ownRevenue;
+            $drain -= ($rivalGainDollars * ($ownCompeting / $othersRevenue)) / $ownRevenue;
         }
 
         $this->store->writeRecord($industry, $ticker, [
@@ -148,7 +166,7 @@ class IndustryShareLedger
             return;
         }
 
-        $this->gainAt($industry, $ticker, $annualRevenue, $gainFraction, $addressableShare, $tick, $economics);
+        $this->gainAt($industry, $ticker, $annualRevenue, $gainFraction, $addressableShare, $tick, $economics, self::streamMix($stock));
     }
 
     /**
@@ -164,8 +182,11 @@ class IndustryShareLedger
         }
     }
 
-    /** @param array{margin: float, turnover: float}|null $economics */
-    private function gainAt(string $industry, string $ticker, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick, ?array $economics = null): void
+    /**
+     * @param array{margin: float, turnover: float}|null $economics
+     * @param array<string, float>|null                  $mix       The firm's revenue mix by line; null for a segment.
+     */
+    private function gainAt(string $industry, string $ticker, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick, ?array $economics = null, ?array $mix = null): void
     {
         $existing = $this->store->readIndustry($industry)[$ticker] ?? null;
         $this->store->writeRecord($industry, $ticker, [
@@ -174,10 +195,59 @@ class IndustryShareLedger
             'capacity'          => (float) ($existing['capacity'] ?? 0.0),
             ...self::carriedFields($existing),
             ...($economics ?? []),
+            ...($mix !== null ? ['mix' => $mix] : []),
             'addressable_share' => max(0.0, min(1.0, $addressableShare)),
             'tick'              => $tick,
             'consumed_tick'     => (int) ($existing['consumed_tick'] ?? $tick),
         ]);
+    }
+
+    /**
+     * A firm's revenue by line as shares of its revenue, from the shares its last report recorded; null for a company
+     * that sells into several markets, whose lines are not all its industry's, or one the ledger has no report from.
+     *
+     * @return array<string, float>|null
+     */
+    private static function streamMix(Stock $stock): ?array
+    {
+        if (Segments::forTicker($stock->getTicker()) !== null) {
+            return null;
+        }
+
+        $mix = [];
+        foreach ($stock->getEarningsMomentumZ() ?? [] as $key => $share) {
+            $key = (string) $key;
+            if (str_starts_with($key, self::SHARE_KEY_PREFIX) && !str_starts_with($key, self::SHARE_KEY_PREFIX . Segments::ENTERED_PREFIX)) {
+                $mix[substr($key, strlen(self::SHARE_KEY_PREFIX))] = max(0.0, (float) $share);
+            }
+        }
+        $total = array_sum($mix);
+        if ($total <= 0.0) {
+            return null;
+        }
+
+        return array_map(static fn(float $share): float => $share / $total, $mix);
+    }
+
+    /**
+     * The share of revenue two firms sell in the same lines: the sum over lines of the smaller of their two shares, 1
+     * for identical mixes and 0 for firms with no line in common. Fully overlapping when either mix is unknown.
+     *
+     * @param array<string, float>|null $a
+     * @param array<string, float>|null $b
+     */
+    private static function mixOverlap(?array $a, ?array $b): float
+    {
+        if ($a === null || $b === null || $a === [] || $b === []) {
+            return 1.0;
+        }
+
+        $overlap = 0.0;
+        foreach ($a as $line => $share) {
+            $overlap += min($share, $b[$line] ?? 0.0);
+        }
+
+        return $overlap;
     }
 
     /**
@@ -198,7 +268,7 @@ class IndustryShareLedger
      * share; zero for a firm the ledger has not seen them from yet.
      *
      * @param array<string, mixed>|null $record
-     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float, margin?: float, turnover?: float, entry_offset?: float, entry_time?: float}
+     * @return array{anchor_capacity_share: float, anchor_demand_share: float, anchor_time: float, anchor_outlook: float, addressable_share: float, mix?: array<string, float>, segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float, margin?: float, turnover?: float, entry_offset?: float, entry_time?: float}
      */
     private static function carriedFields(?array $record): array
     {
@@ -218,11 +288,12 @@ class IndustryShareLedger
      * entered (peerMarks()).
      *
      * @param array<string, mixed>|null $record
-     * @return array{segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float, margin?: float, turnover?: float, entry_offset?: float, entry_time?: float}
+     * @return array{mix?: array<string, float>, segment_outlook_gap?: float, books_main_share?: float, path?: float, anchor_path?: float, margin?: float, turnover?: float, entry_offset?: float, entry_time?: float}
      */
     private static function carriedMarks(?array $record): array
     {
-        return (isset($record['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $record['segment_outlook_gap']] : [])
+        return (isset($record['mix']) ? ['mix' => $record['mix']] : [])
+            + (isset($record['segment_outlook_gap']) ? ['segment_outlook_gap' => (float) $record['segment_outlook_gap']] : [])
             + (isset($record['books_main_share']) ? ['books_main_share' => (float) $record['books_main_share']] : [])
             + (isset($record['path']) ? ['path' => (float) $record['path'], 'anchor_path' => (float) ($record['anchor_path'] ?? $record['path'])] : [])
             + self::peerMarks($record);
@@ -421,7 +492,7 @@ class IndustryShareLedger
             'addressable_share'     => min(1.0, $addressableShare),
             'tick'                  => $tick,
             'consumed_tick'         => (int) ($own['consumed_tick'] ?? $tick),
-        ] + $segmentGap + $ownPath + (isset($own['books_main_share']) ? ['books_main_share' => (float) $own['books_main_share']] : []) + self::grownEntry($own, $path, $totalTime) + self::peerMarks($own);
+        ] + $segmentGap + $ownPath + (isset($own['books_main_share']) ? ['books_main_share' => (float) $own['books_main_share']] : []) + (isset($own['mix']) ? ['mix' => $own['mix']] : []) + self::grownEntry($own, $path, $totalTime) + self::peerMarks($own);
         $this->store->writeRecord($industry, $ticker, $record);
         $records[$ticker] = $record;
 

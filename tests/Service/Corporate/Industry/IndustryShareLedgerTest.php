@@ -53,6 +53,41 @@ class IndustryShareLedgerTest extends TestCase
      * absorption would then take more than 100% of a peer's revenue. The drain is bounded per report, in both
      * directions, and the excess is left as market growth rather than share.
      */
+    public function testARivalTakesItsGainFromPeersByHowMuchOfItsLinesTheySell(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $winner = $this->stock('CASH', 1_000.0)->setEarningsMomentumZ(['share:cash' => 0.75, 'share:vaults' => 0.25]);
+        $guards = $this->stock('GRD', 3_000.0)->setEarningsMomentumZ(['share:cash' => 0.10, 'share:guarding' => 0.90]);
+        $abroad = $this->stock('MIL', 1_000.0)->setEarningsMomentumZ(['share:expeditionary' => 1.0]);
+        $carrier = $this->stock('VAN', 1_000.0)->setEarningsMomentumZ(['share:cash' => 0.75, 'share:vaults' => 0.25]);
+
+        foreach ([$guards, $abroad, $carrier] as $peer) {
+            $ledger->recordIdiosyncraticGain($peer, (float) $peer->getTotalRevenue(), 0.0, 0.5, 10);
+        }
+        $ledger->recordIdiosyncraticGain($winner, 1_000.0, 0.10, 0.5, 20);
+
+        // The carrier's 100 came out of 300 of cash work at the guards and 1,000 at the other carrier; none abroad.
+        $guardsDrain = $ledger->resolveRivalShareDrain($guards, 30, 252);
+        $carrierDrain = $ledger->resolveRivalShareDrain($carrier, 30, 252);
+        $this->assertEqualsWithDelta(-100.0 * 300.0 / 1_300.0 / 3_000.0, $guardsDrain, 1e-9);
+        $this->assertEqualsWithDelta(-100.0 * 1_000.0 / 1_300.0 / 1_000.0, $carrierDrain, 1e-9);
+        $this->assertEqualsWithDelta(0.0, $ledger->resolveRivalShareDrain($abroad, 30, 252), 1e-12);
+        $this->assertEqualsWithDelta(-100.0, ($guardsDrain * 3_000.0) + ($carrierDrain * 1_000.0), 1e-9);
+    }
+
+    public function testTheRevenueMixSurvivesTheCapacityRecord(): void
+    {
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        $winner = $this->stock('CASH', 1_000.0)->setEarningsMomentumZ(['share:cash' => 1.0]);
+        $abroad = $this->stock('MIL', 1_000.0)->setEarningsMomentumZ(['share:expeditionary' => 1.0]);
+
+        $ledger->recordIdiosyncraticGain($abroad, 1_000.0, 0.0, 0.5, 10);
+        $ledger->recordIdiosyncraticGain($winner, 1_000.0, 0.10, 0.5, 20);
+        $ledger->resolveIndustryCapacityRatio($winner, 1_000.0, 0.5, 1.0, 0.0, 0.0, 21, 252);
+
+        $this->assertEqualsWithDelta(0.0, $ledger->resolveRivalShareDrain($abroad, 30, 252), 1e-12);
+    }
+
     public function testDrainIsBoundedWhenALeaderOutweighsItsPeers(): void
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());

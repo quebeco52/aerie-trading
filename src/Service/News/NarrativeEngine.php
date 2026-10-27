@@ -685,6 +685,21 @@ class NarrativeEngine
                 "Delays and rework at a reactor build pushed costs past the contract price, leaving the vendor to absorb the overrun.",
                 "Welding defects and late components put a fixed-price reactor project over budget, with losses expected until handover.",
             ]),
+            ShockEvent::CASH_HEIST => $this->getRandomPhrase([
+                "Armed robbers took a cash van on its round, leaving the carrier to cover the uninsured part of the loss.",
+                "A vault break-in cost the carrier its insurance excess, a security review and the banks' confidence for a season.",
+                "A depot robbery forced a charge for the uninsured loss and the legal costs that followed.",
+            ]),
+            ShockEvent::CLIENT_FILE_LEAK => $this->getRandomPhrase([
+                "Confidential screening files reached the press, and several banks moved their client checks to rival firms.",
+                "An investigation went wrong in public, bringing claims from the people named and a review by the regulator.",
+                "A leak of case files cost the firm clients and a settlement, and put its vetting procedures under review.",
+            ]),
+            ShockEvent::PRISON_DISTURBANCE => $this->getRandomPhrase([
+                "A riot closed a wing of one of the operator's prisons, leaving it to pay for repairs, fines and settlements.",
+                "Inmates escaped from a remand centre, bringing contract penalties and an inquiry from the Aerie Council.",
+                "Disturbances at a prison led to fines and claims, and a bail insurer moved its tagging work to a rival.",
+            ]),
             ShockEvent::FLIGHT_CREW_STRIKE => $this->getRandomPhrase([
                 "A pilots' strike grounded part of the fleet, cancelling flights and refunding tickets already sold.",
                 "Cabin crew walked out over pay, forcing the airline to cancel a share of its schedule for two weeks.",

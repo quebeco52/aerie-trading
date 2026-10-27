@@ -126,6 +126,8 @@ final class MacroFieldCatalog
         'qe_active' => ['label' => 'QE programme', 'unit' => self::UNIT_PERCENT],
         'unemployment_rate_ema' => ['label' => 'Unemployment', 'unit' => self::UNIT_PERCENT],
         'nairu_ema' => ['label' => 'Natural unemployment', 'unit' => self::UNIT_PERCENT],
+        'cyclical_migration_rate' => ['label' => 'Migration over trend', 'unit' => self::UNIT_PERCENT],
+        'labor_force_growth_rate' => ['label' => 'Labour force growth', 'unit' => self::UNIT_PERCENT],
         'real_wage_gap' => ['label' => 'Real wage gap', 'unit' => self::UNIT_PERCENT],
         'capacity_utilization_rate_ema' => ['label' => 'Capacity utilisation', 'unit' => self::UNIT_PERCENT],
         'capital_stock_overhang_ema' => ['label' => 'Capital overhang', 'unit' => self::UNIT_PERCENT],

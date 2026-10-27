@@ -26,10 +26,10 @@ final class IndustryBetas
     // --- Lore Band ---
     /**
      * Half-width of the band lore may place a firm's beta in around its industry's: 1.96 standard errors of a 60-month
-     * regression beta, sqrt(0.21^2 - (0.91 x 0.15)^2) / (0.15 x sqrt(60)) = 0.137, at the board's median volatility
-     * (0.21), the market's (0.15) and the US average beta (0.91).
+     * regression beta, sqrt(0.22^2 - (0.91 x 0.15)^2) / (0.15 x sqrt(60)) = 0.148, at the board's median volatility
+     * (0.22), the market's (0.15) and the US average beta (0.91).
      */
-    public const LORE_BAND = 0.27;
+    public const LORE_BAND = 0.29;
 
     /**
      * Damodaran's US industries the board maps to: number of firms, average levered regression beta, market D/E,
@@ -158,6 +158,7 @@ final class IndustryBetas
         'Computer Hardware' => 'Computers/Peripherals',
         'Conglomerates' => 'Diversified',
         'Consulting Services' => 'Business & Consumer Services',
+        'Correctional Services' => 'Business & Consumer Services',
         'Copper' => 'Metals & Mining',
         'Credit Services' => 'Financial Svcs. (Non-bank & Insurance)',
         'Custody Banks' => 'Bank (Money Center)',

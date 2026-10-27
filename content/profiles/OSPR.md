@@ -16,7 +16,8 @@ train its close protection teams. Under Vane it grew from a few guard posts into
 vehicles, aircraft and supply lines. It also grew lawsuits. Host governments began suing Bird Watch in their own courts
 over incidents at the sites, and Bird Watch's board decided that a shooting at a mine should not be able to reach the
 company that guards the District's boardrooms. The division was spun off as Osprey, registered offshore, with Vane as
-its first chief executive.
+its first chief executive. He gave it the slogan "Protecting assets, projecting power". The second half was dropped from
+the brochure after a host government's lawyers read it aloud in court.
 
 Vane and the officers who left with him took shares in the spin-off. Staff and former officers still hold about a tenth
 of the company.
@@ -51,10 +52,11 @@ Watch's most expensive Black Label officers learned the work on Osprey's convoys
 
 ## What the desk is watching
 
-Osprey's demand comes from fear: of conflict abroad, of a credit crisis that pushes indebted governments towards seizing
-foreign assets, of a market panic that makes owners check what their overseas sites are worth. When those rise, so do
-deployments, which gives the shares a beta of about 0.55, low for a services company. They have often held up while the
-rest of the board fell, and drift in long calm years as deployments wind down.
+Glasswater Row calls Osprey a hedge against world peace. Its demand comes from fear: of conflict abroad, of a credit
+crisis that pushes indebted governments towards seizing foreign assets, of a market panic that makes owners check what
+their overseas sites are worth. When those rise, so do deployments, which gives the shares a beta of about 0.55, low for
+a services company. They have often held up while the rest of the board fell, and drift in long calm years as
+deployments wind down.
 
 The risk is the field. A deployment that goes wrong in public, with civilians hurt or a client's staff killed, brings
 cancellations, legal claims and a diplomatic problem the District would rather not have. The spin-off was designed to

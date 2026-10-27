@@ -75,6 +75,8 @@ final class IndustryAdjacency
         // Services.
         ['Consulting Services', 'Legal Services', self::RELATED],
         ['Consulting Services', 'Education & Training Services', self::DISTANT],
+        ['Security & Protection Services', 'Correctional Services', self::RELATED],
+        ['Security & Protection Services', 'Consulting Services', self::DISTANT],
         // Media and online.
         ['Internet Content & Information', 'Internet Retail', self::RELATED],
         ['Internet Content & Information', 'Advertising Agencies', self::RELATED],
@@ -187,6 +189,7 @@ final class IndustryAdjacency
         'Communication Equipment' => 'Network equipment',
         'Computer Hardware' => 'Computer hardware',
         'Consulting Services' => 'Consulting',
+        'Correctional Services' => 'Prisons',
         'Drug Manufacturers - General' => 'Pharmaceuticals',
         'Education & Training Services' => 'Education',
         'Electrical Equipment & Parts' => 'Electrical equipment',

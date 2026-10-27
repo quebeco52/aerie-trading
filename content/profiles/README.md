@@ -4,6 +4,10 @@ Each file here is one long-form company profile, published at `/stock/<TICKER>/p
 page's "About". Name the file by the company's ticker (`LAKE.md`). Files starting with `_` are drafts and are not
 published; copy `_template.md` to start a new profile.
 
+`_drafts/` holds the old exchange descriptions of 73 companies, kept for their stories: each is a profile file with its
+front matter stubbed and `related` filled from the names in the text. Rewrite one into sections and move it up here
+to publish it. Nothing in `_drafts/` is published or tested.
+
 ## Front matter
 
 Every profile opens with this block:

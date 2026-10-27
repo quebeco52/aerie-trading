@@ -1,8 +1,15 @@
 ---
-headline: 'Iron Beak Heavy Industries: the District had to be built first'
+headline: 'Iron Beak Heavy Industries: concrete in a District of screens'
 standfirst: 'The largest builder in the District is owned by the two houses that finance most of what it builds. It is the most cyclical large company on the board, and Glasswater Row reads its share price as a reading of the economy.'
 related: [LAKE, SWAN, BRKW, PLZA]
 ---
+
+## Concrete and steel
+
+Most of the money made in the District is made on screens. Iron Beak works in poured concrete and rolled steel, and if a
+structure stands on the peninsula, Iron Beak probably built it. If it did not, Iron Beak bid for it and has an opinion
+about the firm that won. Its fabrication yards, dredgers and crane fleets laid the District's roads and transit lines,
+raised the towers on Glasswater Row and still build ocean-going tankers in the old shipyard.
 
 ## The third merger
 
@@ -13,9 +20,9 @@ merged them into one company. Iron Beak was the coalition's third merger, after 
 one it made by buying rather than joining.
 
 Its first contract was the channel to Breakwater Trust's deepwater berths, followed by the roads, the transit lines and
-the first towers on Glasswater Row. Many of its welders and crane operators are the children and grandchildren of the
-crews who did that work, and most of the District's skilled trades still work for it. By most estimates they vote for
-Iron Harbor, which is no friend of the banks that own their employer. Neither side has found this a problem.
+the first towers. Many of its welders and crane operators are the children and grandchildren of the crews who did that
+work, and most of the District's skilled trades still work for it. By most estimates they vote for Iron Harbor, which is
+no friend of the banks that own their employer. Neither side has found this a problem.
 
 ## Its owners, its customers
 
@@ -31,7 +38,7 @@ on several occasions. The Diet has asked for a report on each occasion.
 
 About 60% of revenue comes from civil infrastructure: highways, transit lines, ports and public buildings. A quarter
 comes from commercial work, mainly office towers and fabrication yards, and the remaining 15% from maintenance contracts
-for municipal works and dry docks. Its shipyards also build ocean-going tankers.
+for municipal works and dry docks.
 
 The yards, docks and equipment fleet carry heavy fixed costs and need steady capital spending, and much of the work is
 bid at a fixed price, so cost overruns fall on Iron Beak rather than the client. The operating margin is about 9%. A

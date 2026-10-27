@@ -82,7 +82,8 @@ class DistrictMap
         'Industry & Materials' => [
             'conglomerate', 'merchant_house',
             'steel_manufacturing', 'specialty_industrial_machinery', 'chemical',
-            'construction', 'defense_contractor', 'space_systems', 'security_protection', 'waste_management',
+            'construction', 'defense_contractor', 'space_systems', 'security_protection', 'correctional_services',
+            'waste_management',
             'railroad', 'shipping', 'port_terminal', 'logistics', 'airline', 'tools_and_accessories', 'heavy_manufacturing', 'law_firm',
             'consulting',
         ],
@@ -334,7 +335,7 @@ class DistrictMap
         'construction' => 'crane', 'shipping' => 'anchor', 'port_terminal' => 'crane', 'logistics' => 'truck',
         'railroad' => 'train', 'airline' => 'plane', 'waste_management' => 'bin',
         // Guardians and the professions.
-        'defense_contractor' => 'shield', 'security_protection' => 'lock',
+        'defense_contractor' => 'shield', 'security_protection' => 'lock', 'correctional_services' => 'lock',
         // A space company is known by its rockets.
         'space_systems' => 'rocket',
         'law_firm' => 'scales', 'education' => 'cap', 'advertising_agency' => 'megaphone',

@@ -12,10 +12,14 @@ guarding company serving the banks on Glasswater Row, won the contracts for the 
 Office's border checkpoints, and has renewed them ever since.
 
 Its officers patrol alongside the municipal police. In some boroughs residents find it hard to say which is which, and
-the company has never seen a commercial reason to make it easier.
+the company has never seen a commercial reason to make it easier. On the quays the line is clearer: Bird Watch holds the
+quayside under concession, and the [[coast-guard|Coast Guard]]'s jurisdiction begins at the waterline.
 
-What neither of them does is investigate. Organised crime and foreign agents belong to the Security Bureau, the
-Council's own state police, which also vets every officer Bird Watch wants to arm.
+What neither of them does is investigate. Organised crime and foreign agents belong to the [[security-bureau|Security
+Bureau]], the Council's own state police, which also vets every officer Bird Watch wants to arm.
+
+The company motto, painted on every patrol car, is "Vigilance is our product. Security is our guarantee." Competitors
+like to point out that only the first half appears in the contracts.
 
 ## How it earns
 
@@ -46,5 +50,5 @@ Demand barely moves with the economy, and the shares have a beta of about 0.6. T
 a protected site or an attack on a Black Label client. Bird Watch's prices rest on a record of not failing, and a
 visible lapse could send clients back to contracts they have not read in years.
 
-The concessions are granted by the District's public bodies, so a government that wanted policing back in public hands
-could take a large part of the book with it. No cabinet has yet tried.
+The concessions are granted by the District's public bodies, so a Council that wanted policing back in public hands
+could take a large part of the book with it. No Council has yet tried.

@@ -611,8 +611,10 @@ class StockModelTuning
         // Premier domestic physical asset protection & municipal security retainers.
         'WATCH' => [
             ModelParam::GovernmentContractWeight->value => 0.40,
-            ModelParam::RetainerWeight->value            => 0.50,
+            ModelParam::RetainerWeight->value            => 0.40,
             ModelParam::ExpeditionaryWeight->value       => 0.10,
+            ModelParam::CashServicesWeight->value        => 0.05,
+            ModelParam::InvestigationsWeight->value      => 0.05,
         ],
 
         // --- Osprey Global Vanguard (OSPR) ---
@@ -621,6 +623,37 @@ class StockModelTuning
             ModelParam::GovernmentContractWeight->value => 0.10,
             ModelParam::RetainerWeight->value            => 0.10,
             ModelParam::ExpeditionaryWeight->value       => 0.80,
+        ],
+
+        // --- Wallcreeper Custodial (WALL) ---
+        // Prisons and remand under District concession, immigration detention, and court escort and tagging for bail
+        // insurers.
+        'WALL' => [
+            ModelParam::CustodyWeight->value       => 0.72,
+            ModelParam::DetentionWeight->value     => 0.18,
+            ModelParam::EscortTaggingWeight->value => 0.10,
+        ],
+
+        // --- Nightjar Risk Partners (NJAR) ---
+        // Due diligence and screening on retainer for the banks; fraud, recovery and crisis work when markets break.
+        'NJAR' => [
+            ModelParam::GovernmentContractWeight->value => 0.15,
+            ModelParam::RetainerWeight->value            => 0.00,
+            ModelParam::ExpeditionaryWeight->value       => 0.00,
+            ModelParam::ScreeningWeight->value           => 0.45,
+            ModelParam::InvestigationsWeight->value      => 0.40,
+        ],
+
+        // --- Nutcracker Cash & Vault (NCKR) ---
+        // Cash rounds for the banks and the shops, and the bullion vaults behind Glasswater Row.
+        // The banks buying routes are few and large, so crew pay is passed on less than at a guarding firm.
+        'NCKR' => [
+            ModelParam::GovernmentContractWeight->value => 0.00,
+            ModelParam::RetainerWeight->value            => 0.00,
+            ModelParam::ExpeditionaryWeight->value       => 0.00,
+            ModelParam::CashServicesWeight->value        => 0.75,
+            ModelParam::VaultsWeight->value              => 0.25,
+            ModelParam::PricingPowerIndex->value         => 0.70,
         ],
 
         // =====================================================================

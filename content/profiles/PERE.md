@@ -4,13 +4,20 @@ standfirst: 'If you have bought an option on the Aerie Exchange, Peregrine proba
 related: [ROOK, TICK]
 ---
 
+## The House
+
+On Glasswater Row, Peregrine is called the House, as in the house always collects its edge. When a retail trader buys a
+call option or a fund buys protection against a fall, Peregrine is usually the counterparty, and it takes the spread
+whichever way the market then goes. One of its founding partners put the firm's view of its customers in a speech it has
+since asked to have left out of the record: "Bulls and bears bleed exactly the same. We simply own the slaughterhouse."
+
 ## New money
 
 Peregrine is not a founding house, and it has never wanted to be mistaken for one. It was started a generation after the
 Charter by a group of mathematicians and engineers who had left the founding houses' trading floors, convinced that the
 houses were too slow to price the risks they were taking. It began by quoting options on the Exchange's largest
-companies when few others would, and found that the people who buy options pay more for them, on average, than the
-options turn out to be worth.
+companies when few others would, and found that buyers of options pay more for them, on average, than the options turn
+out to be worth.
 
 Its partners were among the younger members who broke with the Vanguard over the founding houses' privileges, and the
 firm helped pay for New Horizon's first campaign, against a rise in the stamp duty on share trades. The rise was
@@ -27,10 +34,10 @@ hardware and a private microwave network. The operating margin is about 35%, and
 
 ## The hedge that pays twice
 
-Peregrine's shares have a beta of about 0.9, low for a trading house, because its results run against the market's. Calm
-bull markets bring modest, steady results. Sell-offs lift volumes, widen spreads and raise the price of protection, and
-the firm has reported its best quarters during market stress. Some fund managers hold the shares as a partial hedge,
-which means they are paying Peregrine for protection twice.
+Peregrine's shares have a beta of about 0.9, low for a trading house, because what hurts everyone else lifts its
+revenue. Calm bull markets bring modest, steady results. Sell-offs lift volumes, widen spreads and raise the price of
+protection, and the firm has reported its best quarters during market stress. Some fund managers hold the shares as a
+partial hedge, which means they are paying Peregrine for protection twice.
 
 Its rival for the tape is Rook Proprietary Trading, which trades the same names with its own capital. The two firms hire
 from the same universities and do not otherwise speak. Peregrine is also one of the few large desks in the District that

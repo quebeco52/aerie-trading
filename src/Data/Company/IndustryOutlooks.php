@@ -44,6 +44,7 @@ final class IndustryOutlooks
         'Beverages - Wineries & Distilleries' => ['drift_vol' => 0.04, 'learning_half_life' => 0.5],
         'Broadcasting' => ['drift_vol' => 0.04, 'learning_half_life' => 0.5],
         'Consulting Services' => ['drift_vol' => 0.04, 'learning_half_life' => 0.5],
+        'Correctional Services' => ['drift_vol' => 0.04, 'learning_half_life' => 0.5],
         'Financial Data & Stock Exchanges' => ['drift_vol' => 0.04, 'learning_half_life' => 0.5],
         'Legal Services' => ['drift_vol' => 0.04, 'learning_half_life' => 0.5],
         'Passenger Transit' => ['drift_vol' => 0.04, 'learning_half_life' => 0.5],

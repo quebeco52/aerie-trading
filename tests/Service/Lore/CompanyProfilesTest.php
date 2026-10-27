@@ -144,6 +144,7 @@ class CompanyProfilesTest extends TestCase
         yield 'LAKE float' => ['LAKE', 'About half the bank is still held that way', 1.0 - self::seed('LAKE')['public_float'], 0.50];
         yield 'SWAN fees' => ['SWAN', 'about 60% of revenue', $tuning('SWAN', ModelParam::HfManagementFeeWeight), 0.60];
         yield 'SWAN float' => ['SWAN', 'founding partners still hold about half the shares', 1.0 - self::seed('SWAN')['public_float'], 0.50];
+        yield 'SWAN beta' => ['SWAN', 'beta of about 0.9', self::beta('SWAN'), 0.90, self::BETA_ROUNDING];
         yield 'SAFE mutual' => ['SAFE', 'the mutual kept about 30% of the shares', 1.0 - self::seed('SAFE')['public_float'], 0.30];
         yield 'SAFE treaties' => ['SAFE', 'About 97% of revenue comes from these reinsurance treaties', $tuning('SAFE', ModelParam::TreatyReinsuranceWeight), 0.97];
         yield 'SAFE payout' => ['SAFE', 'pays out about 30% of earnings', self::seed('SAFE')['target_payout_ratio'], 0.30];
@@ -174,7 +175,8 @@ class CompanyProfilesTest extends TestCase
         yield 'CORV payout' => ['CORV', 'pays out about 30% of earnings', self::seed('CORV')['target_payout_ratio'], 0.30];
         yield 'CORV beta' => ['CORV', 'beta of about 0.9', self::beta('CORV'), 0.90, self::BETA_ROUNDING];
         yield 'WATCH concessions' => ['WATCH', 'about 40% of revenue', $tuning('WATCH', ModelParam::GovernmentContractWeight), 0.40];
-        yield 'WATCH retainers' => ['WATCH', 'private retainers about half', $tuning('WATCH', ModelParam::RetainerWeight), 0.50];
+        // Private clients buy guarding, the cash rounds and Black Label's counter-espionage on the same retainers.
+        yield 'WATCH retainers' => ['WATCH', 'private retainers about half', $tuning('WATCH', ModelParam::RetainerWeight) + $tuning('WATCH', ModelParam::CashServicesWeight) + $tuning('WATCH', ModelParam::InvestigationsWeight), 0.50];
         yield 'WATCH margin' => ['WATCH', 'operating margin is about 17%', self::seed('WATCH')['operating_margin'], 0.17];
         yield 'WATCH beta' => ['WATCH', 'beta of about 0.6', self::beta('WATCH'), 0.60, self::BETA_ROUNDING];
         yield 'TRIV industrial' => ['TRIV', 'About two thirds of revenue comes from industrial products', $tuning('TRIV', ModelParam::IndustrialConglomerateWeight), 0.67];

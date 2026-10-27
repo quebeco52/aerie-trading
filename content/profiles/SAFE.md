@@ -1,8 +1,17 @@
 ---
-headline: 'Safe Harbor Reinsurance: the backstop'
-standfirst: 'Every balance sheet in the District assumes that the worst losses will be absorbed somewhere. Safe Harbor is where they go, and nobody stands behind it.'
+headline: 'Safe Harbor Reinsurance: selling the assumption'
+standfirst: Every balance sheet on Glasswater Row assumes the worst losses will be absorbed somewhere. Safe Harbor sells that assumption to the rest of the District, and nobody stands behind it.
 related: [LAKE, SWAN, DOVE]
 ---
+
+## The assumption
+
+Every balance sheet on Glasswater Row rests on one premise: that the worst losses will be absorbed somewhere. A bank
+holding tens of thousands of mortgages assumes it, and so does a credit desk lending against the bank's paper. Safe
+Harbor is the company that prices the premise and sells it.
+
+A former chief executive described the business to a Diet committee in one line: "We don't fear the apocalypse. We
+underwrite it." The committee asked him to repeat it for the record, and he did.
 
 ## A condition of the Charter
 
@@ -13,27 +22,25 @@ the risk, so they put up the capital for a reinsurer to stand behind all of them
 
 It began as a mutual, owned by the institutions it covered. When it listed, the mutual kept about 30% of the shares, and
 its board still includes a director nominated by each of the two founding houses. The arrangement has been described in
-a Diet committee as the District insuring itself with its own money. Safe Harbor's reply is that this is what insurance
-is.
+the Diet as the District insuring itself with its own money. Safe Harbor's reply is that this is what insurance is.
 
 ## What it covers
 
 Primary insurers pass it the catastrophe layers of their books: the hurricanes that come in off the sound, floods, and
-industrial losses too large for any one insurer to carry. It also writes cover that few reinsurers elsewhere would,
-protecting banks and non-bank lenders against credit events and against a freeze in interbank funding, and it sells
-retrocession to other reinsurers. White Dove Insurance, once its retail arm, was spun off so that a household's car
-insurance would not depend on the District's worst year. It still sends its catastrophe exposure back to its former
-parent.
+industrial losses too large for any one insurer to carry. It also protects banks and non-bank lenders against credit
+events and a freeze in interbank funding, and sells retrocession to other reinsurers. White Dove Insurance, once its
+retail arm, was spun off so that a household's car insurance would not depend on the District's worst year. It still
+sends its catastrophe exposure back to its former parent.
 
 About 97% of revenue comes from these reinsurance treaties. The rest is the fee Safe Harbor earns structuring
 catastrophe bonds, which pass part of its risk to outside investors: when a storm reaches a bond, they bear the loss,
-and the fees on it shrink until new bonds are sold.
+and the fees shrink until new bonds are sold.
 
 ## The True 10-Year Yield
 
 The yield on Safe Harbor's catastrophe bonds is quoted on Glasswater Row as the True 10-Year Yield. The Exchequer's
 ten-year rate, the saying goes, tells you what the District will pay you; Safe Harbor's tells you whether the District
-will be there to pay. Traders watch the gap between the two as the market's own reading of tail risk.
+will be there to pay.
 
 ## How it is run
 
@@ -45,9 +52,9 @@ say so at most annual meetings.
 ## What the desk is watching
 
 Results follow the frequency of large losses rather than the business cycle, so the shares have a beta of about 0.2 and
-spend long stretches doing very little. The risk is the year they do something. A large hurricane can erase several
-years of profit. A financial crisis is worse, because claims from the banks it insures arrive just as the assets it
-holds to pay them are falling, and its largest clients are also its founders.
+can go years doing little but paying the dividend. The risk is the year they do something. A large hurricane can erase
+several years of profit. A financial crisis is worse, because claims from the banks it insures arrive just as the assets
+it holds to pay them are falling, and its largest clients are also its founders.
 
 Safe Harbor is the District's answer to the mainland's condition. Nobody stands behind it, and in most years the shares
 are priced as though nobody needs to.

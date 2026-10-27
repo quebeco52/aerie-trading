@@ -1,8 +1,19 @@
 ---
 headline: 'Black Swan Capital: the shareholder boards check for first'
-standfirst: "The District's largest hedge fund manager was assembled from the funds that helped found it. It takes new money by invitation only, and tends to appear in a company's debt before it appears on the share register."
+standfirst: The District's largest hedge fund manager takes money by invitation only. Its galas raise a great deal for charity, and its name on a share register has ended more than one chief executive's career.
 related: [LAKE, IBHI, CNDR, CORV, VULT]
 ---
+
+## Galas and spreadsheets
+
+Black Swan manages money for the District's richest families, for foreign sovereign funds and for the pension pools of
+its largest employers, and it takes new clients by invitation only. In public it is best known for its charity galas and
+the philanthropic trust that pays for the lights along Glasswater Row each winter. In boardrooms it is the shareholder
+everyone checks for first.
+
+A former chief executive once summed up the firm's view of the companies it studies: "A bloated balance sheet isn't a
+legacy, it's prey." The firm has spent some years explaining that this was a joke, and has not yet managed to make it
+sound like one.
 
 ## The other half of the coalition
 
@@ -14,43 +25,39 @@ capital to be taken seriously, so they merged into one manager and opened on Gla
 year.
 
 The partners of the merged funds took shares for their stakes, and the founding partners still hold about half the
-shares. The Obsidian Desk was once a fund of its own, the smallest in the merger and the one the others had least wanted
-to take; within a decade it was the part of the firm everyone on Glasswater Row knew by name. The firm says its own name
-refers to the improbable events its funds are built to profit from. Its targets say it describes how the firm prefers to
-arrive.
+shares. The firm says its name refers to the improbable events its funds are built to profit from. Its targets say it
+describes how the firm prefers to arrive.
+
+## The Obsidian Desk
+
+The Obsidian Desk was once a fund of its own, the smallest in the merger and the one the others had least wanted to
+take. In the District's early years it ran the campaigns that made the firm's name. Its forensic accountants picked out
+companies carrying more cash than they used or more subsidiaries than they understood. It built a position through
+offshore vehicles and total return swaps, which did not have to be disclosed until late, then bought the target's senior
+loans, usually from banks glad to be rid of them. By the time a board learned who it was dealing with, Black Swan was
+often its largest creditor as well as a large shareholder.
+
+The Desk then published its case, funded litigation if it needed to, and offered to drop both if management changed or a
+subsidiary was sold. Most boards settled. The ones that did not went through restructurings that ended with Black Swan
+in control and the subsidiaries sold. The Desk has been quieter since. District boards have not found this reassuring.
 
 ## How it earns
 
 Management fees on its funds bring in about 60% of revenue, and they are paid whatever the markets do. The rest comes
 from the funds' own results: statistical arbitrage books that trade District shares at high frequency, and directional
-positions, which are where the large performance fees are earned.
-
-Performance fees are booked when a position closes, so earnings jump in the quarter a takeover completes or a
-restructuring pays out. The shares carry a beta well above the market's and react to the firm's deal calendar more than
-to its funds' monthly figures.
-
-## The Obsidian Desk
-
-The Obsidian Desk runs the firm's activist campaigns. Its method has changed little in the District's history. It builds
-a position through offshore vehicles and total return swaps, which do not have to be disclosed until late, then buys the
-target's senior loans, usually from banks glad to be rid of them. By the time a board learns who it is dealing with,
-Black Swan is often its largest creditor as well as a large shareholder.
-
-The Desk then publishes its case, funds litigation if it needs to, and offers to drop both if management changes or a
-subsidiary is sold. Most boards settle. The ones that did not are the source of the firm's reputation: several went
-through loan-to-own restructurings that ended with Black Swan in control. District boards plan their balance sheets with
-the Desk in mind, since surplus cash and unused borrowing capacity are what it looks for first.
+positions, which are where the large performance fees are earned. Performance fees arrive when a fund has a strong year,
+so earnings rise in steps rather than smoothly.
 
 ## Allies and neighbours
 
 Black Swan and Lakebird jointly own a majority of Iron Beak, which builds the property redevelopments Black Swan leads,
 and loans from the two firms to foreign governments are how Condor Extraction came to hold many of its concessions.
 Corvid Capital is widely believed to sell research to the Obsidian Desk, which neither firm confirms. Vulture Capital
-Recovery frequently buys what is left of a company after a campaign has finished with it.
+Recovery has a reputation for buying what is left after a campaign.
 
 ## What the desk is watching
 
-The firm's earnings are only as good as its last few campaigns. In a long calm market there are fewer mispriced
-companies and fewer distressed ones, management fees carry the results and the shares drift. A credit crisis is the
-opposite case, which is why the shares have at times risen while the rest of the board fell. The risk subscribers ask
-about most is a campaign that fails in public while the firm holds a large block of the target's debt.
+The shares carry a beta of about 0.9, close to the market's, which understates how they feel to hold: the fee base keeps
+them steady for long stretches, and the performance fees move them in jumps. In a long calm market the funds find less
+to do, fees carry the results and the shares drift. The risk subscribers ask about most is a year in which the funds'
+large positions go wrong together, when the fees that were meant to steady the firm are the only thing left.

@@ -198,6 +198,14 @@ class ShockEvent
     public const FLIGHT_CREW_STRIKE = 'flight_crew_strike';
     /** A rival grocer began a discount drive; shelf prices were cut across the market until it ran its course. */
     public const GROCERY_PRICE_WAR = 'grocery_price_war';
+    /** Robbers took a cash van or broke into a vault; the carrier paid the uninsured loss and the legal bill. */
+    public const CASH_HEIST = 'cash_heist';
+    /**
+     * A client file leaked or an investigation went wrong in public; clients moved to rivals and the firm paid claims.
+     */
+    public const CLIENT_FILE_LEAK = 'client_file_leak';
+    /** A riot or an escape at a prison; the operator paid fines, repairs and settlements and lost private clients. */
+    public const PRISON_DISTURBANCE = 'prison_disturbance';
     /**
      * A serious accident at a reactor somewhere in the world; new plants were frozen while regulators reviewed the
      * fleet.
