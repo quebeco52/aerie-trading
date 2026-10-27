@@ -5,16 +5,16 @@ declare(strict_types=1);
 namespace App\Service\View;
 
 use App\Data\Company\AnchorHoldings;
-use App\Data\Company\CompanyResearch;
 use App\Data\Company\StrategicHoldings;
 use App\Data\District\Institutions;
 use App\Entity\Stock;
 use App\Repository\StockEventRepository;
 use App\Repository\StockRepository;
+use App\Service\Lore\CompanyProfiles;
 use App\Service\Market\Chart\PriceChangeFeed;
 
 /**
- * Assembles the long-form company profile: the written article from CompanyResearch beside a column of live
+ * Assembles the long-form company profile: the written article from CompanyProfiles beside a column of live
  * facts (price, owners, peers, the company's own headlines), so the history is static and the sidebar keeps up
  * with play.
  */
@@ -33,6 +33,7 @@ class CompanyProfilePageBuilder
         private readonly StockEventRepository $stockEvents,
         private readonly PeerTableBuilder $peerTable,
         private readonly PriceChangeFeed $priceChangeFeed,
+        private readonly CompanyProfiles $profiles,
     ) {}
 
     /**
@@ -42,7 +43,7 @@ class CompanyProfilePageBuilder
     public function build(Stock $stock): ?array
     {
         $ticker = (string) $stock->getTicker();
-        $article = CompanyResearch::for($ticker);
+        $article = $this->profiles->for($ticker);
         if ($article === null) {
             return null;
         }
@@ -60,7 +61,7 @@ class CompanyProfilePageBuilder
             'freeFloat' => max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage())),
         ] + $this->ownership($ticker) + [
             'peers' => array_slice($this->peerTable->build($stock), 0, self::PEER_ROWS),
-            'related' => $this->related($article['related']),
+            'related' => $this->related($article->related),
             'headlines' => $this->stockEvents->findHeadlinesFor($stock, self::HEADLINE_ROWS),
         ];
     }
@@ -131,7 +132,7 @@ class CompanyProfilePageBuilder
             $related[] = [
                 'ticker' => $ticker,
                 'name' => (string) $stock->getName(),
-                'hasProfile' => CompanyResearch::for($ticker) !== null,
+                'hasProfile' => $this->profiles->for($ticker) !== null,
                 'isDelisted' => $stock->isBankrupt(),
             ];
         }

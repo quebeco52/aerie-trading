@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Lore;
 
-use League\CommonMark\CommonMarkConverter;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\Yaml\Yaml;
 
 /**
  * The District Almanac: the District's reference work, its entries written in Markdown under content/almanac/, one file
@@ -26,8 +24,6 @@ final class Almanac
     public const CATEGORIES = ['Institution', 'History', 'Incident', 'Place', 'Person'];
     /** A slug: lower-case words joined by hyphens, as the file is named and the address reads. */
     public const SLUG_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
-    /** A wiki link in a body: [[slug]] or [[slug|text]]. */
-    private const LINK_PATTERN = '/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/';
 
     /** @var array<string, AlmanacEntry>|null */
     private ?array $entries = null;
@@ -55,18 +51,9 @@ final class Almanac
 
         // Titles are known before any body is rendered, so a [[slug]] link can print its target's title.
         $titles = array_map(static fn(array $source): string => $source['title'], $sources);
-        $converter = new CommonMarkConverter(['html_input' => 'strip', 'allow_unsafe_links' => false]);
         $entries = [];
         foreach ($sources as $slug => $source) {
-            $links = [];
-            $markdown = (string) preg_replace_callback(self::LINK_PATTERN, static function (array $match) use ($titles, &$links): string {
-                $target = trim($match[1]);
-                $text = trim($match[2] ?? '') !== '' ? trim($match[2]) : ($titles[$target] ?? $target);
-                $links[] = $target;
-
-                return isset($titles[$target]) ? "[{$text}](/almanac/{$target})" : $text;
-            }, $source['body']);
-
+            $body = MarkdownSource::render($source['body'], $titles);
             $entries[$slug] = new AlmanacEntry(
                 slug: $slug,
                 title: $source['title'],
@@ -74,9 +61,9 @@ final class Almanac
                 category: $source['category'],
                 sequence: $source['sequence'],
                 about: $source['about'],
-                links: array_values(array_unique($links)),
+                links: $body['links'],
                 markdown: $source['body'],
-                html: $converter->convert($markdown)->getContent(),
+                html: $body['html'],
             );
         }
 
@@ -105,48 +92,40 @@ final class Almanac
     }
 
     /**
+     * Every entry's title by slug.
+     *
+     * @return array<string, string>
+     */
+    public function titles(): array
+    {
+        return array_map(static fn(AlmanacEntry $entry): string => $entry->title, $this->all());
+    }
+
+    /**
      * An entry's front matter and body off its file.
      *
      * @return array{title: string, summary: string, category: string, sequence: int, about: list<string>, body: string}
      */
     private static function parse(string $slug, string $source): array
     {
-        if (!preg_match('/\A---\R(.*?)\R---\R?(.*)\z/s', $source, $parts)) {
-            throw new \InvalidArgumentException("Almanac entry '{$slug}' must open with a front-matter block between --- lines.");
-        }
-        $front = Yaml::parse($parts[1]);
-        if (!is_array($front)) {
-            throw new \InvalidArgumentException("Almanac entry '{$slug}': the front matter is not a map.");
-        }
-
-        $text = static function (string $key) use ($front, $slug): string {
-            $value = $front[$key] ?? null;
-            if (!is_string($value) || trim($value) === '') {
-                throw new \InvalidArgumentException("Almanac entry '{$slug}' needs a '{$key}'.");
-            }
-
-            return trim($value);
-        };
+        $name = "Almanac entry '{$slug}'";
+        [$front, $body] = MarkdownSource::split($name, $source);
         $sequence = $front['sequence'] ?? null;
         if (!is_int($sequence)) {
-            throw new \InvalidArgumentException("Almanac entry '{$slug}': 'sequence' must be a whole number, smaller for earlier events.");
+            throw new \InvalidArgumentException("{$name}: 'sequence' must be a whole number, smaller for earlier events.");
         }
-        $category = $text('category');
+        $category = MarkdownSource::text($front, 'category', $name);
         if (!in_array($category, self::CATEGORIES, true)) {
-            throw new \InvalidArgumentException("Almanac entry '{$slug}': category '{$category}' is not one of " . implode(', ', self::CATEGORIES) . '.');
-        }
-        $about = $front['about'] ?? [];
-        if (!is_array($about)) {
-            throw new \InvalidArgumentException("Almanac entry '{$slug}': 'about' must be a list.");
+            throw new \InvalidArgumentException("{$name}: category '{$category}' is not one of " . implode(', ', self::CATEGORIES) . '.');
         }
 
         return [
-            'title' => $text('title'),
-            'summary' => $text('summary'),
+            'title' => MarkdownSource::text($front, 'title', $name),
+            'summary' => MarkdownSource::text($front, 'summary', $name),
             'category' => $category,
             'sequence' => $sequence,
-            'about' => array_values(array_map(static fn(mixed $subject): string => is_scalar($subject) ? (string) $subject : '', $about)),
-            'body' => trim($parts[2]),
+            'about' => MarkdownSource::names($front, 'about', $name),
+            'body' => $body,
         ];
     }
 }

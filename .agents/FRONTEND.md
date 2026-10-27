@@ -58,11 +58,12 @@ exchange's company profile or an annual report's business section.
   regulator or Exchequer itself.
 
 ### Long-form profiles
-`CompanyResearch::ARTICLES`, shown at `/stock/{ticker}/profile` and linked under "About". Tickbird Research writes
-them for terminal subscribers: history, people, the firms around it, and what the desk is watching.
+Markdown files in `content/profiles/` (one per ticker; its README gives the format), shown at
+`/stock/{ticker}/profile` and linked under "About". Tickbird Research writes them for terminal subscribers: history,
+people, the firms around it, and what the desk is watching.
 - 400-800 words in three to six titled sections, with a headline and a one- or two-sentence standfirst.
 - Deadpan, with the joke's point intact. The same banned words and constructions as the short profiles.
-- Every figure quoted is pinned to the seed data or `StockModelTuning` in `CompanyResearchTest`. Nothing the model
+- Every figure quoted is pinned to the seed data or `StockModelTuning` in `CompanyProfilesTest`. Nothing the model
   does not do: no immunity, monopoly or behaviour the engine lacks.
 - Name founders and past figures, never the sitting chief executive, whom the board can replace during play.
 - `related` lists every listed company the text names; the page links them.

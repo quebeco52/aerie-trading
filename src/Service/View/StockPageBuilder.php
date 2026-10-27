@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
-use App\Data\Company\CompanyResearch;
 use App\Data\Company\LifecycleStage;
 use App\Data\Company\Sectors;
 use App\Data\Company\StockInfo;
@@ -16,6 +15,7 @@ use App\Entity\User;
 use App\Repository\BondRepository;
 use App\Repository\EtfEventRepository;
 use App\Repository\StockEventRepository;
+use App\Service\Lore\CompanyProfiles;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\Market\Index\MarketIndex;
@@ -80,6 +80,7 @@ class StockPageBuilder
         private readonly ?\Redis $redis = null,
         private readonly ?BusinessMapBuilder $businessMap = null,
         private readonly ?SegmentNoteBuilder $segmentNote = null,
+        private readonly ?CompanyProfiles $profiles = null,
     ) {}
 
     /**
@@ -102,7 +103,7 @@ class StockPageBuilder
             // The lore copy, as the district map reads it, so an edit shows without a reseed; the seeded column covers
             // a listing the lore does not know.
             'generalInfo' => StockInfo::DESCRIPTIONS[$ticker] ?? $asset->getDescription(),
-            'hasProfile' => CompanyResearch::for($ticker) !== null,
+            'hasProfile' => $this->profiles?->for($ticker) !== null,
             'events' => $isEtf
                 ? $this->etfEvents->findRecentFor($asset, self::EVENT_ROWS)
                 : $this->stockEvents->findRecentFor($asset, self::EVENT_ROWS),

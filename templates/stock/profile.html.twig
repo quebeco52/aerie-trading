@@ -1,6 +1,6 @@
 {% extends 'base.html.twig' %}
 
-{# The long-form company profile: App\Data\Company\CompanyResearch's article beside live facts from
+{# The long-form company profile: App\Service\Lore\CompanyProfiles's article, its Markdown rendered, beside live facts from
    App\Service\View\CompanyProfilePageBuilder. Tickbird Research writes for terminal subscribers. #}
 
 {% block page_title %}{{ article.headline }} | {{ publisher }}{% endblock %}
@@ -19,18 +19,7 @@
 				<p class="mt-4 text-sm text-on-surface-variant">{{ publisher }}, company profile</p>
 			</header>
 
-			<div class="pt-6 space-y-8">
-				{% for section in article.sections %}
-					<section>
-						<h2 class="text-lg font-semibold text-on-surface">{{ section.heading }}</h2>
-						<div class="mt-3 space-y-4 text-base text-on-surface-variant leading-relaxed">
-							{% for paragraph in section.body|split("\n\n") %}
-								<p>{{ paragraph }}</p>
-							{% endfor %}
-						</div>
-					</section>
-				{% endfor %}
-			</div>
+			<div class="almanac-prose pt-6">{{ article.html|raw }}</div>
 
 			<p class="mt-10 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant">Profiles are written for terminal subscribers and are not investment advice. Figures in the margin are live; the text is reviewed periodically.</p>
 		</article>

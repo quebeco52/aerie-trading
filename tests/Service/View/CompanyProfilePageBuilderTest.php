@@ -5,18 +5,18 @@ declare(strict_types=1);
 namespace App\Tests\Service\View;
 
 use App\Data\Company\AnchorHoldings;
-use App\Data\Company\CompanyResearch;
 use App\Data\Company\StrategicHoldings;
 use App\Data\District\Institutions;
 use App\Entity\Stock;
 use App\Repository\StockEventRepository;
 use App\Repository\StockRepository;
+use App\Service\Lore\Almanac;
+use App\Service\Lore\CompanyProfiles;
 use App\Service\Market\Chart\PriceChangeFeed;
 use App\Service\View\CompanyProfilePageBuilder;
 use App\Service\View\PeerTableBuilder;
 use App\Tests\Support\StockBuilder;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
-use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -24,9 +24,15 @@ use PHPUnit\Framework\TestCase;
  * keeps up with play.
  */
 #[AllowMockObjectsWithoutExpectations]
-#[Group('unit')]
 class CompanyProfilePageBuilderTest extends TestCase
 {
+    private static function profiles(): CompanyProfiles
+    {
+        static $profiles = null;
+
+        return $profiles ??= new CompanyProfiles(dirname(__DIR__, 3), new Almanac(dirname(__DIR__, 3)));
+    }
+
     /** @param array<string, Stock> $board */
     private function builder(array $board): CompanyProfilePageBuilder
     {
@@ -39,12 +45,12 @@ class CompanyProfilePageBuilderTest extends TestCase
         $feed = $this->createMock(PriceChangeFeed::class);
         $feed->method('changeForTicker')->willReturn(0.0125);
 
-        return new CompanyProfilePageBuilder($stocks, $this->createMock(StockEventRepository::class), $peers, $feed);
+        return new CompanyProfilePageBuilder($stocks, $this->createMock(StockEventRepository::class), $peers, $feed, self::profiles());
     }
 
     public function testCompanyWithoutAProfileHasNoPage(): void
     {
-        $this->assertArrayNotHasKey('HUMM', CompanyResearch::ARTICLES);
+        $this->assertNull(self::profiles()->for('HUMM'));
         $this->assertNull($this->builder([])->build(StockBuilder::create('HUMM')->build()));
     }
 
@@ -54,7 +60,7 @@ class CompanyProfilePageBuilderTest extends TestCase
         $page = $this->builder([])->build($lake);
 
         $this->assertNotNull($page);
-        $this->assertSame(CompanyResearch::ARTICLES['LAKE'], $page['article']);
+        $this->assertSame(self::profiles()->for('LAKE'), $page['article']);
         $this->assertSame(Institutions::TICKBIRD_RESEARCH, $page['publisher']);
         $this->assertEqualsWithDelta(80_000_000_000.0, $page['marketCap'], 1.0);
         $this->assertSame(0.0125, $page['changePercent']);

@@ -2,37 +2,73 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Data\Company;
+namespace App\Tests\Service\Lore;
 
 use App\Data\Company\AnchorHoldings;
-use App\Data\Company\CompanyResearch;
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\StockModelTuning;
+use App\Service\Lore\Almanac;
+use App\Service\Lore\CompanyProfile;
+use App\Service\Lore\CompanyProfiles;
 use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
+use App\Tests\Data\Company\StockInfoTest;
 use PHPUnit\Framework\Attributes\DataProvider;
-use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The long-form profiles are lore, and lore sets facts, never the model: a figure in the text must be the figure the
  * firm runs on, and a firm the text names must be on the board.
  */
-#[Group('unit')]
-class CompanyResearchTest extends TestCase
+class CompanyProfilesTest extends TestCase
 {
     /** A beta quoted to one decimal is the seeded beta rounded: within half a unit of the last digit. */
     private const BETA_ROUNDING = 0.05;
 
-    /**
-     * @return iterable<string, array{string, array{headline: string, standfirst: string, sections: list<array{heading: string, body: string}>, related: list<string>}}>
-     */
+    private static function profiles(): CompanyProfiles
+    {
+        $root = dirname(__DIR__, 3);
+
+        return new CompanyProfiles($root, new Almanac($root));
+    }
+
+    /** @return iterable<string, array{string, CompanyProfile}> */
     public static function articleProvider(): iterable
     {
-        foreach (CompanyResearch::ARTICLES as $ticker => $article) {
+        foreach (self::profiles()->all() as $ticker => $article) {
             yield $ticker => [$ticker, $article];
         }
+    }
+
+    /** Every file in content/profiles/ is published under a listed company's ticker, the README and drafts aside. */
+    public function testEveryFileIsTheProfileOfAListedCompany(): void
+    {
+        $files = array_map(static fn(string $path): string => basename($path, '.md'), glob(dirname(__DIR__, 3) . '/' . CompanyProfiles::DIRECTORY . '/*.md') ?: []);
+        $published = array_values(array_filter($files, static fn(string $file): bool => $file !== 'README' && !str_starts_with($file, '_')));
+
+        $this->assertNotEmpty($published);
+        $this->assertEqualsCanonicalizing($published, array_keys(self::profiles()->all()));
+        $listed = array_column(InitialMarket::STOCKS, 'ticker');
+        foreach ($published as $ticker) {
+            $this->assertContains($ticker, $listed, "content/profiles/{$ticker}.md: name the file by a listed company's ticker.");
+        }
+    }
+
+    /** Every [[link]] in a profile points at an Almanac entry. */
+    public function testAlmanacLinksResolve(): void
+    {
+        $almanac = new Almanac(dirname(__DIR__, 3));
+        $broken = [];
+        foreach (self::profiles()->all() as $ticker => $article) {
+            foreach ($article->links as $target) {
+                if ($almanac->get($target) === null) {
+                    $broken[] = "{$ticker}: [[{$target}]]";
+                }
+            }
+        }
+
+        $this->assertSame([], $broken, 'These links point at no Almanac entry.');
     }
 
     /** @return array<string, mixed> */
@@ -52,22 +88,23 @@ class CompanyResearchTest extends TestCase
         return IndustryBetas::seedBetaFor(self::seed($ticker));
     }
 
-    private static function text(array $article): string
+    /** The article as a reader takes it in, one line per paragraph. */
+    private static function text(CompanyProfile $article): string
     {
-        return implode("\n\n", [$article['headline'], $article['standfirst'], ...array_map(
-            static fn(array $section): string => $section['heading'] . "\n\n" . $section['body'],
-            $article['sections'],
+        return implode("\n\n", [$article->headline, $article->standfirst, ...array_map(
+            static fn(array $section): string => $section['heading'] . "\n\n" . (string) preg_replace('/(?<!\n)\n(?!\n)/', ' ', $section['markdown']),
+            $article->sections,
         )]);
     }
 
     #[DataProvider('articleProvider')]
-    public function testArticleReadsAsHouseCopy(string $ticker, array $article): void
+    public function testArticleReadsAsHouseCopy(string $ticker, CompanyProfile $article): void
     {
         self::seed($ticker);
         $text = self::text($article);
-        $words = str_word_count(implode(' ', array_column($article['sections'], 'body')));
+        $words = str_word_count(implode(' ', array_column($article->sections, 'markdown')));
 
-        $this->assertGreaterThanOrEqual(3, count($article['sections']), "$ticker: a profile has at least three sections.");
+        $this->assertGreaterThanOrEqual(3, count($article->sections), "$ticker: a profile has at least three sections.");
         $this->assertGreaterThanOrEqual(350, $words, "$ticker: a long-form profile runs 400-800 words.");
         $this->assertLessThanOrEqual(850, $words, "$ticker: a long-form profile runs 400-800 words.");
         $this->assertDoesNotMatchRegularExpression(StockInfoTest::AI_TELLS, $text, "$ticker: marketing adjectives and stock AI constructions.");
@@ -77,7 +114,7 @@ class CompanyResearchTest extends TestCase
 
     /** Every listed company the text names in full is linked from the page, and every link is named in the text. */
     #[DataProvider('articleProvider')]
-    public function testRelatedCompaniesAreTheOnesTheTextNames(string $ticker, array $article): void
+    public function testRelatedCompaniesAreTheOnesTheTextNames(string $ticker, CompanyProfile $article): void
     {
         $text = self::text($article);
         $names = array_column(InitialMarket::STOCKS, 'name', 'ticker');
@@ -85,11 +122,11 @@ class CompanyResearchTest extends TestCase
         foreach ($names as $listed => $name) {
             $shortName = implode(' ', array_slice(explode(' ', $name), 0, 2));
             if ($listed !== $ticker && str_contains($text, $shortName)) {
-                $this->assertContains($listed, $article['related'], "$ticker: the text names $shortName; add $listed to 'related'.");
+                $this->assertContains($listed, $article->related, "$ticker: the text names $shortName; add $listed to 'related'.");
             }
         }
 
-        foreach ($article['related'] as $related) {
+        foreach ($article->related as $related) {
             $this->assertArrayHasKey($related, $names, "$ticker: $related is not on the board.");
             $this->assertStringContainsString(explode(' ', $names[$related])[0], $text, "$ticker: $related is linked but never named.");
         }
@@ -169,7 +206,7 @@ class CompanyResearchTest extends TestCase
     #[DataProvider('figureProvider')]
     public function testQuotedFiguresMatchTheModel(string $ticker, string $phrase, float $actual, float $quoted, float $tolerance = 0.01): void
     {
-        $this->assertStringContainsString($phrase, self::text(CompanyResearch::ARTICLES[$ticker]));
+        $this->assertStringContainsString($phrase, self::text(self::profiles()->for($ticker) ?? self::fail("No profile for $ticker.")));
         $this->assertEqualsWithDelta($quoted, $actual, $tolerance, "$ticker: the profile says '$phrase'; the model disagrees.");
     }
 }

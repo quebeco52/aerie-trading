@@ -206,7 +206,7 @@ final class PagesRenderTest extends KernelTestCase
             ]],
             'profile' => ['/stock/LAKE/profile', 'stock/profile.html.twig', [
                 'asset' => ['ticker' => 'LAKE', 'name' => 'Lakebird Bank', 'sector' => 'Financials', 'industry' => 'Banks - Diversified', 'price' => 84.21, 'isBankrupt' => false],
-                'article' => \App\Data\Company\CompanyResearch::ARTICLES['LAKE'], 'publisher' => 'Tickbird Research',
+                'article' => (new \App\Service\Lore\CompanyProfiles(dirname(__DIR__, 2), $almanac))->for('LAKE'), 'publisher' => 'Tickbird Research',
                 'changePercent' => 0.0342, 'marketCap' => 2.02e11, 'freeFloat' => 0.5,
                 'management' => ['label' => 'Fortress', 'mandate' => 'expected to rebuild the balance sheet and hold cash against the cycle', 'tenureYears' => 6.4],
                 'holders' => [], 'holdings' => [],

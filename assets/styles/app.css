@@ -114,13 +114,14 @@
     border-color: var(--color-primary);
   }
 
-  /* A District Almanac entry's body, rendered from Markdown: the long-form profile's type, with links in the accent. */
+  /* A body rendered from Markdown, an Almanac entry's or a long-form profile's, with links in the accent. */
   .almanac-prose {
     font-size: var(--text-base);
     line-height: 1.7;
     color: var(--color-on-surface-variant);
   }
   .almanac-prose > * + * { margin-top: 1rem; }
+  .almanac-prose > :first-child { margin-top: 0; }
   .almanac-prose h2 { margin-top: 2rem; font-size: var(--text-lg); font-weight: 600; color: var(--color-on-surface); }
   .almanac-prose h3 { margin-top: 1.5rem; font-size: var(--text-base); font-weight: 600; color: var(--color-on-surface); }
   .almanac-prose a { color: var(--color-primary); text-underline-offset: 2px; }
