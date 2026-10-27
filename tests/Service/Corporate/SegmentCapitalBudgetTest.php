@@ -39,9 +39,10 @@ final class SegmentCapitalBudgetTest extends TestCase
     {
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
         $ctx = $this->context('WEAV', 'Internet Retail', [Segments::MAIN => 0.8, 'ads_and_cloud' => 0.2], $ledger);
-        // The ads arm anchored on 1,000 of plant and now runs 1,500: a third of it is ahead of its market.
+        // The ads arm anchored on 1,000 of plant and now runs 1,050: it is a little ahead of its market, not so far
+        // that its market's growth no longer calls for more.
         $ledger->resolveSegmentSupply($ctx->stock, 'ads_and_cloud', 1_000.0, 1_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
-        $ledger->resolveSegmentSupply($ctx->stock, 'ads_and_cloud', 1_000.0, 1_500.0, 0.05, 1.0, 0.0, 0.0, 20, 252);
+        $ledger->resolveSegmentSupply($ctx->stock, 'ads_and_cloud', 1_000.0, 1_050.0, 0.05, 1.0, 0.0, 0.0, 20, 252);
         $ctx->segments[Segments::MAIN] = ['price' => 0.75] + $ctx->segments[Segments::MAIN];
 
         $growthCapEx = $this->growthCapEx($ctx, $ledger);
@@ -51,7 +52,7 @@ final class SegmentCapitalBudgetTest extends TestCase
         $this->assertEqualsWithDelta($growthCapEx, $ctx->segments['ads_and_cloud']['growth'], 1e-6);
         $momentum = $ctx->stock->getEarningsMomentumZ() ?? [];
         $this->assertSame(0.0, $momentum[CapitalBudgetEngine::STATE_CAPACITY_GAP]);
-        $this->assertEqualsWithDelta(0.25 * log(2.0 / 3.0), $momentum[CapitalBudgetEngine::STATE_CAPACITY_SPARE], 1e-12, 'weighed by its share of the revenue');
+        $this->assertEqualsWithDelta(0.25 * log(1_000.0 / 1_050.0), $momentum[CapitalBudgetEngine::STATE_CAPACITY_SPARE], 1e-12, 'weighed by its share of the revenue');
 
         // The shares are of the capital the plant sells on, and what the arm builds joins that capital.
         $ctx->revenueGeneratingCapital = 5_000_000_000.0;

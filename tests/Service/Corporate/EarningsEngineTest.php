@@ -179,7 +179,8 @@ class EarningsEngineTest extends TestCase
      */
     public function testGrowthPlantFollowsDemandNotHowSmallTheFirmLooksInItsMarket(): void
     {
-        $capitalGrowth = function (string $samRatio): float {
+        /** @return array{0: float, 1: float} Plant growth over two years, and the widest shortfall the firm filed. */
+        $capitalGrowth = function (string $samRatio): array {
             $this->mathUtility = new MathUtility();
             $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), new IndustryShareLedger(new InMemoryIndustryShareStore()));
             mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
@@ -192,22 +193,27 @@ class EarningsEngineTest extends TestCase
             $engine->calculate($stock, $macro, EarningsEngine::resolveReportingTick('GROW', $ticksPerYear), $ticksPerYear);
             $opening = $stock->getNetPpe();
             $this->assertGreaterThan(0.0, $opening, 'the first report seeds the plant ledger');
+            $shortfall = 0.0;
             for ($quarter = 1; $quarter <= 8; $quarter++) {
                 $engine->calculate($stock, $macro, ($quarter * 63) + EarningsEngine::resolveReportingTick('GROW', $ticksPerYear), $ticksPerYear);
+                $shortfall = max($shortfall, ($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0);
             }
 
-            return $stock->getNetPpe() / $opening;
+            return [$stock->getNetPpe() / $opening, $shortfall];
         };
 
-        $priceTaker = $capitalGrowth('10.0');
-        $dominant = $capitalGrowth('0.125');
+        [$priceTaker, $shortfall] = $capitalGrowth('10.0');
+        [$dominant] = $capitalGrowth('0.125');
 
-        // Two years of the sector's nominal demand growth (its secular rate plus 2% inflation), with a point of
-        // slack for replacement-cost maintenance; reinvesting at the full rate instead compounds to ~15%.
+        // Two years of the sector's nominal demand growth (its secular rate plus 2% inflation) and of closing the
+        // widest shortfall at the catch-up speed, with a point of slack for replacement-cost maintenance; reinvesting
+        // at the full rate instead compounds to ~15%.
         $demandGrowth = Sectors::strategyFor('Auto Manufacturers')->getFadedSecularGrowthRate(new Stock(), 0.0) + 0.02;
+        $catchUp = CapitalBudgetEngine::CAPITAL_ERROR_CORRECTION_SPEED * $shortfall;
 
         $this->assertGreaterThan(1.0, $priceTaker, 'the firm still grows with its market');
-        $this->assertLessThan(exp(2.0 * $demandGrowth) + 0.01, $priceTaker, 'plant grows with demand, not at the reinvestment rate');
+        $this->assertLessThan(exp(2.0 * ($demandGrowth + $catchUp)) + 0.01, $priceTaker, 'plant grows with demand, not at the reinvestment rate');
+        $this->assertLessThan(1.12, $priceTaker, 'well short of compounding at the reinvestment rate');
         $this->assertLessThanOrEqual($dominant + 0.01, $priceTaker, 'a small share of a large market is no licence to build past demand');
         // Alike, not identical: the two trade at different prices, so their market leverage, Hamada beta and hurdle
         // differ.

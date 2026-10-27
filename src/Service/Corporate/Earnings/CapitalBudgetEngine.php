@@ -30,10 +30,12 @@ final class CapitalBudgetEngine
 {
     // --- Capacity Investment ---
     /**
-     * Share of the log gap between demand-implied and installed capital a firm closes each year: 6.2% (Bloom, Bond &
-     * Van Reenen 2007, UK company panel, error-correction term).
+     * Share of the log gap between demand-implied and installed capital a firm closes each year: 25%, a half-life of
+     * about 2.4 years. An error-correction investment equation (Bloom, Bond & Van Reenen 2007) closes only ~6% a year
+     * through its long-run term and does most of its first-year building through a sales-growth term; plant here has
+     * no such term, so its response to a lasting demand shift is folded into this one speed.
      */
-    public const CAPITAL_ERROR_CORRECTION_SPEED = 0.062;
+    public const CAPITAL_ERROR_CORRECTION_SPEED = 0.25;
     /**
      * Carried stream-state key: log of the plant the firm's expected market calls for over the plant it runs, filed at
      * each report for the market's valuation of the catch-up (Valuation::capacityCatchUpGrowth()). A shortfall files
