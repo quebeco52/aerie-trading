@@ -150,6 +150,13 @@ final class CapitalBudgetEngine
             if ($ctx->scheduledCapex > 0.0 && !$deploysIntoEarningAssets) {
                 $this->capExEngine->allocateGrowthCapEx($stock, $ctx->scheduledCapex);
             }
+            // New plant takes time to build (Kydland & Prescott 1982): growth spend is queued as construction and
+            // sells nothing until its sector's completion rate places it in service, so supply trails the demand it
+            // was ordered for. Upkeep replaces plant already running and lands at once.
+            $queuesGrowth = !$ctx->strategy->isFinancial();
+            if ($queuesGrowth && $growthCapEx > 0.0) {
+                $this->capExEngine->allocateGrowthCapEx($stock, $growthCapEx);
+            }
 
             // A lender's growth spend is loans made, not plant built: it lands on the earning-asset ledger
             // the day the cash leaves, with no construction lag.
@@ -168,10 +175,10 @@ final class CapitalBudgetEngine
             $fcfData = [
                 'fcf_per_share' => $fcff / $ctx->sharesOutstanding,
                 'capex' => $actualCapEx,
-                // Only spend that buys an asset outright lands in PP&E this quarter. Scheduled CapEx is
-                // queued as construction in progress and reaches the ledger when it is placed in service,
-                // so counting it here as well would capitalize the same dollar twice.
-                'direct_capex' => $maintenanceCapEx + $growthCapEx,
+                // Only spend that buys an asset outright lands in PP&E this quarter. Growth and scheduled CapEx
+                // are queued as construction in progress and reach the ledger when placed in service, so
+                // counting them here as well would capitalize the same dollar twice.
+                'direct_capex' => $maintenanceCapEx + ($queuesGrowth ? 0.0 : $growthCapEx),
             ];
         }
 
@@ -472,6 +479,8 @@ final class CapitalBudgetEngine
         $support = $stock->getManagementProfile()->weakSegmentSupport();
         $wears = !$ctx->strategy->depreciatesByUnitsOfProduction();
         $pending = SegmentBooks::pending($stock->getEarningsMomentumZ() ?? []);
+        // The rest of the queue is the segments' own growth, still being built in proportion to their plant.
+        $ordinary = max(0.0, $stock->getTotalCipAmount() - array_sum($pending));
         $plantBase = $stock->getGrossPpe() !== null ? max(0.0, $stock->getNetPpe()) : abs($ctx->investedCapital);
         $filed = [];
         foreach ([...array_diff(array_keys($ctx->segments), $joint), ...array_intersect(array_keys($ctx->segments), $joint)] as $segment) {
@@ -482,7 +491,7 @@ final class CapitalBudgetEngine
             } else {
                 $strategy = $segment === Segments::MAIN ? $ctx->strategy : Sectors::strategyFor($industries[$segment] ?? '');
                 $capitalGap = $this->industryShareLedger?->resolveSegmentCapacityGap($stock, $segment, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($strategy, $stock)) ?? 0.0;
-                $capitalGap = self::gapAfterPipeline($capitalGap, $pending[$segment] ?? 0.0, $books['plant'] * $plantBase);
+                $capitalGap = self::gapAfterPipeline($capitalGap, ($pending[$segment] ?? 0.0) + ($ordinary * $books['plant']), $books['plant'] * $plantBase);
                 $books['capital_gap'] = $capitalGap;
                 $books['gap'] = $capitalGap - log(max(OperatingCapacityEngine::MIN_CAPACITY_UTILIZATION, $books['load']));
                 $books['return'] = self::segmentReturnOnPlant($ctx, $books);

@@ -1649,6 +1649,45 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * New plant takes time to build: the quarter's growth spend joins the construction queue, not the plant ledger,
+     * which takes only the upkeep and the construction placed in service.
+     */
+    public function testGrowthSpendIsBuiltBeforeItRuns(): void
+    {
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $this->mathUtility = new MathUtility();
+        $engine = $this->buildEngine($dispatcher, new IndustryShareLedger(new InMemoryIndustryShareStore()));
+        mt_srand(5); // seeded once every mock is built: PHPUnit names a new mock class from the same generator
+        $stock = $this->buildMatureIndustrial('TTBX');
+        $stock->setTotalRevenue('0');
+        $ticksPerYear = 252;
+        $macro = static fn(int $quarter): MacroStateDTO => new MacroStateDTO(
+            corporateTaxRate: 0.21,
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            inflationEma: 0.02,
+            totalTime: $quarter / 4.0,
+            gdpDeflator: exp(0.02 * $quarter / 4.0),
+            potentialGdpIndex: exp(MacroConstants::TREND_REAL_GROWTH * $quarter / 4.0),
+        );
+        $engine->calculate($stock, $macro(0), EarningsEngine::resolveReportingTick('TTBX', $ticksPerYear), $ticksPerYear);
+        $cipBefore = $stock->getTotalCipAmount();
+        $netPpeBefore = $stock->getNetPpe();
+
+        $engine->calculate($stock, $macro(1), 63 + EarningsEngine::resolveReportingTick('TTBX', $ticksPerYear), $ticksPerYear);
+        $this->assertNotNull($captured);
+        $growth = $captured->operatingCapex - $captured->maintenanceCapex - $captured->scheduledCapex - ($captured->marketEntry['capex'] ?? 0.0);
+
+        $this->assertGreaterThan(0.0, $growth, 'a firm whose market grows builds');
+        $this->assertEqualsWithDelta($cipBefore - $captured->completedCip + $captured->scheduledCapex + $growth + ($captured->marketEntry['capex'] ?? 0.0), $stock->getTotalCipAmount(), 1.0, 'growth spend is queued as construction');
+        $this->assertEqualsWithDelta($netPpeBefore + $captured->maintenanceCapex + $captured->completedCip - $captured->quarterlyDepreciation, $stock->getNetPpe(), 1.0, 'the plant ledger takes no growth spend before it is built');
+    }
+
+    /**
      * Construction placed in service leaves CIP and enters gross PP&E, where it starts depreciating.
      */
     public function testCompletedConstructionMovesFromCipIntoGrossPpe(): void
@@ -2240,7 +2279,7 @@ class EarningsEngineTest extends TestCase
         $landBank = HomebuilderBusinessModel::LAND_BANK_YEARS * 4.0 * $captured->expectedRevenue;
         $this->assertEqualsWithDelta((0.55 - HomebuilderBusinessModel::LAND_SHARE_OF_PRICE) * $landBank, $captured->plantImpairment, 1.0, 'the model\'s charge is the write-down');
         $this->assertEqualsWithDelta(
-            $openingNetPpe + $captured->totalReportedCapex + $captured->completedCip - $captured->quarterlyDepreciation - $captured->plantImpairment,
+            $openingNetPpe + $captured->maintenanceCapex + $captured->completedCip - $captured->quarterlyDepreciation - $captured->plantImpairment,
             $impaired->getNetPpe(),
             1.0,
             'the plant carries the land at its written-down value',
