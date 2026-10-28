@@ -24,4 +24,7 @@ cycles (plant under construction, longer shortages, idle plant in gluts) without
   industries ever idle, firms with CIP > 25% of invested capital for 8+ quarters, PP&E stalls. "2nd half" windows are
   t >= YEARS/2.
 
+- IBIS check: `TAG=<tag> ibis.py <seeds> [A] [B] [traj_seed]`: IBIS plant, revenue, capex/dep, CIP, idle, margin,
+  cap, distress per seed and paired, plus board sanity and one seed's trajectory.
+
 Results: `timetobuild_evidence.md`.
