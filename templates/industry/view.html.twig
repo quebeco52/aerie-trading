@@ -16,6 +16,8 @@
 				<nav class="text-2xs text-on-surface-variant flex items-center gap-1 mb-3" aria-label="Breadcrumb">
 					<a href="{{ path('app_industries') }}" class="hover:text-on-surface hover:underline">Industries</a>
 					<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
+					<a href="{{ path('app_screener', {sector: industry.sector}) }}" class="hover:text-on-surface hover:underline">{{ industry.sector }}</a>
+					<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
 					<span class="text-on-surface" aria-current="page">{{ industry.name }}</span>
 				</nav>
 			{% endblock %}
@@ -72,37 +74,6 @@
 		</section>
 
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-			{% if industry.charts.price and industry.pricesCapacity %}
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
-					<h2 class="text-sm font-semibold text-on-surface">Price against a balanced industry</h2>
-					<p class="text-xs text-on-surface-variant mt-1 mb-3">What the industry's output fetched each quarter against what it would with just enough plant. Short of plant, prices rise until new plant opens; overbuilt, they fall until plant wears out or demand catches up.</p>
-					{{ charts.line_chart(industry.charts.price, 'Price against a balanced industry, by quarter') }}
-				</section>
-			{% endif %}
-			{% if industry.charts.plant %}
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
-					<h2 class="text-sm font-semibold text-on-surface">Plant idle and under construction</h2>
-					<p class="text-xs text-on-surface-variant mt-1 mb-3">Idle plant is switched off because its output would not cover its running cost. Plant under construction is the next wave of supply, as a share of the plant standing.</p>
-					{{ charts.line_chart(industry.charts.plant, 'Idle plant and plant under construction, by quarter') }}
-				</section>
-			{% endif %}
-			{% if industry.charts.shares %}
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
-					<h2 class="text-sm font-semibold text-on-surface">Who sells its output</h2>
-					<p class="text-xs text-on-surface-variant mt-1 mb-3">Each listed company's share of the sales the listed companies report, largest first.</p>
-					{{ charts.line_chart(industry.charts.shares, 'Share of listed sales by company, by quarter') }}
-				</section>
-			{% endif %}
-			{% if industry.charts.margin %}
-				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
-					<h2 class="text-sm font-semibold text-on-surface">Operating margin</h2>
-					<p class="text-xs text-on-surface-variant mt-1 mb-3">Operating profit over sales, summed across the listed companies.</p>
-					{{ charts.line_chart(industry.charts.margin, 'Operating margin of the listed companies, by quarter') }}
-				</section>
-			{% endif %}
-		</div>
-
-		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 				<h2 class="text-sm font-semibold text-on-surface mb-3">Companies</h2>
 				<div class="overflow-x-auto">
@@ -142,7 +113,8 @@
 
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 				<h2 class="text-sm font-semibold text-on-surface mb-1">Deals, failures and outlook</h2>
-				<div class="divide-y divide-outline-variant/10">
+				{# Scrolls beside the companies on a wide screen, so fifteen stories do not push the charts down. #}
+				<div class="divide-y divide-outline-variant/10 lg:max-h-96 lg:overflow-y-auto custom-scrollbar">
 					{% for story in industry.stories %}
 						{% include 'partials/_event_card.html.twig' with { event: story.card, source: story.source } only %}
 					{% else %}
@@ -150,6 +122,37 @@
 					{% endfor %}
 				</div>
 			</section>
+		</div>
+
+		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+			{% if industry.charts.price and industry.pricesCapacity %}
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+					<h2 class="text-sm font-semibold text-on-surface">Price against a balanced industry</h2>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">What the industry's output fetched each quarter against what it would with just enough plant. Short of plant, prices rise until new plant opens; overbuilt, they fall until plant wears out or demand catches up.</p>
+					{{ charts.line_chart(industry.charts.price, 'Price against a balanced industry, by quarter') }}
+				</section>
+			{% endif %}
+			{% if industry.charts.plant %}
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+					<h2 class="text-sm font-semibold text-on-surface">Plant idle and under construction</h2>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">Idle plant is switched off because its output would not cover its running cost. Plant under construction is the next wave of supply, as a share of the plant standing.</p>
+					{{ charts.line_chart(industry.charts.plant, 'Idle plant and plant under construction, by quarter') }}
+				</section>
+			{% endif %}
+			{% if industry.charts.shares %}
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+					<h2 class="text-sm font-semibold text-on-surface">Who sells its output</h2>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">Each listed company's share of the sales the listed companies report, largest first.</p>
+					{{ charts.line_chart(industry.charts.shares, 'Share of listed sales by company, by quarter') }}
+				</section>
+			{% endif %}
+			{% if industry.charts.margin %}
+				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
+					<h2 class="text-sm font-semibold text-on-surface">Operating margin</h2>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">Operating profit over sales, summed across the listed companies.</p>
+					{{ charts.line_chart(industry.charts.margin, 'Operating margin of the listed companies, by quarter') }}
+				</section>
+			{% endif %}
 		</div>
 	</div>
 {% endblock %}

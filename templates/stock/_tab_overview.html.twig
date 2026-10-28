@@ -59,7 +59,8 @@
 			{% endfor %}
 			<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" id="move-attribution">
 				<h2 class="text-sm font-semibold text-on-surface">What moved the shares</h2>
-				<p class="text-xs text-on-surface-variant mt-1 mb-4">Each move split into what the whole market did, what {{ moves.peerLabel == 'industry' ? 'its industry, ' ~ moves.peerName ~ ',' : 'the ' ~ moves.peerName ~ ' sector' }} did beyond the market, and what was the company's own. From weekly closes over two years, the shares move <span class="font-mono text-on-surface">{{ moves.beta|number_format(2) }}</span> times the market.</p>
+				{% set peerLink %}<a href="{{ moves.peerLabel == 'industry' ? path('app_industry', {slug: industry_slug(moves.peerName)}) : path('app_screener', {sector: moves.peerName}) }}" class="text-primary hover:underline">{{ moves.peerName }}</a>{% endset %}
+				<p class="text-xs text-on-surface-variant mt-1 mb-4">Each move split into what the whole market did, what {% if moves.peerLabel == 'industry' %}its industry, {{ peerLink }},{% else %}the {{ peerLink }} sector{% endif %} did beyond the market, and what was the company's own. From weekly closes over two years, the shares move <span class="font-mono text-on-surface">{{ moves.beta|number_format(2) }}</span> times the market.</p>
 				<table class="w-full text-xs">
 					<thead>
 						<tr class="table-head">

@@ -29,9 +29,11 @@
         {% endif %}
     {% endfor %}
     <div class="flex items-center gap-1 overflow-x-auto pb-1 custom-scrollbar" id="sector-filters" role="group" aria-label="Filter by sector">
-        <button type="button" class="sector-filter-btn seg-btn" aria-pressed="true" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">All sectors</button>
+        {# ?sector= opens the screener on one sector; screener_controller.js filters to the pressed button. #}
+        {% set picked = app.request.query.get('sector') in sectors ? app.request.query.get('sector') : 'ALL' %}
+        <button type="button" class="sector-filter-btn seg-btn" aria-pressed="{{ picked == 'ALL' ? 'true' : 'false' }}" data-sector="ALL" data-screener-target="sectorBtn" data-action="click->screener#filterSector">All sectors</button>
         {% for sec in sectors|sort %}
-            <button type="button" class="sector-filter-btn seg-btn" aria-pressed="false" data-sector="{{ sec }}" data-screener-target="sectorBtn" data-action="click->screener#filterSector">{{ sec }}</button>
+            <button type="button" class="sector-filter-btn seg-btn" aria-pressed="{{ picked == sec ? 'true' : 'false' }}" data-sector="{{ sec }}" data-screener-target="sectorBtn" data-action="click->screener#filterSector">{{ sec }}</button>
         {% endfor %}
     </div>
 

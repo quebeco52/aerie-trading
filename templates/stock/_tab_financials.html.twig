@@ -164,7 +164,7 @@
 				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation" id="rival-comparison">
 					<div class="mb-3">
 						<h4 class="text-sm font-semibold text-on-surface">{{ rivals.measure }} against its rivals</h4>
-						<p class="text-xs text-on-surface-variant mt-0.5">Over the trailing four quarters, against the median of {{ rivals.peers }} other {{ rivals.peers == 1 ? 'company' : 'companies' }} in {{ rivals.peerLabel == 'industry' ? 'its industry' : 'the ' ~ rivals.peerName ~ ' sector' }}, including any that have since failed.</p>
+						<p class="text-xs text-on-surface-variant mt-0.5">Over the trailing four quarters, against the median of {{ rivals.peers }} other {{ rivals.peers == 1 ? 'company' : 'companies' }} in {% if rivals.peerLabel == 'industry' %}its industry, <a href="{{ path('app_industry', {slug: industry_slug(rivals.peerName)}) }}" class="text-primary hover:underline">{{ rivals.peerName }}</a>{% else %}the <a href="{{ path('app_screener', {sector: rivals.peerName}) }}" class="text-primary hover:underline">{{ rivals.peerName }}</a> sector{% endif %}, including any that have since failed.</p>
 					</div>
 					{{ lines.line_chart(rivals.chart, rivals.measure ~ ' of ' ~ asset.ticker ~ ' against the ' ~ rivals.peerLabel ~ ' median, by quarter') }}
 					{% if rivals.gap is not null %}

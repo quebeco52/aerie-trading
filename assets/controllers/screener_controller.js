@@ -4,9 +4,12 @@ export default class extends Controller {
     static targets = ['searchInput', 'tbody', 'header', 'sectorBtn', 'row'];
 
     connect() {
-        this.selectedSector = 'ALL';
+        // The template presses the sector a ?sector= link asked for.
+        const pressed = this.sectorBtnTargets.find(b => b.getAttribute('aria-pressed') === 'true');
+        this.selectedSector = pressed?.dataset.sector || 'ALL';
         this.searchQuery = '';
         this.currentSort = { colIndex: null, direction: 'asc' };
+        if (this.selectedSector !== 'ALL') this.applyFilters();
     }
 
     filterSector(event) {
@@ -67,6 +70,8 @@ export default class extends Controller {
         rows.sort((a, b) => {
             const aVal = a.children[index]?.getAttribute('data-value') || '';
             const bVal = b.children[index]?.getAttribute('data-value') || '';
+            // A missing figure sorts last either way.
+            if (aVal === '' || bVal === '') return (aVal === '') - (bVal === '');
             const aNum = parseFloat(aVal);
             const bNum = parseFloat(bVal);
 

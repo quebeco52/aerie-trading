@@ -19,30 +19,30 @@
 				<p class="text-xs text-on-surface-variant mt-1">Output gap <span class="font-mono">{{ macro.output_gap|pct(2, true) }}</span> <span class="text-primary group-hover:underline underline-offset-2">&middot; Economy</span></p>
 			</a>
 
-			{# Inflation #}
-			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/20">
+			{# Inflation: the economy page holds the CPI series. #}
+			<a href="{{ path('app_economy') }}" class="block bg-surface-container-low rounded-lg p-4 border border-outline-variant/20 hover:border-primary/50 transition-colors group">
 				{# The quarter's annual rate, as on the economy page, not the instant's noisy reading. #}
 				<p class="text-xs text-on-surface-variant mb-1">Inflation (CPI)</p>
 				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ macro.inflation_ema|pct(2) }}</p>
-				<p class="text-xs text-on-surface-variant mt-1">Target <span class="font-mono">{{ inflationTarget|pct(2) }}</span></p>
-			</div>
+				<p class="text-xs text-on-surface-variant mt-1">Target <span class="font-mono">{{ inflationTarget|pct(2) }}</span> <span class="text-primary group-hover:underline underline-offset-2">&middot; Economy</span></p>
+			</a>
 
-			{# Policy Rate #}
-			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/20">
+			{# Policy rate: links through to the Monetary Authority, which sets it. #}
+			<a href="{{ path('app_authority') }}" class="block bg-surface-container-low rounded-lg p-4 border border-outline-variant/20 hover:border-primary/50 transition-colors group">
 				<p class="text-xs text-on-surface-variant mb-1">Policy rate</p>
 				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ macro.policy_rate|pct(2) }}</p>
-				<p class="text-xs text-on-surface-variant mt-1">Overnight target</p>
-			</div>
+				<p class="text-xs text-on-surface-variant mt-1">Overnight target <span class="text-primary group-hover:underline underline-offset-2">&middot; Monetary Authority</span></p>
+			</a>
 
-			{# 10Y Yield #}
-			<div class="bg-surface-container-low rounded-lg p-4 border border-outline-variant/20">
+			{# 10Y yield: links through to the bond ladder, where the curve is drawn. #}
+			<a href="{{ path('app_bond_ladder') }}" class="block bg-surface-container-low rounded-lg p-4 border border-outline-variant/20 hover:border-primary/50 transition-colors group">
 				<p class="text-xs text-on-surface-variant mb-1">10Y yield</p>
 				<p class="text-2xl font-semibold text-on-surface tracking-tight font-mono">{{ macro.yield_10y|pct(2) }}</p>
 				{% set spread = macro.yield_10y - macro.policy_rate %}
 				<p class="text-xs mt-1 {{ spread < 0 ? 'text-warning' : 'text-on-surface-variant' }}">
-					Curve <span class="font-mono">{{ spread|bps(0, true) }}</span>{{ spread < 0 ? ', inverted' : '' }}
+					Curve <span class="font-mono">{{ spread|bps(0, true) }}</span>{{ spread < 0 ? ', inverted' : '' }} <span class="text-primary group-hover:underline underline-offset-2">&middot; Bonds</span>
 				</p>
-			</div>
+			</a>
 		</div>
 
 		{# The published indices. Read against each other rather than one at a time: the headline against the
@@ -72,7 +72,7 @@
 			<section class="bg-surface-container-low rounded-lg border border-outline-variant/20 p-5 space-y-5" id="market-wrap">
 				<div class="flex flex-wrap items-baseline justify-between gap-3">
 					<h2 class="text-base font-semibold text-on-surface">The month on the exchange</h2>
-					<p class="text-xs text-on-surface-variant"><span class="font-mono text-secondary">{{ wrap.advancing }}</span> rose, <span class="font-mono text-tertiary">{{ wrap.declining }}</span> fell{% if wrap.unchanged > 0 %}, <span class="font-mono">{{ wrap.unchanged }}</span> unchanged{% endif %}</p>
+					<p class="text-xs text-on-surface-variant"><span class="font-mono text-secondary">{{ wrap.advancing }}</span> rose, <span class="font-mono text-tertiary">{{ wrap.declining }}</span> fell{% if wrap.unchanged > 0 %}, <span class="font-mono">{{ wrap.unchanged }}</span> unchanged{% endif %} &middot; <a href="{{ path('app_industries') }}" class="text-primary hover:underline">Industries</a></p>
 				</div>
 				<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
 					{% for list in [{title: 'Leaders', rows: wrap.leaders, empty: 'No listing rose.'}, {title: 'Laggards', rows: wrap.laggards, empty: 'No listing fell.'}] %}
@@ -96,7 +96,7 @@
 						<ul class="space-y-1.5 text-xs" aria-label="Sector moves, weighted by market value">
 							{% for sector in wrap.sectors %}
 								<li class="flex items-center gap-2">
-									<span class="w-36 shrink-0 truncate text-on-surface-variant" title="{{ sector.companies }} {{ sector.companies == 1 ? 'listing' : 'listings' }}">{{ sector.name }}</span>
+									<a href="{{ path('app_screener', {sector: sector.name}) }}" class="w-36 shrink-0 truncate text-on-surface-variant hover:text-primary" title="{{ sector.companies }} {{ sector.companies == 1 ? 'listing' : 'listings' }}">{{ sector.name }}</a>
 									<span class="flex-1 flex h-1.5" aria-hidden="true">
 										<span class="w-1/2 flex justify-end">{% if sector.change < 0 %}<span class="block h-full rounded-l-full bg-tertiary" style="width: {{ (-sector.change / widest * 100)|round(1) }}%"></span>{% endif %}</span>
 										<span class="w-1/2 flex border-l border-outline-variant/60">{% if sector.change > 0 %}<span class="block h-full rounded-r-full bg-secondary" style="width: {{ (sector.change / widest * 100)|round(1) }}%"></span>{% endif %}</span>
@@ -123,7 +123,6 @@
 						</ul>
 					</div>
 				</div>
-				<p class="text-xs text-on-surface-variant">Which industries are short of plant or overbuilt: <a href="{{ path('app_industries') }}" class="text-primary hover:underline">Industries</a>.</p>
 			</section>
 		{% endif %}
 
