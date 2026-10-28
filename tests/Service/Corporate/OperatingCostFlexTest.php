@@ -232,6 +232,29 @@ final class OperatingCostFlexTest extends TestCase
     }
 
     /**
+     * Idle plant is measured against normal running: none in an ordinary quarter, a seasonal trough or a boom; the
+     * economy's slack and an industry glut both stand plant idle; a firm's own bad quarter does not.
+     */
+    public function testIdlePlantIsTheSlackBeyondNormalRunning(): void
+    {
+        $idle = function (float $utilization, float $seasonalFactor = 1.0, float $plantLoad = 1.0, float $ownShock = 0.0): float {
+            $ctx = $this->buildContext(1.0, $utilization + $ownShock, $seasonalFactor);
+            $ctx->capacityUtilizationBeforeShocks = $utilization * $seasonalFactor;
+            $ctx->plantLoad = $plantLoad;
+
+            return OperatingCapacityEngine::idlePlantShare($ctx);
+        };
+
+        $this->assertSame(0.0, $idle(1.0), 'an ordinary quarter');
+        $this->assertSame(0.0, $idle(1.0, 0.70), 'a seasonal trough');
+        $this->assertSame(0.0, $idle(1.08), 'a boom runs hot, never below zero idle');
+        $this->assertEqualsWithDelta(0.10, $idle(0.90), 1e-12, 'a slump leaves a tenth of the plant idle');
+        $this->assertEqualsWithDelta(0.10, $idle(0.90, 0.80), 1e-12, 'the same slump in a seasonal trough');
+        $this->assertEqualsWithDelta(1.0 - (0.90 * 0.80), $idle(0.90, 1.0, 0.80), 1e-12, 'a glut idles plant on top of the slump');
+        $this->assertSame(0.0, $idle(1.0, 1.0, 1.0, -0.15), 'a bad quarter of its own is not idle plant');
+    }
+
+    /**
      * ASC 420-10: one-time termination benefits are recognised in the quarter the plan is committed, on the
      * labour share of the capacity cut — exiting a lease or mothballing a line does not pay severance.
      */

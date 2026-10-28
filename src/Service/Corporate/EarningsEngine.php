@@ -820,7 +820,7 @@ class EarningsEngine
         $ctx->kpis['rival_share_drain'] = $ctx->rivalShareDrain;
         $ctx->kpis['own_price_volume_shift'] = $ctx->ownPriceVolumeShift;
         $ctx->kpis['industry_price_level'] = $ctx->industryPriceLevel;
-        $ctx->kpis['idle_plant_share'] = 1.0 - $ctx->plantLoad;
+        $ctx->kpis['idle_plant_share'] = OperatingCapacityEngine::idlePlantShare($ctx);
         $ctx->kpis['industry_outlook'] = $ctx->industryOutlook;
         $ctx->kpis['price_revenue'] = $actuals->priceRevenue;
         $this->recordCostKpis($ctx, $streamState);

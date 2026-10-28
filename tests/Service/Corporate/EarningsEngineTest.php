@@ -163,7 +163,12 @@ class EarningsEngineTest extends TestCase
 
         $this->assertSame(1.0, $control->plantLoad);
         $this->assertLessThan(1.0, $glut->plantLoad, 'buyers take less than the industry built');
-        $this->assertEqualsWithDelta(1.0 - $glut->plantLoad, $glut->kpis['idle_plant_share'], 1e-12);
+        $this->assertEqualsWithDelta(
+            max(0.0, 1.0 - (OperatingCapacityEngine::plantRunRate($control, $control->capacityUtilizationBeforeShocks) * $glut->plantLoad)),
+            $glut->kpis['idle_plant_share'],
+            1e-12,
+            'the glut idles plant on top of whatever the economy left idle',
+        );
         $this->assertGreaterThanOrEqual(1.0 - ($substitutability * FinancialConstants::MAX_INDUSTRY_PRICE_RESPONSE) - 1e-12, $glut->industryPriceLevel, 'the price holds at the deepest cut');
         $this->assertSame($control->capacityUtilization, $glut->capacityUtilization, 'idle plant is not unsold stock');
         $this->assertEqualsWithDelta($control->maintenanceCapex * $glut->plantLoad, $glut->maintenanceCapex, 1e-6 * $control->maintenanceCapex, 'wear replaced on the plant in use');

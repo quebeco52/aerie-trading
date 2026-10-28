@@ -406,6 +406,25 @@ final class OperatingCapacityEngine
     }
 
     /**
+     * How hard the plant runs against normal at a given utilisation: the seasonal swing the firm staffs through taken
+     * out, the volume a model moves inside its own sector physics put back in, and plant idled in an industry glut
+     * left out. One in an ordinary quarter.
+     */
+    public static function plantRunRate(EarningsSimulationContext $ctx, float $capacityUtilization): float
+    {
+        return ($capacityUtilization / max(0.01, $ctx->seasonalFactor)) * $ctx->sectorActivityFactor * $ctx->plantLoad;
+    }
+
+    /**
+     * Share of the plant standing idle beyond the spare a firm always keeps: the economy's slack, the sector's own
+     * order book or fleet, and an industry glut, but not the quarter's own luck. Zero in an ordinary quarter or a boom.
+     */
+    public static function idlePlantShare(EarningsSimulationContext $ctx): float
+    {
+        return max(0.0, 1.0 - self::plantRunRate($ctx, $ctx->capacityUtilizationBeforeShocks));
+    }
+
+    /**
      * The committed cost base the firm is actually resourced for, as a fraction of the base its structural
      * capacity implies.
      *
@@ -427,9 +446,8 @@ final class OperatingCapacityEngine
             $prior = 1.0;
         }
 
-        // The activity the base has to carry, with the seasonal swing the firm staffs through taken out, the volume a
-        // model moves inside its own sector physics put back in, and plant idled in an industry glut left out.
-        $utilization = ($ctx->capacityUtilization / max(0.01, $ctx->seasonalFactor)) * $ctx->sectorActivityFactor * $ctx->plantLoad;
+        // The activity the base has to carry: the plant's run rate this quarter, its own shocks included.
+        $utilization = self::plantRunRate($ctx, $ctx->capacityUtilization);
         $activityGap = log(
             max(self::MIN_CAPACITY_UTILIZATION, $utilization) / max(self::MIN_CAPACITY_UTILIZATION, $prior),
         );
