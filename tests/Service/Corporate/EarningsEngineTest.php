@@ -3031,6 +3031,27 @@ class EarningsEngineTest extends TestCase
     }
 
     /**
+     * A trust's shares sit below its net asset value by the holding-company discount, which prices the holder's
+     * shares, not the business it bought. Tested against the discounted value, every acquisition a trust made was
+     * written off at its next year-end.
+     */
+    public function testHoldingCompanyDiscountDoesNotImpairATrustsGoodwill(): void
+    {
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, equityRiskPremium: 0.05);
+        $strategy = Sectors::getBusinessModelStrategy(Sectors::businessModelFor('Investment Companies'));
+        $this->assertGreaterThan(0.1, $strategy->getStructuralValuationDiscount($macroState), 'the trust must trade at a discount for the test to have power');
+
+        $stock = StockBuilder::matureIndustrial('TRST')->withIndustry('Investment Companies')->build();
+        $stock->setGoodwill('2000000000');
+        $stock->setLifecycleStage(LifecycleStage::Mature);
+
+        $q4Tick = ((EarningsEngine::FISCAL_YEAR_END_QUARTER + 1) * 63) + EarningsEngine::resolveReportingTick('TRST', 252);
+        $this->earningsEngine->calculate($stock, $macroState, $q4Tick);
+
+        $this->assertEqualsWithDelta(2_000_000_000.0, (float) $stock->getGoodwill(), 1.0, 'a sound business bought by a trust keeps its goodwill');
+    }
+
+    /**
      * The single-step test (ASU 2017-04) writes book equity down to the reporting unit's fair value and no further:
      * the charge is the carrying amount over fair value, capped at goodwill, so a thin-equity acquirer loses the
      * excess and keeps a book equal to what it is worth. Goodwill leaves the asset side and the equity that carried
