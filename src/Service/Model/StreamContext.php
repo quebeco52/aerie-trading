@@ -6,11 +6,9 @@ namespace App\Service\Model;
 
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
-use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
-use App\Service\Math\TimeSeries;
 
 /**
  * Encapsulates the generation, registration, and persistence of autoregressive AR(1) stream Z-scores.
@@ -38,12 +36,6 @@ class StreamContext
      * (the deepest mobilisation runs 1.7 times), so the cap guards the state without deleting booked work.
      */
     public const MAX_BACKLOG_STEADY_STATE_MULTIPLE = 3.0;
-
-    // --- Dynamic Revenue Mix Drift & Mean Reversion ---
-    /** Adaptation speed scalar (alpha) at which quarterly realized revenue mix shifts active baseline weights. */
-    public const DEFAULT_MIX_ADAPTATION_RATE = 0.15;
-    /** Strategic mean reversion speed (kappa) pulling dynamic weights back toward long-term franchise target. */
-    public const DEFAULT_MIX_REVERSION_SPEED = 0.08;
 
     /**
      * @var array<string, int> Regime clocks resolved this quarter (quarters active including this one; 0 = inactive).
@@ -330,94 +322,26 @@ class StreamContext
     }
 
     /**
-     * Evolve and resolve active mean-reverting revenue stream weights for this quarter.
+     * The quarter's revenue weights: the plan's shares, normalized. A company that keeps plant by segment gives each
+     * segment's lines that segment's share of the quarter; one in several markets on one plant leans each line's target
+     * by its segment's outlook against the blend.
      *
-     * @param array<string, float> $targetWeights Map of stream keys to strategic target weights
-     * @param float $adaptationRate Adaptation speed scalar (alpha)
-     * @param float $reversionSpeed Mean reversion speed scalar (kappa)
-     * @param float $minFloor       Minimum structural floor clamp per stream
-     * @param float $maxCeiling     Maximum structural ceiling clamp per stream
-     * @return array<string, float> Simplex-normalized active weights for this quarter
+     * The weights are the plan and nothing else. A line's draws and market terms move its revenue each quarter on top
+     * of them; carried into the next quarter's weights as well, they were counted twice and compounded (a dry quarter
+     * of carried interest handed its weight to the fees, which then billed for funds that had not grown).
+     *
+     * @param array<string, float> $targetWeights Map of stream keys to the plan's weights
+     * @return array<string, float> Simplex-normalized weights for this quarter
      */
-    public function resolveActiveStreamWeights(
-        array $targetWeights,
-        float $adaptationRate = self::DEFAULT_MIX_ADAPTATION_RATE,
-        float $reversionSpeed = self::DEFAULT_MIX_REVERSION_SPEED,
-        float $minFloor = FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR,
-        float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING,
-    ): array {
-        // A company that keeps plant by segment gives each segment's lines that segment's share of the quarter; one in
-        // several markets on one plant leans each line's target by its segment's outlook against the blend.
+    public function resolveActiveStreamWeights(array $targetWeights): array
+    {
         $split = SegmentBooks::splitToTargets($this->ticker, $this->previousMomentum, $targetWeights);
         foreach ($split === null ? $targetWeights : [] as $key => $weight) {
             $targetWeights[$key] = $weight * SegmentOutlook::tilt($this->previousMomentum, (string) $key);
         }
         $targetWeights = $split ?? $targetWeights;
-        $normalizedTargets = ResponseCurves::normalizeWeightsSimplex($targetWeights);
-        if (empty($normalizedTargets)) {
-            $total = array_sum($targetWeights);
-            if ($total > 0.0) {
-                foreach ($targetWeights as $k => $w) {
-                    $normalizedTargets[$k] = $w / $total;
-                }
-            } else {
-                $count = max(1, count($targetWeights));
-                foreach ($targetWeights as $k => $w) {
-                    $normalizedTargets[$k] = 1.0 / $count;
-                }
-            }
-        }
 
-        $hasPreviousShares = true;
-        foreach (array_keys($normalizedTargets) as $key) {
-            if (!isset($this->previousMomentum["share:{$key}"])) {
-                $hasPreviousShares = false;
-                break;
-            }
-        }
-
-        if ($hasPreviousShares) {
-            $rawWeights = [];
-            foreach ($normalizedTargets as $key => $targetWeight) {
-                if ($targetWeight <= 0.0) {
-                    $rawWeights[$key] = 0.0;
-                    continue;
-                }
-
-                $prevWeight = (float) ($this->previousMomentum["weight:{$key}"] ?? $targetWeight);
-                $prevShare  = (float) $this->previousMomentum["share:{$key}"];
-
-                $raw = TimeSeries::calculateMeanRevertingWeight(
-                    $prevWeight,
-                    $prevShare,
-                    $targetWeight,
-                    $adaptationRate,
-                    $reversionSpeed,
-                    $minFloor,
-                    $maxCeiling,
-                );
-                $rawWeights[$key] = $raw;
-            }
-            $activeWeights = ResponseCurves::normalizeWeightsSimplex($rawWeights) ?: $rawWeights;
-        } else {
-            $activeWeights = [];
-            foreach ($normalizedTargets as $key => $targetWeight) {
-                if ($targetWeight <= 0.0) {
-                    $activeWeights[$key] = 0.0;
-                    continue;
-                }
-                $activeWeights[$key] = (float) ($this->previousMomentum["weight:{$key}"] ?? $targetWeight);
-            }
-            $activeWeights = ResponseCurves::normalizeWeightsSimplex($activeWeights) ?: $activeWeights;
-        }
-
-        // The mix drifts toward its targets within a segment, but a company that keeps plant by segment sells each
-        // segment's share of the quarter as its plant does: smoothing it too would leave a segment's sales lagging its
-        // plant.
-        if ($split !== null) {
-            $activeWeights = SegmentBooks::splitToTargets($this->ticker, $this->previousMomentum, $activeWeights) ?? $activeWeights;
-        }
-
+        $activeWeights = ResponseCurves::normalizeWeightsSimplex($targetWeights);
         foreach ($activeWeights as $key => $weight) {
             $this->registerZ("weight:{$key}", $weight);
         }
@@ -426,7 +350,8 @@ class StreamContext
     }
 
     /**
-     * Calculates and registers realized revenue shares for multi-quarter mix persistence.
+     * Records each line's share of the quarter's revenue: the realised mix the industry ledger compares rivals on
+     * (IndustryShareLedger). The weights never read it.
      *
      * @param array<string, float> $streamRevenues Map of stream keys to recognized dollar revenues
      */

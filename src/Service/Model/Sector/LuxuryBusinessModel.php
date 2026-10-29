@@ -174,7 +174,7 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'haute_couture'     => $params[ModelParam::HauteCoutureWeight],
             'accessible_luxury' => $params[ModelParam::AccessibleLuxuryWeight],

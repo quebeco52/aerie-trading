@@ -279,7 +279,7 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             ModelParam::DirectLendingWeight->value       => 0.40,
         ]);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'origination_fees' => $params[ModelParam::MortgageOriginationWeight],
             'direct_lending'   => $params[ModelParam::DirectLendingWeight],

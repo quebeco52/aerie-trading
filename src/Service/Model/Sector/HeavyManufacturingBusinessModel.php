@@ -219,7 +219,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'oem_equipment'   => $params[ModelParam::OemEquipmentWeight],
             'aftermarket_mro' => $params[ModelParam::AftermarketMroWeight],

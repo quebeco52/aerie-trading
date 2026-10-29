@@ -280,7 +280,7 @@ class InvestmentBankBusinessModel extends BrokerageBusinessModel
             $targetWeights['options_premium_income'] = $rawOptionsWeight;
         }
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $advisoryWeight = $activeWeights['advisory'];

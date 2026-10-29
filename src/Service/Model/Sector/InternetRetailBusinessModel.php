@@ -284,7 +284,7 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'first_party_retail' => $params[ModelParam::FirstPartyWeight],
             'third_party_seller' => $params[ModelParam::ThirdPartyWeight],

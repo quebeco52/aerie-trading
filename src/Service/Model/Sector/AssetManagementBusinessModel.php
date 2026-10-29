@@ -353,7 +353,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'base_fee' => $params[ModelParam::BaseFeeWeight],
             'alpha'    => $params[ModelParam::PerformanceFeeWeight],

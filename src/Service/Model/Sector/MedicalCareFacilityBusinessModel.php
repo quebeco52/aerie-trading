@@ -245,7 +245,7 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'inpatient_care'      => $params[ModelParam::InpatientCareWeight],
             'elective_outpatient' => $params[ModelParam::ElectiveOutpatientWeight],

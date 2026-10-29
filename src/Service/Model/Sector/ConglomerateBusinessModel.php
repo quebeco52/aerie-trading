@@ -291,7 +291,7 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         // A stream the firm does not own stays at exactly zero through the simplex, so the portfolio a
         // conglomerate declares is the portfolio it is priced on.
         // The plant earns the operating subsidiaries' sales; the float is the treasury's, earned on the cash itself

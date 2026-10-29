@@ -152,15 +152,13 @@ class CommunicationEquipmentBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta($expectedRoyalties * (1.0 - $withheldShare), $onset->streamRevenue['sep_licensing'], 1.0);
         $this->assertEqualsWithDelta($withheldShare, $onset->kpis['withheld_royalty_quarters'], 1e-9);
 
-        // Quarter 2: the dispute continues silently and the arrears keep accruing. From here the revenue mix
-        // drifts toward the realized (withheld) share, so the expected royalty base is the active weight the
-        // context registered rather than the 10% target.
+        // Quarter 2: the dispute continues silently and the arrears keep accruing on the same royalty base: the
+        // withheld quarter does not shrink the licences in force.
         $second = $this->runQuarter($onset->streamZ);
         $this->assertNull($second->eventType);
         $this->assertSame(2.0, $second->streamZ[$regimeKey]);
-        $secondBase = self::EXPECTED_REVENUE * $second->streamZ['weight:sep_licensing'];
-        $this->assertLessThan($expectedRoyalties, $secondBase, 'Mix drift pulls the royalty weight toward the withheld reality.');
-        $this->assertEqualsWithDelta($secondBase * (1.0 - $withheldShare), $second->streamRevenue['sep_licensing'], 1.0);
+        $this->assertEqualsWithDelta($expectedRoyalties, self::EXPECTED_REVENUE * $second->streamZ['weight:sep_licensing'], 1.0);
+        $this->assertEqualsWithDelta($expectedRoyalties * (1.0 - $withheldShare), $second->streamRevenue['sep_licensing'], 1.0);
         $this->assertEqualsWithDelta(2.0 * $withheldShare, $second->kpis['withheld_royalty_quarters'], 1e-9);
 
         // Quarter 3: the exit hazard fires. Royalties normalize and the catch-up payment lands on top.

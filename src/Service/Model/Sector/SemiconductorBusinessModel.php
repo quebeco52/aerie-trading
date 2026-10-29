@@ -194,7 +194,7 @@ class SemiconductorBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'foundry' => $params[ModelParam::FoundryRevenueWeight],
             'design'  => $params[ModelParam::DesignRevenueWeight],

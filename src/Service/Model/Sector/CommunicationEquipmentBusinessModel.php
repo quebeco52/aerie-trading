@@ -284,7 +284,7 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
         $beta = $this->getOperatingCyclicality($stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'carrier_networks'   => $params[ModelParam::EnterpriseWeight],
             'sep_licensing'      => $params[ModelParam::PatentLicensingWeight],

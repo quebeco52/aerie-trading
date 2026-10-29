@@ -136,7 +136,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'trading'  => $params[ModelParam::TradingRevenueWeight],
             'advisory' => $params[ModelParam::AdvisoryRevenueWeight],

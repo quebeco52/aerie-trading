@@ -268,7 +268,7 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
         $beta = $this->getOperatingCyclicality($stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'wireless_subscriptions' => $params[ModelParam::SubscriptionWeight],
             'equipment_sales'        => $params[ModelParam::EquipmentWeight],

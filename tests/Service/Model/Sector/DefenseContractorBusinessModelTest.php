@@ -337,50 +337,29 @@ class DefenseContractorBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $physics['pricing_power_multiplier'], 0.001);
     }
 
-    public function testDynamicRevenueMixDriftsWithRealizedSharesAndMeanReverts(): void
+    /**
+     * The mix is the plan: a boom in foreign sales last quarter moves last quarter's revenue, not this quarter's
+     * weights, so it is not counted a second time.
+     */
+    public function testLastQuartersMixLeavesThisQuartersWeightsAtThePlan(): void
     {
         $model = new DefenseContractorBusinessModel();
         $stock = new Stock();
         $stock->setTicker('GRIP');
-
-        // Quarter 1: Previous quarter had huge FMS share (50% FMS, 30% CostPlus, 20% FixedPrice)
         $stock->setEarningsMomentumZ([
-            'weight:cost_plus_procurement'   => 0.60,
+            'weight:cost_plus_procurement'   => 0.45,
             'weight:fixed_price_development' => 0.20,
-            'weight:foreign_military_sales'  => 0.20,
+            'weight:foreign_military_sales'  => 0.35,
             'share:cost_plus_procurement'    => 0.30,
             'share:fixed_price_development'  => 0.20,
             'share:foreign_military_sales'   => 0.50,
         ]);
 
-        $mathUtility = MathUtility::ownStream(20261024);
-        $macroState = $this->createMacroState();
+        $result = $model->computeActualFinancials($stock, 10_000.0, 0.30, 3000.0, 0.15, $this->createMacroState(), MathUtility::ownStream(20261024));
 
-        $result1 = $model->computeActualFinancials(
-            $stock,
-            10_000.0,
-            0.30,
-            3000.0,
-            0.15,
-            $macroState,
-            $mathUtility,
-        );
-
-        // FMS active weight should have drifted up from 0.20 due to 50% realized share
-        $activeFmsWeight = $result1->streamZ['weight:foreign_military_sales'];
-        $this->assertGreaterThan(0.20, $activeFmsWeight);
-        $this->assertLessThanOrEqual(\App\Service\Math\FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING, $activeFmsWeight);
-
-        // Cost-plus active weight should have drifted down from 0.60
-        $activeCostPlusWeight = $result1->streamZ['weight:cost_plus_procurement'];
-        $this->assertLessThan(0.60, $activeCostPlusWeight);
-        $this->assertGreaterThanOrEqual(\App\Service\Math\FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR, $activeCostPlusWeight);
-
-        // All active weights must sum to 1.0
-        $totalActiveWeight = $result1->streamZ['weight:cost_plus_procurement']
-            + $result1->streamZ['weight:fixed_price_development']
-            + $result1->streamZ['weight:foreign_military_sales'];
-        $this->assertEqualsWithDelta(1.0, $totalActiveWeight, 0.0001);
+        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::COST_PLUS_WEIGHT, $result->streamZ['weight:cost_plus_procurement'], 1e-12);
+        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::FIXED_PRICE_DEV_WEIGHT, $result->streamZ['weight:fixed_price_development'], 1e-12);
+        $this->assertEqualsWithDelta(DefenseContractorBusinessModel::FOREIGN_MILITARY_SALES_WEIGHT, $result->streamZ['weight:foreign_military_sales'], 1e-12);
     }
 
     public function testAlliedDefenceSpendingAndFmsFxSensitivity(): void

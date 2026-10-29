@@ -30,12 +30,6 @@ class FinancialConstants
     /** Cash-to-revenue ratio threshold classifying a firm as an aggressive mega cash hoarder. */
     public const MEGA_HOARDER_THRESHOLD_RATIO = 0.40;
 
-    // --- Dynamic Revenue Mix Drift & Mean Reversion ---
-    /** Minimum structural floor for any business unit to prevent complete segment abandonment. */
-    public const DEFAULT_MIN_STREAM_WEIGHT_FLOOR = 0.05;
-    /** Maximum structural ceiling for any single business unit to prevent total monopoly capture. */
-    public const DEFAULT_MAX_STREAM_WEIGHT_CEILING = 0.85;
-
     // --- Gordon Growth & Perpetual Valuation Bounds ---
     /**
      * Floor on the spread between a discount rate and a perpetual growth rate (50bp), so a perpetuity never divides by

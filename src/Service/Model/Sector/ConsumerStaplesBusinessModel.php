@@ -244,7 +244,7 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
             $targetWeights['commodity_trading'] = $rawCommodityWeight;
         }
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $brandedWeight   = $activeWeights['branded'];

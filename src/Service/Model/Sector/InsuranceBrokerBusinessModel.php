@@ -96,22 +96,14 @@ class InsuranceBrokerBusinessModel extends StandardCorporateBusinessModel
         $commissionZ = $streams->generateZ('commissions', 0.30);
         $benefitsZ   = $streams->generateZ('benefits', 0.40);
 
-        // The mix drifts with the firm's own wins and losses; the market terms are applied each quarter on top. Carried
-        // into the weights as well, a persistent term compounded: a line held at more than 1.5 times its normal took
-        // over the mix.
-        $ownRevenues = [
-            'commissions' => $expectedRevenue * $activeWeights['commissions'] * (1.0 + ($commissionZ * $baselineVol * self::COMMISSION_VARIANCE_SCALAR)),
-            'benefits'    => $expectedRevenue * $activeWeights['benefits'] * (1.0 + ($benefitsZ * $baselineVol * self::BENEFITS_VARIANCE_SCALAR)),
-            'fiduciary'   => $expectedRevenue * $activeWeights['fiduciary'],
-        ];
-        $streams->recordStreamShares(array_map(static fn(float $revenue): float => max(0.0, $revenue), $ownRevenues));
-
         $streamRevenues = [
-            'commissions' => max(0.0, $ownRevenues['commissions'] + ($expectedRevenue * $activeWeights['commissions'] * self::COMMISSION_RATE_PASS_THROUGH * $macroState->insuranceRateDeviation())),
-            'benefits'    => max(0.0, $ownRevenues['benefits']),
-            'fiduciary'   => max(0.0, $ownRevenues['fiduciary'] * $this->resolveFiduciaryYieldRatio($macroState)),
+            'commissions' => max(0.0, $expectedRevenue * $activeWeights['commissions'] * (1.0 + ($commissionZ * $baselineVol * self::COMMISSION_VARIANCE_SCALAR) + (self::COMMISSION_RATE_PASS_THROUGH * $macroState->insuranceRateDeviation()))),
+            'benefits'    => max(0.0, $expectedRevenue * $activeWeights['benefits'] * (1.0 + ($benefitsZ * $baselineVol * self::BENEFITS_VARIANCE_SCALAR))),
+            'fiduciary'   => max(0.0, $expectedRevenue * $activeWeights['fiduciary'] * $this->resolveFiduciaryYieldRatio($macroState)),
         ];
+
         $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         $inputCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $this->resolvePricingPower($stock), $realizedVariableMargin);
 

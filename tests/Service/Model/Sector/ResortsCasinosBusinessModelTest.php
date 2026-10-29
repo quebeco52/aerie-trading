@@ -9,7 +9,6 @@ use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
-use App\Service\Math\MathUtility;
 use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\Sector\ResortsCasinosBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
@@ -285,27 +284,4 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $this->assertSame(0, array_search(min($factors), $factors, true));
     }
 
-    public function testDynamicRevenueMixDriftsAcrossStreams(): void
-    {
-        $model = new ResortsCasinosBusinessModel();
-
-        // Previous quarter had heavy gaming share surge
-        $stock = $this->stock('GULL', [
-            'weight:gaming'     => 0.20,
-            'weight:non_gaming' => 0.10,
-            'weight:cre'        => 0.70,
-            'share:gaming'      => 0.40,
-            'share:non_gaming'  => 0.10,
-            'share:cre'         => 0.50,
-        ]);
-
-        $result = $model->computeActualFinancials($stock, 10_000.0, 0.33, 2000.0, 0.15, $this->createMacroState(), MathUtility::ownStream(20261024));
-
-        // Gaming active weight should drift up from 0.20
-        $this->assertGreaterThan(0.20, $result->streamZ['weight:gaming']);
-
-        // Total active weights sum to 1.0
-        $totalWeight = $result->streamZ['weight:gaming'] + $result->streamZ['weight:non_gaming'] + $result->streamZ['weight:cre'];
-        $this->assertEqualsWithDelta(1.0, $totalWeight, 0.0001);
-    }
 }

@@ -311,7 +311,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             $targetWeights['longevity_bond_yield'] = $rawLongevityWeight;
         }
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $leaseWeight          = $activeWeights['lease'];

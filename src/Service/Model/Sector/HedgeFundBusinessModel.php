@@ -280,7 +280,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'management_fees'  => $params[ModelParam::HfManagementFeeWeight],
             'directional_bets' => $params[ModelParam::HfDirectionalBetsWeight],

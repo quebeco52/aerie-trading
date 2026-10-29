@@ -12,6 +12,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use App\Service\Model\ModelParam;
 
 /**
@@ -115,11 +116,15 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     /** Interest coverage below which the firm stops repurchasing stock (3x). */
     public const BUYBACK_MIN_ICR = 3.0;
 
-    /** Trend real growth plus the sector's measured drift in its share of GDP. */
+    /**
+     * Trend real growth plus the sector's measured drift in its share of GDP, and its lines' drifts on how far the
+     * agency's mix leans from the industry's typical one.
+     */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
-            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS)
+            + TimeSeries::lineMixExcessGrowth($this->resolveLineWeights($stock), self::typicalLineWeights(), self::LINE_DRIFTS);
     }
 
     // --- Stream Weights ---
@@ -142,6 +147,22 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
      */
     public const MARTECH_AD_SPEND_SHARE = 0.40;
 
+    // --- Line Drifts ---
+    /**
+     * Media buying's drift against the industry (-2% a year): clients take buying in-house and onto self-serve tools.
+     */
+    public const MEDIA_BUYING_DRIFT = -0.02;
+    /**
+     * Data and technology consulting's drift against the industry (+4% a year): the agencies' growth has run through
+     * their data, commerce and technology work.
+     */
+    public const MARTECH_CONSULTING_DRIFT = 0.04;
+    /** Each line's drift against the industry; creative retainers have none. */
+    public const LINE_DRIFTS = [
+        'media_buying_commissions' => self::MEDIA_BUYING_DRIFT,
+        'martech_consulting'       => self::MARTECH_CONSULTING_DRIFT,
+    ];
+
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
@@ -154,26 +175,62 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The client work the agency is staffed to run: the target-mix weighted cycle shift of media billings and
-     * MarTech engagements. Commissions are a take rate on gross spend, so the spend moves volume, not price;
-     * creative retainers carry no macro term and add only to the weight.
+     * The client work the agency is staffed to run: the mix-weighted cycle shift of media billings and MarTech
+     * engagements. Commissions are a take rate on gross spend, so the spend moves volume, not price; creative
+     * retainers carry no macro term and add only to the weight.
      */
     public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    {
+        $shares = $this->resolveLineShares($stock, $macroState->totalTime);
+        $adSpendShift = $this->resolveAdSpendShift($stock, $macroState);
+
+        return ($shares['media_buying_commissions'] * $adSpendShift)
+            + ($shares['martech_consulting'] * $adSpendShift * self::MARTECH_AD_SPEND_SHARE);
+    }
+
+    /**
+     * Each line's share of the plan: the agency's opening mix with each line compounding its faded drift against the
+     * industry.
+     *
+     * @return array<string, float>
+     */
+    public function resolveLineShares(Stock $stock, float $simYears): array
+    {
+        return TimeSeries::driftedLineShares($this->resolveLineWeights($stock), self::LINE_DRIFTS, $simYears, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS) + [
+            'media_buying_commissions' => 0.0,
+            'creative_brand_retainers' => 0.0,
+            'martech_consulting'       => 0.0,
+        ];
+    }
+
+    /** @return array{media_buying_commissions: float, creative_brand_retainers: float, martech_consulting: float} */
+    private function resolveLineWeights(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::MediaBuyingWeight->value       => self::MEDIA_BUYING_WEIGHT,
             ModelParam::BrandRetainerWeight->value      => self::BRAND_RETAINER_WEIGHT,
             ModelParam::MartechConsultingWeight->value => self::MARTECH_CONSULTING_WEIGHT,
         ]);
-        $totalWeight = $params[ModelParam::MediaBuyingWeight] + $params[ModelParam::BrandRetainerWeight] + $params[ModelParam::MartechConsultingWeight];
-        if ($totalWeight <= 0.0) {
-            return 0.0;
-        }
 
-        $adSpendShift = $this->resolveAdSpendShift($stock, $macroState);
+        return [
+            'media_buying_commissions' => max(0.0, (float) $params[ModelParam::MediaBuyingWeight]),
+            'creative_brand_retainers' => max(0.0, (float) $params[ModelParam::BrandRetainerWeight]),
+            'martech_consulting'       => max(0.0, (float) $params[ModelParam::MartechConsultingWeight]),
+        ];
+    }
 
-        return (($params[ModelParam::MediaBuyingWeight] * $adSpendShift)
-            + ($params[ModelParam::MartechConsultingWeight] * $adSpendShift * self::MARTECH_AD_SPEND_SHARE)) / $totalWeight;
+    /**
+     * The industry's typical agency: the model's own weights, before any firm's lore.
+     *
+     * @return array<string, float>
+     */
+    private static function typicalLineWeights(): array
+    {
+        return [
+            'media_buying_commissions' => self::MEDIA_BUYING_WEIGHT,
+            'creative_brand_retainers' => self::BRAND_RETAINER_WEIGHT,
+            'martech_consulting'       => self::MARTECH_CONSULTING_WEIGHT,
+        ];
     }
 
     /** Client ad budgets on the output gap and the confidence residual, at the firm's cyclicality. */
@@ -184,21 +241,11 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::MediaBuyingWeight->value       => self::MEDIA_BUYING_WEIGHT,
-            ModelParam::BrandRetainerWeight->value      => self::BRAND_RETAINER_WEIGHT,
-            ModelParam::MartechConsultingWeight->value => self::MARTECH_CONSULTING_WEIGHT,
-        ]);
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
-        $activeWeights = $streams->resolveActiveStreamWeights([
-            'media_buying_commissions' => $params[ModelParam::MediaBuyingWeight],
-            'creative_brand_retainers' => $params[ModelParam::BrandRetainerWeight],
-            'martech_consulting'       => $params[ModelParam::MartechConsultingWeight],
-        ]);
+        // --- Revenue Mix ---
+        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveLineShares($stock, $macroState->totalTime));
 
         $mediaWeight   = $activeWeights['media_buying_commissions'];
         $brandWeight   = $activeWeights['creative_brand_retainers'];

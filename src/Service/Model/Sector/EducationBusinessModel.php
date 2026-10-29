@@ -202,7 +202,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
         $beta     = $this->getOperatingCyclicality($stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'degree_tuition_enrollment' => $params[ModelParam::DegreeTuitionWeight],
             'enterprise_b2b_training'   => $params[ModelParam::EnterpriseTrainingWeight],

@@ -186,7 +186,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights($this->resolveTargetStreamWeights($stock));
 
         $clearingWeight = $activeWeights['clearing_fees'];

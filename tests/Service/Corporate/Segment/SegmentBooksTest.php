@@ -203,7 +203,8 @@ class SegmentBooksTest extends TestCase
         $streams = (new StreamContext($momentum, new MathUtility(), ticker: 'TERN'))->resolveActiveStreamWeights($weights);
         $this->assertEqualsWithDelta(0.2, $streams['air_cargo'], 1e-12, 'the models\' stream mix reads the same split');
 
-        // A mix still drifting from an old one moves within each segment, but each segment sells its share now.
+        // Last quarter's weights and shares move nothing: each segment sells its share now, split as the model splits
+        // it.
         $drifting = $momentum;
         foreach (['leisure_passengers' => 0.40, 'business_passengers' => 0.40, 'air_cargo' => 0.05, 'loyalty_miles' => 0.15] as $line => $old) {
             $drifting["weight:{$line}"] = $old;
@@ -211,7 +212,7 @@ class SegmentBooksTest extends TestCase
         }
         $streams = (new StreamContext($drifting, new MathUtility(), ticker: 'TERN'))->resolveActiveStreamWeights($weights);
         $this->assertEqualsWithDelta(0.2, $streams['air_cargo'], 1e-12);
-        $this->assertNotEqualsWithDelta($split['leisure_passengers'], $streams['leisure_passengers'], 1e-6, 'within the segment the mix still drifts');
+        $this->assertEqualsWithDelta($split['leisure_passengers'], $streams['leisure_passengers'], 1e-12);
     }
 
     /**

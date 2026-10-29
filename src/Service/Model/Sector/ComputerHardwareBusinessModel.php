@@ -221,7 +221,7 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'enterprise_hardware' => $params[ModelParam::EnterpriseWeight],
             'consumer_hardware'   => $params[ModelParam::ConsumerWeight],

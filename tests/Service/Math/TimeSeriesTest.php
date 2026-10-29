@@ -15,47 +15,6 @@ use PHPUnit\Framework\TestCase;
 #[Group('unit')]
 class TimeSeriesTest extends TestCase
 {
-    public function testCalculateMeanRevertingWeight(): void
-    {
-        // Target = 0.20, Current = 0.20, Realized Share = 0.50 (boom)
-        // Drift = 0.15 * (0.50 - 0.20) = +0.045
-        // Reversion = 0.08 * (0.20 - 0.20) = 0.0
-        // Result = 0.20 + 0.045 = 0.245
-        $updated = TimeSeries::calculateMeanRevertingWeight(
-            0.20,
-            0.50,
-            0.20,
-            0.15,
-            0.08,
-            0.05,
-            0.85,
-        );
-        $this->assertEqualsWithDelta(0.245, $updated, 0.001);
-
-        // Reversion pull when weight has drifted far above target:
-        // Target = 0.20, Current = 0.40, Realized Share = 0.20 (cooled down)
-        // Drift = 0.15 * (0.20 - 0.40) = -0.030
-        // Reversion = 0.08 * (0.20 - 0.40) = -0.016
-        // Result = 0.40 - 0.030 - 0.016 = 0.354 (pulling back toward 0.20)
-        $reverting = TimeSeries::calculateMeanRevertingWeight(
-            0.40,
-            0.20,
-            0.20,
-            0.15,
-            0.08,
-            0.05,
-            0.85,
-        );
-        $this->assertEqualsWithDelta(0.354, $reverting, 0.001);
-
-        // Clamping bounds
-        $clampedCeiling = TimeSeries::calculateMeanRevertingWeight(0.80, 1.0, 0.80, 0.50, 0.0, 0.05, 0.85);
-        $this->assertEqualsWithDelta(0.85, $clampedCeiling, 0.001);
-
-        $clampedFloor = TimeSeries::calculateMeanRevertingWeight(0.10, 0.0, 0.10, 0.50, 0.0, 0.05, 0.85);
-        $this->assertEqualsWithDelta(0.05, $clampedFloor, 0.001);
-    }
-
     public function testCalculateReversionPullWithCustomDt(): void
     {
         $currentReturn = 0.20;
@@ -296,6 +255,47 @@ class TimeSeriesTest extends TestCase
         self::assertEqualsWithDelta(0.00, TimeSeries::fadeTowardTrend(-0.02, 0.02, 8.0, 8.0), 1e-12);
         self::assertEqualsWithDelta(0.02, TimeSeries::fadeTowardTrend(0.06, 0.02, 400.0, 8.0), 1e-12);
         self::assertSame(0.02, TimeSeries::fadeTowardTrend(0.02, 0.02, 5.0, 8.0));
+    }
+
+    /**
+     * Each line compounds its own faded drift against a line with none, the shares always sum to one, a line with no
+     * weight never gains one, and the mix settles where the drifts have faded out.
+     */
+    public function testDriftedLineSharesCompoundEachLinesFadedDrift(): void
+    {
+        $weights = ['legacy' => 2.0, 'steady' => 1.0, 'new' => 1.0, 'none' => 0.0];
+        $drifts = ['legacy' => -0.03, 'new' => 0.05, 'none' => 0.10];
+
+        $opening = TimeSeries::driftedLineShares($weights, $drifts, 0.0, 8.0);
+        self::assertEqualsWithDelta(0.5, $opening['legacy'], 1e-12);
+        self::assertEqualsWithDelta(0.25, $opening['steady'], 1e-12);
+
+        $shares = TimeSeries::driftedLineShares($weights, $drifts, 12.0, 8.0);
+        self::assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
+        self::assertSame(0.0, $shares['none']);
+        self::assertEqualsWithDelta(2.0 * exp(TimeSeries::fadedExcessIntegral(-0.03, 0.0, 12.0, 8.0)), $shares['legacy'] / $shares['steady'], 1e-12);
+        self::assertEqualsWithDelta(exp(TimeSeries::fadedExcessIntegral(0.05, 0.0, 12.0, 8.0)), $shares['new'] / $shares['steady'], 1e-12);
+
+        $settled = TimeSeries::driftedLineShares($weights, $drifts, 1.0e6, 8.0);
+        self::assertEqualsWithDelta(exp(0.05 * 8.0 / M_LN2), $settled['new'] / $settled['steady'], 1e-9);
+        self::assertEqualsWithDelta(0.25, TimeSeries::driftedLineShares($weights, [], 40.0, 8.0)['steady'], 1e-12, 'no drift, no change');
+    }
+
+    /**
+     * A firm with the industry's typical mix grows at the industry's rate; one that leans toward a drifting line grows
+     * by the lean times the drift, however its weights are scaled.
+     */
+    public function testTheLineMixExcessIsTheLeanFromTheTypicalMixTimesEachDrift(): void
+    {
+        $typical = ['legacy' => 0.5, 'steady' => 0.35, 'new' => 0.15];
+        $drifts = ['legacy' => -0.02, 'new' => 0.04];
+
+        self::assertEqualsWithDelta(0.0, TimeSeries::lineMixExcessGrowth($typical, $typical, $drifts), 1e-15);
+        $firm = ['legacy' => 0.2, 'steady' => 0.5, 'new' => 0.3];
+        $expected = ((0.2 - 0.5) * -0.02) + ((0.3 - 0.15) * 0.04);
+        self::assertEqualsWithDelta($expected, TimeSeries::lineMixExcessGrowth($firm, $typical, $drifts), 1e-15);
+        self::assertEqualsWithDelta($expected, TimeSeries::lineMixExcessGrowth(array_map(static fn(float $w): float => 4.0 * $w, $firm), $typical, $drifts), 1e-15);
+        self::assertSame(0.0, TimeSeries::lineMixExcessGrowth([], $typical, $drifts));
     }
 
     /** What a level compounds is the integral of the faded rate: the closed form matches a fine Riemann sum. */

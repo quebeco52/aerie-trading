@@ -269,7 +269,7 @@ class DefenseContractorBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'cost_plus_procurement'   => $params[ModelParam::CostPlusWeight->value],
             'fixed_price_development' => $params[ModelParam::FixedPriceDevWeight->value],

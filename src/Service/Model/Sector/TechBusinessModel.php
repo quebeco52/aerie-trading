@@ -244,7 +244,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
             $targetWeights['cloud_infrastructure'] = $rawCloudWeight;
         }
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
         $subWeight   = $activeWeights['subscription'];

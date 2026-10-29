@@ -73,7 +73,7 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'property_casualty_premiums' => $params[ModelParam::PropertyCasualtyWeight],
             'life_insurance_premiums'    => $params[ModelParam::LifeAndAnnuityWeight],

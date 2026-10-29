@@ -104,21 +104,14 @@ class LifeInsurerBusinessModel extends InsuranceBusinessModel
         $annuityZ    = $streams->generateZ('annuities', 0.25);
         $savingsZ    = $streams->generateZ('savings_fees', 0.50);
 
-        // The mix drifts with the firm's own wins and losses; the market terms (the long yield, the markets) are
-        // applied each quarter on top. Carried into the weights as well, a persistent term compounded on itself.
-        $ownRevenues = [
-            'protection'   => $expectedRevenue * $activeWeights['protection'] * (1.0 + ($protectionZ * $baselineVol * self::PROTECTION_VARIANCE_SCALAR)),
-            'annuities'    => $expectedRevenue * $activeWeights['annuities'] * (1.0 + ($annuityZ * $baselineVol * self::ANNUITY_VARIANCE_SCALAR)),
-            'savings_fees' => $expectedRevenue * $activeWeights['savings_fees'] * (1.0 + ($savingsZ * $baselineVol * self::SAVINGS_VARIANCE_SCALAR)),
-        ];
-        $streams->recordStreamShares(array_map(static fn(float $revenue): float => max(0.0, $revenue), $ownRevenues));
-
         $streamRevenues = [
-            'protection'   => max(0.0, $ownRevenues['protection']),
-            'annuities'    => max(0.0, $ownRevenues['annuities'] + ($expectedRevenue * $activeWeights['annuities'] * $this->resolveAnnuityDemandShift($macroState, $streams))),
-            'savings_fees' => max(0.0, $ownRevenues['savings_fees'] + ($expectedRevenue * $activeWeights['savings_fees'] * self::SAVINGS_EQUITY_SHARE * $macroState->equityWealthDeviation())),
+            'protection'   => max(0.0, $expectedRevenue * $activeWeights['protection'] * (1.0 + ($protectionZ * $baselineVol * self::PROTECTION_VARIANCE_SCALAR))),
+            'annuities'    => max(0.0, $expectedRevenue * $activeWeights['annuities'] * (1.0 + ($annuityZ * $baselineVol * self::ANNUITY_VARIANCE_SCALAR) + $this->resolveAnnuityDemandShift($macroState, $streams))),
+            'savings_fees' => max(0.0, $expectedRevenue * $activeWeights['savings_fees'] * (1.0 + ($savingsZ * $baselineVol * self::SAVINGS_VARIANCE_SCALAR) + (self::SAVINGS_EQUITY_SHARE * $macroState->equityWealthDeviation()))),
         ];
+
         $actualRevenue = max(0.0, array_sum($streamRevenues));
+        $streams->recordStreamShares($streamRevenues);
 
         // The capacity book (franchise, written share) is carried as every underwriter carries it; a life book's
         // policies are contractual, so the share it writes never falls.

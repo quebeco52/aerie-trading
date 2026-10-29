@@ -112,7 +112,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'treaty_reinsurance' => $params[ModelParam::TreatyReinsuranceWeight],
             'catastrophe_bonds'  => $params[ModelParam::CatBondSpreadWeight],

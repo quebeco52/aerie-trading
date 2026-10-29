@@ -750,7 +750,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'commercial_therapeutics'       => $params[ModelParam::EstablishedDrugWeight],
             'pipeline_licensing_milestones' => $params[ModelParam::PipelineDrugWeight],
@@ -849,12 +849,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         ];
 
         $actualRevenue = max(0.0, array_sum($streamRevenues));
-        // The mix adapts to the draws, not to the book: the book already scales the commercial stream, and a weight
-        // that chased it would count each launch and expiry a second time.
-        $streams->recordStreamShares([
-            'commercial_therapeutics'       => $establishedRevenue / max(self::MIN_FRANCHISE_INDEX, $measured['marketed']),
-            'pipeline_licensing_milestones' => $pipelineRevenue,
-        ]);
+        $streams->recordStreamShares($streamRevenues);
 
         // API, fill-finish and technician costs reach the cost base behind long supply agreements and are
         // recovered on-label at exclusivity pricing.

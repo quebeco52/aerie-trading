@@ -290,7 +290,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'dtc_retail'              => $params[ModelParam::DtcRetailWeight],
             'wholesale_channel'       => $params[ModelParam::WholesaleChannelWeight],

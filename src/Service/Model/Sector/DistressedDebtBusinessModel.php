@@ -162,7 +162,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $distressMultiplier = $this->resolveDistressMultiplier($macroState);
         $eventType = null;
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights($this->resolveTargetStreamWeights($stock));
 
         $advisoryWeight  = $activeWeights['restructuring_advisory'];

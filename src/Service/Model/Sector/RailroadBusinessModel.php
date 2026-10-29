@@ -160,7 +160,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         // operators that carry passengers, so a pure freight hauler never sees it.
         $rawTransitWeight = $params[ModelParam::SubscriptionWeight];
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $targetWeights = [
             'intermodal_freight'  => $params[ModelParam::IntermodalFreightWeight],
             'bulk_commodities'    => $params[ModelParam::BulkCommoditiesWeight],

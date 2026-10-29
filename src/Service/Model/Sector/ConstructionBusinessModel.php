@@ -263,7 +263,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
         $beta = $this->getOperatingCyclicality($stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'civil_infrastructure'   => $params[ModelParam::CivilInfrastructureWeight],
             'commercial_epc'         => $params[ModelParam::CommercialEpcWeight],

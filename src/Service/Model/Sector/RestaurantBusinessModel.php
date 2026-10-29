@@ -185,7 +185,7 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $activeWeights = $streams->resolveActiveStreamWeights([
             'company_operated_stores'      => $params[ModelParam::CompanyStoresWeight],
             'franchise_royalties'          => $params[ModelParam::FranchiseRoyaltiesWeight],

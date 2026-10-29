@@ -163,6 +163,8 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
      * year, offset in part by banks handing their own cash work to carriers.
      */
     public const CASH_USE_DRIFT = -0.02;
+    /** Each line's drift against the industry: only the cash rounds have one. */
+    public const LINE_DRIFTS = ['cash_services' => self::CASH_USE_DRIFT];
 
     // --- Vaults ---
     /** Share of vault fees charged on the value of the bullion kept (50%); the rest is rent and shipments. */
@@ -207,16 +209,14 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     public const LEAK_CHARGE = 0.12;
 
     /**
-     * Trend real growth plus the sector's measured drift in its share of GDP, less the cards' drift on its cash rounds.
+     * Trend real growth plus the sector's measured drift in its share of GDP, and the cards' drift on as much more cash
+     * work as the firm does than the industry's typical guarding firm (none).
      */
     public function getSecularGrowthRate(Stock $stock): float
     {
-        $weights = $this->resolveLineWeights($stock);
-        $total = array_sum($weights);
-
         return MacroConstants::TREND_REAL_GROWTH
             + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS)
-            + ($total > 0.0 ? ($weights['cash_services'] / $total) * self::CASH_USE_DRIFT : 0.0);
+            + TimeSeries::lineMixExcessGrowth($this->resolveLineWeights($stock), self::typicalLineWeights(), self::LINE_DRIFTS);
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
@@ -276,7 +276,7 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $sold = array_filter($this->resolveLineShares($stock, $macroState->totalTime), static fn(float $share): bool => $share > 0.0);
         $weights = $streams->resolveActiveStreamWeights($sold);
         $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
@@ -387,32 +387,32 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * Each line's share of the plan. The plan compounds the cards' drift on the cash rounds, faded as the firm's
-     * secular growth is; every other line grows with the industry, so its share rises by however far that drift has
-     * left the plan below the industry's path, and the cash rounds take the rest.
+     * Each line's share of the plan: the cash rounds compound the cards' drift against the industry, faded as the
+     * firm's secular growth is, and every other line grows with the industry.
      *
      * @return array<string, float>
      */
     public function resolveLineShares(Stock $stock, float $simYears): array
     {
-        $weights = $this->resolveLineWeights($stock);
-        $total = array_sum($weights);
-        if ($total <= 0.0) {
-            return array_map(static fn(): float => 0.0, $weights);
-        }
+        return TimeSeries::driftedLineShares($this->resolveLineWeights($stock), self::LINE_DRIFTS, $simYears, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
+    }
 
-        $cashShare = $weights['cash_services'] / $total;
-        $planOverIndustry = exp(TimeSeries::fadedExcessIntegral($cashShare * self::CASH_USE_DRIFT, 0.0, $simYears, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS));
-        $others = min(1.0, (1.0 - $cashShare) / $planOverIndustry);
-
-        $shares = [];
-        foreach ($weights as $key => $weight) {
-            $shares[$key] = $key === 'cash_services'
-                ? 1.0 - $others
-                : ($cashShare < 1.0 ? $others * ($weight / $total) / (1.0 - $cashShare) : 0.0);
-        }
-
-        return $shares;
+    /**
+     * The industry's typical guarding firm: the model's own weights, before any firm's lore.
+     *
+     * @return array<string, float>
+     */
+    private static function typicalLineWeights(): array
+    {
+        return [
+            'government_contracts' => self::GOVERNMENT_CONTRACT_WEIGHT,
+            'corporate_retainers'  => self::RETAINER_WEIGHT,
+            'expeditionary_ops'    => self::EXPEDITIONARY_WEIGHT,
+            'cash_services'        => self::CASH_SERVICES_WEIGHT,
+            'vaults'               => self::VAULTS_WEIGHT,
+            'screening'            => self::SCREENING_WEIGHT,
+            'investigations'       => self::INVESTIGATIONS_WEIGHT,
+        ];
     }
 
     /**

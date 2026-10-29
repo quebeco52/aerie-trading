@@ -211,6 +211,53 @@ final class TimeSeries
     }
 
     /**
+     * A revenue mix whose lines drift against their industry at fading rates: each line's opening weight compounds its
+     * own faded drift (fadedExcessIntegral()) and the shares are taken of the sum. A line with no drift keeps its
+     * weight, one with no weight stays at none, and the mix settles where the drifts have faded out.
+     *
+     * @param array<string, float> $openingWeights
+     * @param array<string, float> $lineDrifts     Annual drift of a line against its industry; a line left out has
+     *                                             none.
+     * @return array<string, float>
+     */
+    public static function driftedLineShares(array $openingWeights, array $lineDrifts, float $years, float $halfLifeYears): array
+    {
+        $levels = [];
+        foreach ($openingWeights as $line => $weight) {
+            $levels[$line] = max(0.0, $weight) * exp(self::fadedExcessIntegral($lineDrifts[$line] ?? 0.0, 0.0, $years, $halfLifeYears));
+        }
+        $total = array_sum($levels);
+
+        return $total > 0.0 ? array_map(static fn(float $level): float => $level / $total, $levels) : $levels;
+    }
+
+    /**
+     * What a firm grows at beyond its industry for its revenue mix: each line's drift on how far the firm's opening
+     * share of it leans from the industry's typical share. The industry's measured growth already holds the typical
+     * mix's drifts, so a firm with that mix grows at the industry's rate and nothing is counted twice.
+     *
+     * @param array<string, float> $firmWeights
+     * @param array<string, float> $typicalWeights
+     * @param array<string, float> $lineDrifts     Annual drift of a line against its industry; a line left out has
+     *                                             none.
+     */
+    public static function lineMixExcessGrowth(array $firmWeights, array $typicalWeights, array $lineDrifts): float
+    {
+        $firmTotal = array_sum(array_map(static fn(float $weight): float => max(0.0, $weight), $firmWeights));
+        $typicalTotal = array_sum(array_map(static fn(float $weight): float => max(0.0, $weight), $typicalWeights));
+        if ($firmTotal <= 0.0 || $typicalTotal <= 0.0) {
+            return 0.0;
+        }
+
+        $excess = 0.0;
+        foreach ($lineDrifts as $line => $drift) {
+            $excess += ((max(0.0, $firmWeights[$line] ?? 0.0) / $firmTotal) - (max(0.0, $typicalWeights[$line] ?? 0.0) / $typicalTotal)) * $drift;
+        }
+
+        return $excess;
+    }
+
+    /**
      * Autocorrelation of a stationary AR(2) at a lag, from the Yule-Walker equations (Box & Jenkins 1970):
      * rho_1 = a1 / (1 - a2), then rho_k = a1 rho_{k-1} + a2 rho_{k-2}.
      *
@@ -358,40 +405,6 @@ final class TimeSeries
         int $periodsPerYear = 4,
     ): float {
         return ($periodValue / max(0.01, $seasonalFactor)) * $periodsPerYear;
-    }
-
-    /**
-     * Calculates the mean-reverting exponential moving average (Ornstein-Uhlenbeck mix drift) for dynamic
-     * portfolio/revenue weights.
-     *
-     * Formula: w_{t+1} = w_t + alpha * (realized_t - w_t) + kappa * (target - w_t)
-     *
-     * @param float $currentWeight Current active weight w_t
-     * @param float $realizedShare Recent realized share r_t
-     * @param float $targetWeight  Long-term strategic anchor theta
-     * @param float $alpha         Adaptation speed parameter [0, 1]
-     * @param float $kappa         Mean reversion pull speed [0, 1]
-     * @param float $minFloor      Minimum structural floor clamp for active diversified segments
-     * @param float $maxCeiling    Maximum structural ceiling clamp for diversified segments
-     * @return float Clamped updated weight before simplex normalization
-     */
-    public static function calculateMeanRevertingWeight(
-        float $currentWeight,
-        float $realizedShare,
-        float $targetWeight,
-        float $alpha,
-        float $kappa,
-        float $minFloor = FinancialConstants::DEFAULT_MIN_STREAM_WEIGHT_FLOOR,
-        float $maxCeiling = FinancialConstants::DEFAULT_MAX_STREAM_WEIGHT_CEILING,
-    ): float {
-        $drift = $alpha * ($realizedShare - $currentWeight);
-        $reversion = $kappa * ($targetWeight - $currentWeight);
-        $raw = $currentWeight + $drift + $reversion;
-
-        $effectiveMinFloor = $targetWeight <= 0.0 ? 0.0 : min($minFloor, $targetWeight);
-        $effectiveMaxCeiling = max($maxCeiling, $targetWeight);
-
-        return max($effectiveMinFloor, min($effectiveMaxCeiling, $raw));
     }
 
     /**

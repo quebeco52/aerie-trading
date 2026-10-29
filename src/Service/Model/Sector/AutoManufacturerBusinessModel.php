@@ -315,7 +315,7 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // --- Dynamic Revenue Mix Drift with Strategic Mean Reversion ---
+        // --- Revenue Mix ---
         $targetWeights = [
             'mass_market_sales'   => $params[ModelParam::AutoSalesWeight],
             'apex_luxury'         => $params[ModelParam::ApexLuxuryWeight],
