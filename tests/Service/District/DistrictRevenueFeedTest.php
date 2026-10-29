@@ -74,14 +74,14 @@ class DistrictRevenueFeedTest extends TestCase
 
     public function testTenantWithNoReportGetsAnEmptyMixNotAMissingKey(): void
     {
-        $stock = $this->makeStock('ROOK');
+        $stock = $this->makeStock('FINC');
         $this->repository->method('findForStocksNewestFirst')->willReturn([]);
 
         $result = $this->feed->latestRevenueMixByTicker([$stock]);
 
-        $this->assertArrayHasKey('ROOK', $result);
-        $this->assertSame(0.0, $result['ROOK']['totalRevenue']);
-        $this->assertSame([], $result['ROOK']['streams']);
+        $this->assertArrayHasKey('FINC', $result);
+        $this->assertSame(0.0, $result['FINC']['totalRevenue']);
+        $this->assertSame([], $result['FINC']['streams']);
     }
 
     public function testFetchesAllStocksInOneQuery(): void

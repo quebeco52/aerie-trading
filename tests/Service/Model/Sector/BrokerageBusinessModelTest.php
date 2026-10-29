@@ -34,20 +34,20 @@ class BrokerageBusinessModelTest extends TestCase
         $this->mathUtility = MathUtility::ownStream(20261024);
     }
 
-    public function testRookIsRegisteredInInitialMarketAndBrokeragesIndustry(): void
+    public function testFinchIsRegisteredInInitialMarketAndBrokeragesIndustry(): void
     {
-        $rookConfig = null;
+        $finchConfig = null;
         foreach (InitialMarket::STOCKS as $stock) {
-            if ($stock['ticker'] === 'ROOK') {
-                $rookConfig = $stock;
+            if ($stock['ticker'] === 'FINC') {
+                $finchConfig = $stock;
                 break;
             }
         }
 
-        $this->assertNotNull($rookConfig, 'ROOK must be registered in InitialMarket::STOCKS');
-        $this->assertSame('Rook Proprietary Trading', $rookConfig['name']);
-        $this->assertSame('Financials', $rookConfig['sector']);
-        $this->assertSame('Brokerages', $rookConfig['industry']);
+        $this->assertNotNull($finchConfig, 'FINC must be registered in InitialMarket::STOCKS');
+        $this->assertSame('Finch Securities', $finchConfig['name']);
+        $this->assertSame('Financials', $finchConfig['sector']);
+        $this->assertSame('Brokerages', $finchConfig['industry']);
 
         $industryConfig = Sectors::INDUSTRY_METRICS['Brokerages'] ?? null;
         $this->assertNotNull($industryConfig);
@@ -58,7 +58,7 @@ class BrokerageBusinessModelTest extends TestCase
     public function testTradingVolumeBonusScalesWithVix(): void
     {
         $stock = new Stock();
-        $stock->setTicker('ROOK');
+        $stock->setTicker('FINC');
         $stock->setOperatingMargin('0.30');
 
         $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
@@ -82,14 +82,14 @@ class BrokerageBusinessModelTest extends TestCase
             mathUtility: $mathMock,
         );
 
-        // ROOK custom tuning overrides: trading_weight = 0.85, advisory_weight = 0.15
+        // FINC custom tuning overrides: trading_weight = 0.75, advisory_weight = 0.25
         // VIX term = (0.30 - 0.15 anchor) * 0.50 = 0.075
-        // Trading revenue = 1000 * 0.85 * (1.0 + 0.075) = 913.75
-        // Advisory revenue = 1000 * 0.15 * 1.0 = 150.0
-        // Total expected revenue = 913.75 + 150.0 = 1063.75
-        $this->assertEqualsWithDelta(1063.75, $result->actualRevenue, 0.01);
-        $this->assertEqualsWithDelta(913.75, $result->streamRevenue['trading'], 0.01);
-        $this->assertEqualsWithDelta(150.0, $result->streamRevenue['advisory'], 0.01);
+        // Trading revenue = 1000 * 0.75 * (1.0 + 0.075) = 806.25
+        // Advisory revenue = 1000 * 0.25 * 1.0 = 250.0
+        // Total expected revenue = 806.25 + 250.0 = 1056.25
+        $this->assertEqualsWithDelta(1056.25, $result->actualRevenue, 0.01);
+        $this->assertEqualsWithDelta(806.25, $result->streamRevenue['trading'], 0.01);
+        $this->assertEqualsWithDelta(250.0, $result->streamRevenue['advisory'], 0.01);
     }
 
     /**
@@ -98,7 +98,7 @@ class BrokerageBusinessModelTest extends TestCase
      */
     public function testTheVolatilityTermIsNeutralAtTheAnchor(): void
     {
-        $stock = (new Stock())->setTicker('ROOK');
+        $stock = (new Stock())->setTicker('FINC');
         $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $anchor = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR);
         $quiet = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR - 0.05);
@@ -120,7 +120,7 @@ class BrokerageBusinessModelTest extends TestCase
      */
     public function testBroadMoneyEntersTheTradingStreamOnce(): void
     {
-        $stock = (new Stock())->setTicker('ROOK');
+        $stock = (new Stock())->setTicker('FINC');
         $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
         $deviation = 0.05;
         $atTrend = new MacroStateDTO(marketVolatilityEma: MacroConstants::MACRO_VOL_BASE_ANCHOR);
@@ -222,7 +222,7 @@ class BrokerageBusinessModelTest extends TestCase
     public function testTargetMetricsCalculatedOnEarningAssetsAndRoe(): void
     {
         $stock = new Stock();
-        $stock->setTicker('ROOK');
+        $stock->setTicker('FINC');
         $stock->setIndustry('Brokerages');
         $stock->setTotalEquity('50000000');
         $stock->setWholesaleDebt('100000000');
@@ -275,7 +275,7 @@ class BrokerageBusinessModelTest extends TestCase
     public function testDealActivityExpandsAdvisoryRevenue(): void
     {
         $stock = new Stock();
-        $stock->setTicker('ROOK');
+        $stock->setTicker('FINC');
 
         $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
@@ -328,7 +328,7 @@ class BrokerageBusinessModelTest extends TestCase
     public function testAStampDutyThinsTradingCommissions(): void
     {
         $stock = new Stock();
-        $stock->setTicker('ROOK');
+        $stock->setTicker('FINC');
         $mathMock = new ScriptedDraws(generatePersistentZ: 0.0);
 
         $founding = $this->model->computeActualFinancials($stock, 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20), $mathMock);
@@ -349,9 +349,9 @@ class BrokerageBusinessModelTest extends TestCase
         $duty = \App\Service\Math\FinancialConstants::STAMP_DUTY_RATE + 0.001;
         $contribution = static fn(\App\DTO\ActualFinancialsDTO $report): float => $report->actualRevenue - $report->actualVariableCosts;
 
-        $founding = $this->model->computeActualFinancials((new Stock())->setTicker('ROOK'), 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20), $mathMock);
-        $taxed = $this->model->computeActualFinancials((new Stock())->setTicker('ROOK'), 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20, stampDutyRate: $duty), $mathMock);
-        $stock = (new Stock())->setTicker('ROOK')->setTotalRevenue((string) (4.0 * $founding->actualRevenue))->setEarningsMomentumZ($founding->streamZ);
+        $founding = $this->model->computeActualFinancials((new Stock())->setTicker('FINC'), 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20), $mathMock);
+        $taxed = $this->model->computeActualFinancials((new Stock())->setTicker('FINC'), 1000.0, 0.35, 100.0, 0.0, new MacroStateDTO(marketVolatilityEma: 0.20, stampDutyRate: $duty), $mathMock);
+        $stock = (new Stock())->setTicker('FINC')->setTotalRevenue((string) (4.0 * $founding->actualRevenue))->setEarningsMomentumZ($founding->streamZ);
 
         $this->assertEqualsWithDelta(
             $contribution($taxed) - $contribution($founding),
@@ -361,7 +361,7 @@ class BrokerageBusinessModelTest extends TestCase
         $this->assertSame(0.0, $this->model->annualStampDutyTurnoverBase($stock->setEarningsMomentumZ(null)), 'Before its first report nothing is known to move with turnover.');
     }
 
-    /** A ROOK-shaped broker: a margin book funded by its equity and a wholesale layer about its size. */
+    /** A margin broker: a margin book funded by its equity and a wholesale layer about its size. */
     private function marginBroker(string $baselineRoe = '0.20'): Stock
     {
         return (new Stock())->setTicker('MRGN')->setIndustry('Brokerages')
@@ -386,8 +386,8 @@ class BrokerageBusinessModelTest extends TestCase
     /**
      * At the macro its operating yield is struck at, with its notes rolled, the broker books its structural return: the
      * target nets the interest its books show, margin interest on the whole book at its funding rate plus the sweep and
-     * the cash. Netted against margin interest on its debt alone at the policy rate, ROOK booked 31% against a 20%
-     * target.
+     * the cash. Netted against margin interest on its debt alone at the policy rate, the broker booked 31% against a
+     * 20% target.
      */
     public function testTheOperatingTargetNetsTheInterestTheBookBooks(): void
     {
@@ -441,7 +441,7 @@ class BrokerageBusinessModelTest extends TestCase
     public function testABrokerWhoseCouponIsOffTheMarketOpensOnTargetAndStaysThereAsItsNotesRoll(): void
     {
         foreach ([0.02, 0.08] as $coupon) {
-            $stock = $this->openRook(['historical_fixed_rate' => $coupon]);
+            $stock = $this->openFinch(['historical_fixed_rate' => $coupon]);
             $marketCoupon = $this->opening->yield5yEma + DebtEngine::throughTheCycleCreditSpread($stock, $this->opening, $this->model->getLossGivenDefault());
             $structural = $this->structuralReturn($stock);
 
@@ -462,7 +462,7 @@ class BrokerageBusinessModelTest extends TestCase
     {
         $lossGivenDefault = $this->model->getLossGivenDefault();
         foreach ([0.02, 0.08] as $coupon) {
-            $stock = $this->openRook(['historical_fixed_rate' => $coupon, 'corporate_treasury' => 20_000_000_000.00]);
+            $stock = $this->openFinch(['historical_fixed_rate' => $coupon, 'corporate_treasury' => 20_000_000_000.00]);
             $idleBorrowing = (float) $stock->getTotalDebt() - $this->model->resolveEarningAssets($stock);
             $paid = DebtEngine::chargedWholesaleRate($stock, $this->opening, $lossGivenDefault);
             $rolled = DebtEngine::chargedWholesaleRate($stock, $this->opening, $lossGivenDefault, true);
@@ -475,22 +475,22 @@ class BrokerageBusinessModelTest extends TestCase
     }
 
     /**
-     * ROOK as the seed opens it, with its operating yield struck.
+     * FINC as the seed opens it, with its operating yield struck.
      *
      * @param array<string, mixed> $overrides Seed fields to open it with instead.
      */
-    private function openRook(array $overrides): Stock
+    private function openFinch(array $overrides): Stock
     {
         $seed = null;
         foreach (InitialMarket::STOCKS as $row) {
-            if ($row['ticker'] === 'ROOK') {
+            if ($row['ticker'] === 'FINC') {
                 $seed = $row;
             }
         }
         $this->assertNotNull($seed);
         $this->opening = \App\Tests\Support\OpeningCreditAtTrend::macro();
         $builder = new OpeningBoardBuilder($this->mathUtility, new DebtEngine($this->mathUtility, CorporateMetrics::getInstance()), new MarketEngine($this->mathUtility), new AnchorStakeLedger());
-        $stock = (new Stock())->setTicker('ROOK');
+        $stock = (new Stock())->setTicker('FINC');
         $builder->open($stock, $overrides + $seed, $this->opening);
         $stock->setEarningsMomentumZ([BrokerageBusinessModel::STATE_OPERATING_YIELD => (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $stock, $this->mathUtility)]);
 

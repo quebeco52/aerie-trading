@@ -138,13 +138,13 @@ class DistrictEventFeedTest extends TestCase
 
     public function testEmptyHistoryYieldsAnEmptyListNotAMissingKey(): void
     {
-        $stock = $this->makeStock('ROOK');
+        $stock = $this->makeStock('FINC');
         $this->repository->method('findForStocksNewestFirst')->willReturn([]);
 
         $result = $this->feed->recentEventsByTicker([$stock], self::NOW);
 
-        $this->assertArrayHasKey('ROOK', $result);
-        $this->assertSame([], $result['ROOK']);
+        $this->assertArrayHasKey('FINC', $result);
+        $this->assertSame([], $result['FINC']);
     }
 
     /**

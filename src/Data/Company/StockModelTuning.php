@@ -58,12 +58,12 @@ class StockModelTuning
             ModelParam::TargetCapitalRatio->value    => 0.2941, // Its seeded book equity/assets
         ],
 
-        // --- Rook Proprietary Trading (ROOK) ---
-        // High-frequency proprietary trading & institutional execution desk. Pure volatility arbitrage focus.
-        'ROOK' => [
-            ModelParam::AdvisoryRevenueWeight->value => 0.15,
-            ModelParam::TradingRevenueWeight->value  => 0.85,
-            ModelParam::TargetCapitalRatio->value    => 0.4667, // Its seeded book equity/assets
+        // --- Finch Securities (FINC) ---
+        // Retail broker: commissions and order-flow payments, with IPO allocations and managed portfolios beside them.
+        'FINC' => [
+            ModelParam::AdvisoryRevenueWeight->value => 0.25,
+            ModelParam::TradingRevenueWeight->value  => 0.75,
+            ModelParam::TargetCapitalRatio->value    => 0.3333, // Its seeded book equity/assets
         ],
 
         // --- Corvid Strategic Arbitrage (CORV) ---

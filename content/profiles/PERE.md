@@ -1,7 +1,7 @@
 ---
 headline: 'Peregrine Prime Securities: the other side of your option'
 standfirst: 'If you have bought an option on the Aerie Exchange, Peregrine probably wrote it. The firm makes markets, sells volatility, and has its best quarters when everyone else is having their worst.'
-related: [ROOK, TICK]
+related: [FINC, TICK]
 ---
 
 ## The House
@@ -39,9 +39,10 @@ revenue. Calm bull markets bring modest, steady results. Sell-offs lift volumes,
 protection, and the firm has reported its best quarters during market stress. Some fund managers hold the shares as a
 partial hedge, which means they are paying Peregrine for protection twice.
 
-Its rival for the tape is Rook Proprietary Trading, which trades the same names with its own capital. The two firms hire
-from the same universities and do not otherwise speak. Peregrine is also one of the few large desks in the District that
-does not use a Tickbird terminal, which this desk records without comment.
+Much of its retail flow comes from Finch Securities, the District's largest retail broker, which sends Peregrine its
+clients' orders and is paid for each one. Finch's clients trade without commission and Peregrine fills them against its
+own quotes; both firms describe the arrangement as good for the small investor. Peregrine is also one of the few large
+desks in the District that does not use a Tickbird terminal, which this desk records without comment.
 
 ## What the desk is watching
 

@@ -118,14 +118,14 @@ class PriceChangeFeedTest extends TestCase
     {
         $this->redis->method('exec')->willReturn([false]);
 
-        $this->assertSame([], $this->feed->changeByTicker([$this->makeStock('ROOK', 50.0)]));
+        $this->assertSame([], $this->feed->changeByTicker([$this->makeStock('FINC', 50.0)]));
     }
 
     public function testMalformedBufferEntryIsSkipped(): void
     {
         $this->redis->method('exec')->willReturn(['not json at all']);
 
-        $this->assertSame([], $this->feed->changeByTicker([$this->makeStock('ROOK', 50.0)]));
+        $this->assertSame([], $this->feed->changeByTicker([$this->makeStock('FINC', 50.0)]));
     }
 
     public function testAZeroBaselineIsSkippedRatherThanDividedBy(): void
@@ -149,12 +149,12 @@ class PriceChangeFeedTest extends TestCase
         $changes = $this->feed->changeByTicker([
             $this->makeStock('LAKE', 110.0),
             $this->makeStock('SWAN', 200.0),
-            $this->makeStock('ROOK', 45.0),
+            $this->makeStock('FINC', 45.0),
         ]);
 
         $this->assertEqualsWithDelta(0.10, $changes['LAKE'], 0.0001);
         $this->assertArrayNotHasKey('SWAN', $changes);
-        $this->assertEqualsWithDelta(-0.10, $changes['ROOK'], 0.0001);
+        $this->assertEqualsWithDelta(-0.10, $changes['FINC'], 0.0001);
     }
 
     public function testChangeForTickerReadsTheSameBufferTailAsTheBatchPath(): void
@@ -178,14 +178,14 @@ class PriceChangeFeedTest extends TestCase
     {
         $this->redis->method('lIndex')->willReturn(false);
 
-        $this->assertNull($this->feed->changeForTicker('ROOK', 50.0));
+        $this->assertNull($this->feed->changeForTicker('FINC', 50.0));
     }
 
     public function testChangeForTickerIsUnknownForAMalformedEntry(): void
     {
         $this->redis->method('lIndex')->willReturn('not json at all');
 
-        $this->assertNull($this->feed->changeForTicker('ROOK', 50.0));
+        $this->assertNull($this->feed->changeForTicker('FINC', 50.0));
     }
 
     public function testChangeForTickerRefusesToDivideByAZeroBaseline(): void
@@ -257,7 +257,7 @@ class PriceChangeFeedTest extends TestCase
         $this->redis->method('exec')->willReturn([$this->buffered(100.0), $this->buffered(50.0)]);
         $this->repository->expects($this->never())->method('findRecentPrices');
 
-        $changes = $this->feed->changeByTicker([$this->makeStock('LAKE', 110.0), $this->makeStock('ROOK', 45.0)]);
+        $changes = $this->feed->changeByTicker([$this->makeStock('LAKE', 110.0), $this->makeStock('FINC', 45.0)]);
 
         $this->assertCount(2, $changes);
     }
@@ -278,7 +278,7 @@ class PriceChangeFeedTest extends TestCase
     {
         $this->redis->method('exec')->willReturn([false]);
 
-        $this->assertSame([], $this->feed->changeByTicker([$this->makeStock('ROOK', 50.0)]));
+        $this->assertSame([], $this->feed->changeByTicker([$this->makeStock('FINC', 50.0)]));
     }
 
     public function testAZeroPersistedBaselineIsSkippedRatherThanDividedBy(): void
