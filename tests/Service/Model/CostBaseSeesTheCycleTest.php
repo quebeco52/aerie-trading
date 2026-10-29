@@ -41,6 +41,7 @@ class CostBaseSeesTheCycleTest extends TestCase
     private const ACYCLICAL = [
         'biotech'            => 'prescription volume follows patents and approvals, not the gap',
         'broadcasting'       => 'the minutes aired are fixed; the cycle moves the price of a minute, not the minutes',
+        'exchange_operator'  => 'fees follow the value the board trades and commodity price swings, not the gap',
         'mining'             => 'sells every tonne into a global pool at the going price',
         'oil_gas_producer'   => 'sells every barrel into a global pool at the going price',
     ];

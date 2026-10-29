@@ -50,6 +50,7 @@ class Sectors
         'space_systems' => 'Space companies build and fly their own rockets and run satellite networks. Satellites are booked onto the launch manifest about a year ahead, and reusable rockets made reaching orbit cheap enough that launch demand outgrows the economy for years; every launch flown makes the next cheaper, and competition passes part of the saving on. Government agencies buy cargo, crew and defence missions out of their budgets. A satellite internet service opens a few years in and signs up subscribers slowly at first, then fast; how large its market is only the sign-ups reveal, and estimates are revised as they arrive. A failed launch grounds the fleet while the cause is found, and the manifest waits for it.',
         'defense_contractor' => 'Operates on sovereign government "Cost-Plus" procurement contracts (Aerospace & Defense). Highly immune to recessions with guaranteed margin cost escalators.',
         'security_protection' => 'Guarding, private military work, cash carriers and investigators. Each firm is its mix of seven lines: guarding posts paid from the District budget, corporate retainers that move a little with the economy, overseas work bought in panics and credit stress, cash rounds that follow household spending and rise when people fear for their banks, vaults whose fees rise with gold, screening that follows the deals banks do, and fraud and crisis cases that arrive with defaults. Each line carries its own failure: a breach at a guarded site, a heist, a leaked file.',
+        'exchange_operator' => 'Runs the District\'s share market and its commodity futures market. Trading fees follow the value the board trades: turnover rises in a sell-off while the value it is charged on falls. Futures volume follows commodity price swings. Listing fees, market data and colocation are steady subscriptions. Asset-light with high margins; clearing is a separate house.',
         'clearing_house'  => 'Acts as the ultimate guarantor of all market trades. Holds massive "Initial Margin" deposits from member firms, earning interest on the float. Revenue scales off transaction volume, thriving during market panics (high VIX). Carries extreme apocalyptic tail risk if member defaults exceed the margin pool. Evaluated on ROE.',
         'biotech'         => 'Biotechnology and specialty pharma. CapEx is intangible R&D IP. R&D sets how often pivotal trials read out; approvals step up the marketed franchise and patent expiries erode it on a known schedule. Inelastic demand during recessions.',
         'luxury'          => 'Luxury goods and elite brand conglomerates. Possesses Veblen pricing power: immune to inflation penalties, raising prices without volume loss. Very high operating leverage and brand equity, but sensitive to global liquidity freezes among ultra-wealthy buyers.',
@@ -162,6 +163,8 @@ class Sectors
         'Farm Products' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'consumer_staples'],
         // Monopolies, high P/E
         'Financial Data & Stock Exchanges' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'financial_data'],
+        // A licensed venue, but its volumes follow the market
+        'Securities & Commodity Exchanges' => ['pe' => 24.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 0.75, 'business_model' => 'exchange_operator'],
         'Financial Clearinghouses' => ['pe' => 18.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 50.0, 'business_model' => 'clearing_house'],
         'Food Distribution' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'none'],
         'Footwear & Accessories' => ['pe' => 18.00, 'depreciation' => 0.06, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'apparel_manufacturing'],
@@ -371,6 +374,7 @@ class Sectors
         'oil_gas_producer'               => Sector\OilGasProducerBusinessModel::class,
         'refining'                       => Sector\RefiningBusinessModel::class,
         'financial_data'                 => Sector\FinancialDataBusinessModel::class,
+        'exchange_operator'              => Sector\ExchangeOperatorBusinessModel::class,
         'medical_care_facility'          => Sector\MedicalCareFacilityBusinessModel::class,
         'health_insurer'                 => Sector\HealthInsurerBusinessModel::class,
         'tech'                           => Sector\TechBusinessModel::class,

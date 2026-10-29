@@ -145,6 +145,8 @@ final class MacroFieldCatalog
         'potential_gdp_index' => ['label' => 'Potential output (opening = 1)', 'unit' => self::UNIT_INDEX],
         'gdp_deflator' => ['label' => 'GDP deflator (opening = 1)', 'unit' => self::UNIT_INDEX],
         'equity_wealth_ratio' => ['label' => 'Equity market wealth', 'unit' => self::UNIT_LEVEL],
+        'board_turnover_ema' => ['label' => 'Share turnover', 'unit' => self::UNIT_LEVEL],
+        'board_turnover_trend' => ['label' => 'Share turnover trend', 'unit' => self::UNIT_LEVEL],
         'sovereign_fund_to_gdp' => ['label' => 'Reserve Fund / GDP', 'unit' => self::UNIT_PERCENT],
         'energy_base_price' => ['label' => 'Energy base price', 'unit' => self::UNIT_INDEX],
         'energy_supply_ema' => ['label' => 'Energy supply', 'unit' => self::UNIT_INDEX],

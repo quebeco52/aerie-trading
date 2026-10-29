@@ -65,6 +65,7 @@ final class BusinessModelMacroFieldDeclarationTest extends TestCase
         'floating_reference_rate' => ['policy_rate_ema', 'interbank_liquidity_spread_ema'],
         'market_cost_of_equity' => ['yield_10y_ema', 'equity_risk_premium'],
         'equity_wealth_deviation' => ['equity_wealth_ratio', 'equity_wealth_trend'],
+        'board_turnover_deviation' => ['board_turnover_ema', 'board_turnover_trend'],
         'corporate_default_deviation' => ['corporate_default_rate_ema'],
         'retail_default_deviation' => ['retail_default_rate_ema'],
         'corporate_default_rate_trend' => ['corporate_default_rate_ema'],

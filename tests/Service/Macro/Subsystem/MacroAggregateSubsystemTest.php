@@ -684,6 +684,34 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
+     * Turnover is a year's value traded over the float cap. The first traded tick opens both the reading and its trend;
+     * a tick that priced no board leaves them where they were rather than reading a dead market.
+     */
+    public function testBoardTurnoverIsMeasuredOnlyOffATradedTick(): void
+    {
+        $state = new MacroState();
+        $state->boardFloatCap = 1.0e12;
+        $dt = 1.0 / 360.0;
+
+        $state->boardTradedValue = 1.0e12 * 1.2 * $dt;
+        $this->subsystem->updateExponentialMovingAverages($state, $dt);
+        $this->assertEqualsWithDelta(1.2, $state->boardTurnoverEma, 1e-12);
+        $this->assertEqualsWithDelta(1.2, $state->boardTurnoverTrend, 1e-12);
+
+        $state->boardTradedValue = 0.0;
+        $this->subsystem->updateExponentialMovingAverages($state, $dt);
+        $this->assertEqualsWithDelta(1.2, $state->boardTurnoverEma, 1e-12, 'A tick with no board priced is no reading.');
+
+        // A busier tape lifts the quarter's reading well before the multi-year trend.
+        for ($i = 0; $i < 90; $i++) {
+            $state->boardTradedValue = 1.0e12 * 2.4 * $dt;
+            $this->subsystem->updateExponentialMovingAverages($state, $dt);
+        }
+        $this->assertGreaterThan(1.2 + (0.5 * 1.2), $state->boardTurnoverEma);
+        $this->assertLessThan(1.2 + (0.2 * 1.2), $state->boardTurnoverTrend);
+    }
+
+    /**
      * A caller that never reports a market -- the simulate command, the headless harness, every unit test
      * written before this channel existed -- must be left exactly where it was.
      */

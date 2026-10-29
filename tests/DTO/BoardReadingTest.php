@@ -16,7 +16,7 @@ use PHPUnit\Framework\TestCase;
 final class BoardReadingTest extends TestCase
 {
     /**
-     * @return array{total_cap: float, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_bank_levy: float, strategic_stake_cash: float}
+     * @return array{total_cap: float, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_traded_value: float, board_bank_levy: float, strategic_stake_cash: float}
      */
     private static function board(float $cap, float $floatCap): array
     {
@@ -27,6 +27,7 @@ final class BoardReadingTest extends TestCase
             'board_dividend_cash' => 2.0e6,
             'board_net_issuance' => -3.0e6,
             'board_stamp_duty' => 4.0e5,
+            'board_traded_value' => 1.0e8,
             'board_bank_levy' => 5.0e7,
             'strategic_stake_cash' => 6.0e5,
         ];
@@ -42,6 +43,7 @@ final class BoardReadingTest extends TestCase
         $this->assertSame(2.0e6, $reading->dividendCash);
         $this->assertSame(-3.0e6, $reading->netIssuance);
         $this->assertSame(4.0e5, $reading->stampDuty);
+        $this->assertSame(1.0e8, $reading->tradedValue);
         $this->assertSame(6.0e5, $reading->strategicStakeCash);
         $this->assertSame(5.0e7, $reading->bankLevy);
     }
@@ -65,6 +67,7 @@ final class BoardReadingTest extends TestCase
         $this->assertSame(0.0, $spent->dividendCash);
         $this->assertSame(0.0, $spent->netIssuance);
         $this->assertSame(0.0, $spent->stampDuty);
+        $this->assertNull($spent->tradedValue, 'No board priced since: nothing to measure turnover on.');
         $this->assertSame(0.0, $spent->strategicStakeCash);
     }
 

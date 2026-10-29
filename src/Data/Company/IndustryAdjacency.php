@@ -152,6 +152,7 @@ final class IndustryAdjacency
     private const SOURCES_ONLY = [
         'Tobacco',
         'Financial Data & Stock Exchanges',
+        'Securities & Commodity Exchanges',
         'Healthcare Plans',
         'Railroads',
         'Resorts & Casinos',

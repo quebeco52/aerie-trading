@@ -28,6 +28,13 @@ final class StrategicHoldings
      */
     public const CLEARINGHOUSE_STAKE = 0.23;
 
+    // --- Exchange Stake ---
+    /**
+     * The District's stake in its exchange group, as a share of shares outstanding: a strategic minority, the rest held
+     * by institutions and the market.
+     */
+    public const EXCHANGE_STAKE = 0.20;
+
     /**
      * Held ticker => the District's share of its shares outstanding.
      *
@@ -35,6 +42,7 @@ final class StrategicHoldings
      */
     public const STAKES = [
         'ACC' => self::CLEARINGHOUSE_STAKE, // Aerie Central Clearing: the District's CCP
+        'ROOK' => self::EXCHANGE_STAKE, // Rookery Holdings: the Aerie Exchange and the Commodity Exchange
     ];
 
     /** The District's share of a company's shares outstanding; zero for every company it holds no stake in. */

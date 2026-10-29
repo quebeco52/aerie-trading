@@ -1925,6 +1925,37 @@ class InitialMarket
             'retained_earnings' => 10_000_000_000.00,
         ],
         [
+            'ticker' => 'ROOK',
+            'name' => 'Rookery Holdings',
+            'sector' => 'Financials',
+            'industry' => 'Securities & Commodity Exchanges',
+            'systemic_importance' => 'titan',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.24,
+            'beta_tilt' => 0.05, // turnover rises in a sell-off as the value it is charged on falls
+            'jump_intensity' => 0.60,
+            'jump_vol' => 0.08,
+            'baseline_roic' => 0.20,
+            'capex_ratio' => 0.10,
+            'target_payout_ratio' => 0.70,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'fixed_cost_ratio' => 0.75,
+            'operating_margin' => 0.60,
+            // The District's block is StrategicHoldings', taken off in AnchorHoldings::tradableFloat; the institutions
+            // that hold the rest trade it.
+            'public_float' => 1.00,
+            'sam_ratio' => 0.06, // the only licensed venue: the District's own turnover is the room it has
+            'floating_debt_ratio' => 0.20,
+            'historical_fixed_rate' => 0.035,
+            'credit_spread' => 0.0070,
+            'depreciation_rate' => 0.05,
+            'corporate_treasury' => 5_000_000_000.00,
+            'total_equity' => 16_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 8_000_000_000.00,
+            'retained_earnings' => 9_000_000_000.00,
+        ],
+        [
             'ticker' => 'ALBT',
             'name' => 'Albatross Deepwaters',
             'sector' => 'Industrials',

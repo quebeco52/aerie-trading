@@ -24,6 +24,8 @@ final readonly class BoardReadingDTO
         public float $netIssuance = 0.0,
         /** Stamp duty the tick's trading paid, buyer and seller each. */
         public float $stampDuty = 0.0,
+        /** What the board traded over the tick, in currency; null when no board was priced since the last reading. */
+        public ?float $tradedValue = null,
         /** Cash the District's strategic stakes paid it over the tick. */
         public float $strategicStakeCash = 0.0,
         /** What the board's banks owe a year in bank levy: a standing amount, so null keeps the last one booked. */
@@ -34,7 +36,7 @@ final readonly class BoardReadingDTO
      * What this tick's board, StockTracker::updateStocks()'s result, hands the next tick's economy. A board worth
      * nothing keeps the last levels it had.
      *
-     * @param array{total_cap: float, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_bank_levy: float, strategic_stake_cash: float} $board
+     * @param array{total_cap: float, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_traded_value: float, board_bank_levy: float, strategic_stake_cash: float} $board
      */
     public function after(array $board): self
     {
@@ -45,6 +47,7 @@ final readonly class BoardReadingDTO
             $board['board_dividend_cash'],
             $board['board_net_issuance'],
             $board['board_stamp_duty'],
+            $board['board_traded_value'],
             $board['strategic_stake_cash'],
             $board['board_bank_levy'],
         );

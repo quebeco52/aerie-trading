@@ -607,6 +607,11 @@ class MacroState
     public float $boardPriceIndex;
     public float $boardTotalReturnIndex;
     public float $boardStampDuty;
+    // What the board traded over the previous tick, and its turnover (a year's value traded over float cap) smoothed
+    // and trended: what the exchange charges its trading fees on.
+    public float $boardTradedValue;
+    public float $boardTurnoverEma;
+    public float $boardTurnoverTrend;
     // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced
     // again.
     public float $boardBankLevy;

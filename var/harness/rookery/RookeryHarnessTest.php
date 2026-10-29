@@ -8,12 +8,12 @@ use App\Entity\CorporateReport;
 
 /**
  * Behaviour check for FINC (Finch Securities, retail broker on BrokerageBusinessModel). Read-only probe: writes one
- * JSON per seed to FINCH_OUT with the opening, every FINC quarter (revenue, margin, income, price, book, rating,
+ * JSON per seed to ROOKERY_OUT with the opening, every FINC quarter (revenue, margin, income, price, book, rating,
  * streams, the macro the streams read) and the board's opening and final caps.
  */
-final class FinchHarnessTest extends BoardRun
+final class RookeryHarnessTest extends BoardRun
 {
-    private const FIRM = 'FINC';
+    private const FIRM = 'ROOK';
 
     /** @var array<string, mixed> */
     private array $out = ['opening' => [], 'q' => []];
@@ -49,6 +49,12 @@ final class FinchHarnessTest extends BoardRun
             'rating' => $s->getCreditRating(), 'streams' => $report->getRevenueStreams() ?? [],
             'vix' => $m?->marketVolatilityEma ?? 0.0, 'rate' => $m?->policyRateEma ?? 0.0,
             'gap' => $m?->outputGapEma ?? 0.0,
+            'to' => $m?->boardTurnoverEma ?? 0.0, 'to_tr' => $m?->boardTurnoverTrend ?? 0.0,
+            'to_dev' => $m?->boardTurnoverDeviation() ?? 0.0, 'w_dev' => $m?->equityWealthDeviation() ?? 0.0,
+            'deal_dev' => $m?->dealActivityDeviation() ?? 0.0, 'board' => $m?->equityMarketCap ?? 0.0,
+            'cvar' => (float) (($s->getEarningsMomentumZ() ?? [])['state:commodity_variance'] ?? 0.0),
+            'cvar_tr' => (float) (($s->getEarningsMomentumZ() ?? [])['state:commodity_variance_trend'] ?? 0.0),
+            'float' => (float) $s->getPublicFloatPercentage(),
         ];
 
         return $row;
@@ -72,7 +78,7 @@ final class FinchHarnessTest extends BoardRun
     {
         $this->out['dead'] = $this->dead;
         $this->out['seed'] = $this->seed;
-        $path = getenv('FINCH_OUT');
+        $path = getenv('ROOKERY_OUT');
         if ($path) {
             file_put_contents((string) $path, (string) json_encode($this->out, JSON_PARTIAL_OUTPUT_ON_ERROR));
         }

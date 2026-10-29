@@ -36,6 +36,11 @@ final class MovingAverages
      */
     public const COMMERCIAL_PROPERTY_TREND_YEARS = self::RESIDENTIAL_WEALTH_TREND_HORIZON_YEARS;
     /**
+     * Years over which the board's turnover becomes its normal: past the volatility cycle that moves it, so a busy year
+     * still reads as busy.
+     */
+    public const BOARD_TURNOVER_TREND_YEARS = 5.0;
+    /**
      * Time constant (years) of the default rates' measured trends: a decade, past the credit cycle their readers
      * answer, as the credit spread's.
      */
@@ -123,6 +128,17 @@ final class MovingAverages
             $state->equityWealthTrend = $state->equityWealthTrend > 0.0
                 ? TimeSeries::calculateDistributedLag($state->equityWealthTrend, $state->equityWealthRatio, $dt, self::EQUITY_WEALTH_TREND_HORIZON_YEARS)
                 : $state->equityWealthRatio;
+        }
+
+        // Turnover is read only off a tick that priced a board: a tick with none traded nothing to measure.
+        if ($state->boardTradedValue > 0.0 && $state->boardFloatCap > 0.0 && $dt > 0.0) {
+            $turnover = $state->boardTradedValue / $dt / $state->boardFloatCap;
+            $state->boardTurnoverEma = $state->boardTurnoverEma > 0.0
+                ? $state->boardTurnoverEma + ($emaWeight * ($turnover - $state->boardTurnoverEma))
+                : $turnover;
+            $state->boardTurnoverTrend = $state->boardTurnoverTrend > 0.0
+                ? TimeSeries::calculateDistributedLag($state->boardTurnoverTrend, $state->boardTurnoverEma, $dt, self::BOARD_TURNOVER_TREND_YEARS)
+                : $state->boardTurnoverEma;
         }
 
         $state->naturalRateEma += $emaWeight * ($state->naturalRate - $state->naturalRateEma);

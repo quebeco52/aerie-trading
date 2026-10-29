@@ -178,6 +178,7 @@ final class IndustryBetas
         'Farm Products' => 'Farming/Agriculture',
         'Financial Data & Stock Exchanges' => 'Information Services',
         'Financial Clearinghouses' => 'Financial Svcs. (Non-bank & Insurance)',
+        'Securities & Commodity Exchanges' => 'Financial Svcs. (Non-bank & Insurance)',
         'Food Distribution' => 'Food Wholesalers',
         'Footwear & Accessories' => 'Shoe',
         'Furnishings, Fixtures & Appliances' => 'Furn/Home Furnishings',

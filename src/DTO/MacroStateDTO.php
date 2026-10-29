@@ -724,6 +724,15 @@ readonly class MacroStateDTO
         /** The board's total-return index, price return plus the dividends the float was paid; 1.0 at the start. */
         public float $boardTotalReturnIndex = 1.0,
         public float $boardStampDuty = 0.0,
+        /** What the board traded over the previous tick, in currency; zero on a tick that priced no board. */
+        public float $boardTradedValue = 0.0,
+        /**
+         * The board's turnover, a year's value traded over its float cap, smoothed over a quarter; zero before a board
+         * has traded.
+         */
+        public float $boardTurnoverEma = 0.0,
+        /** The same turnover's measured multi-year trend, where its cyclical readers measure an excess from. */
+        public float $boardTurnoverTrend = 0.0,
         public float $boardBankLevy = 0.0,
         public float $strategicStakeCash = 0.0,
         public float $sovereignFundBudgetInflow = 0.0,
@@ -915,6 +924,12 @@ readonly class MacroStateDTO
     public function equityWealthDeviation(): float
     {
         return $this->equityWealthTrend > 0.0 ? ($this->equityWealthRatio / $this->equityWealthTrend) - 1.0 : 0.0;
+    }
+
+    /** The board's turnover against its multi-year trend, as a fraction. Zero before a board has traded. */
+    public function boardTurnoverDeviation(): float
+    {
+        return $this->boardTurnoverTrend > 0.0 ? ($this->boardTurnoverEma / $this->boardTurnoverTrend) - 1.0 : 0.0;
     }
 
     /**
