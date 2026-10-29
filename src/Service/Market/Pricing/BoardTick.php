@@ -38,6 +38,10 @@ final class BoardTick
     public float $tradedValue = 0.0;
     /** What the board's banks owe a year in bank levy at the rate in force, which the budget books as revenue. */
     public float $bankLevy = 0.0;
+    /** Annual property and casualty premium the board's underwriters write, which their rate levels are weighted by. */
+    public float $insurancePremium = 0.0;
+    /** The same premium, each underwriter's at the rate level it earns. */
+    public float $insuranceRatedPremium = 0.0;
     /**
      * Cash the District's strategic stakes pay it: dividends, and its share of buybacks less its share of issues, since
      * it keeps its percentage by tendering and subscribing pro rata. Off the float; paid into the fund.

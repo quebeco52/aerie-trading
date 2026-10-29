@@ -30,13 +30,18 @@ final readonly class BoardReadingDTO
         public float $strategicStakeCash = 0.0,
         /** What the board's banks owe a year in bank levy: a standing amount, so null keeps the last one booked. */
         public ?float $bankLevy = null,
+        /**
+         * The rate level the board's property and casualty underwriters earn, weighted by their premium: a standing
+         * level, so null keeps the last one read.
+         */
+        public ?float $insuranceRateLevel = null,
     ) {}
 
     /**
      * What this tick's board, StockTracker::updateStocks()'s result, hands the next tick's economy. A board worth
      * nothing keeps the last levels it had.
      *
-     * @param array{total_cap: float, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_traded_value: float, board_bank_levy: float, strategic_stake_cash: float} $board
+     * @param array{total_cap: float, board_float_cap: float, board_price_return: float, board_dividend_cash: float, board_net_issuance: float, board_stamp_duty: float, board_traded_value: float, board_bank_levy: float, strategic_stake_cash: float, board_insurance_rate_level?: float|null} $board
      */
     public function after(array $board): self
     {
@@ -50,12 +55,13 @@ final readonly class BoardReadingDTO
             $board['board_traded_value'],
             $board['strategic_stake_cash'],
             $board['board_bank_levy'],
+            $board['board_insurance_rate_level'] ?? $this->insuranceRateLevel,
         );
     }
 
     /** What is left once the economy has read it: the levels, without the flows. */
     public function spent(): self
     {
-        return new self($this->equityMarketCap, $this->floatCap, bankLevy: $this->bankLevy);
+        return new self($this->equityMarketCap, $this->floatCap, bankLevy: $this->bankLevy, insuranceRateLevel: $this->insuranceRateLevel);
     }
 }

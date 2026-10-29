@@ -166,7 +166,7 @@ class SectorsTest extends TestCase
 
         $this->assertSame([
             'asset_manager', 'brokerage', 'clearing_house', 'commercial_bank', 'credit_services', 'custody_bank', 'distressed_debt',
-            'hedge_fund', 'insurance', 'investment_bank', 'private_bank', 'private_equity', 'reinsurance', 'retail_insurance', 'shadow_bank',
+            'hedge_fund', 'insurance', 'investment_bank', 'life_insurer', 'private_bank', 'private_equity', 'reinsurance', 'retail_insurance', 'shadow_bank',
         ], $financial);
     }
 }

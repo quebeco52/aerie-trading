@@ -67,6 +67,12 @@ interface TreasuryStrategyInterface
     public function getDefaultSecuritiesDuration(): float;
 
     /**
+     * Share of the securities book this institution carries as held-to-maturity when the seed does not name one:
+     * disclosed at amortized cost rather than marked through equity.
+     */
+    public function getDefaultSecuritiesHtmShare(Stock $stock): float;
+
+    /**
      * Whether funding held above the liquidity target is lent out every quarter as a matter of course.
      * True for a balance-sheet lender or float-taker, whose deposits are raw material and not a hoard;
      * false for a fund, whose uninvested cash is dry powder committed on its own judgement of the cycle.

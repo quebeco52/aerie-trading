@@ -69,6 +69,13 @@ interface OperatingStrategyInterface
      */
     public function annualBankLevyBase(Stock $stock): float;
     /**
+     * The firm's annual property and casualty premium and the rate level its book earns, for the market's rate reading
+     * an insurance broker's commissions follow: zero premium for a firm that underwrites none.
+     *
+     * @return array{premium: float, rate_level: float}
+     */
+    public function propertyCasualtyPremiumReading(Stock $stock): array;
+    /**
      * The variable cost the rules on extraction scale, a year, before them, in currency: at a cost factor of one more
      * (FirmEconomics::calculateExtractionCostFactor()), the cost rises by this; zero for a firm that extracts nothing.
      * Deductible, so it comes off earnings before tax.

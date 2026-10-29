@@ -145,6 +145,9 @@ class MacroEngine
         if ($board->bankLevy !== null) {
             $state->boardBankLevy = $board->bankLevy;
         }
+        if ($board->insuranceRateLevel !== null && $board->insuranceRateLevel > 0.0) {
+            $state->insuranceRateLevel = $board->insuranceRateLevel;
+        }
 
         // Advance physical simulation time in years
         $state->totalTime += $dt;

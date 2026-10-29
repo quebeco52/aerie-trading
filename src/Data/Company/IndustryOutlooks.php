@@ -28,6 +28,7 @@ final class IndustryOutlooks
         'Farm Products' => ['drift_vol' => 0.025, 'learning_half_life' => 0.5],
         'Grocery Stores' => ['drift_vol' => 0.025, 'learning_half_life' => 0.5],
         'Healthcare Plans' => ['drift_vol' => 0.025, 'learning_half_life' => 0.5],
+        'Insurance Brokers' => ['drift_vol' => 0.025, 'learning_half_life' => 0.5],
         'Household & Personal Products' => ['drift_vol' => 0.025, 'learning_half_life' => 0.5],
         'Integrated Freight & Logistics' => ['drift_vol' => 0.025, 'learning_half_life' => 0.5],
         'Marine Ports & Services' => ['drift_vol' => 0.025, 'learning_half_life' => 0.5],

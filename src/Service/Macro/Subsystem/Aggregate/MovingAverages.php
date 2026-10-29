@@ -41,6 +41,11 @@ final class MovingAverages
      */
     public const BOARD_TURNOVER_TREND_YEARS = 5.0;
     /**
+     * Years over which the underwriters' premium rate level becomes its normal: past the hard and soft markets of the
+     * underwriting cycle, which run several years each.
+     */
+    public const INSURANCE_RATE_TREND_YEARS = 8.0;
+    /**
      * Time constant (years) of the default rates' measured trends: a decade, past the credit cycle their readers
      * answer, as the credit spread's.
      */
@@ -139,6 +144,14 @@ final class MovingAverages
             $state->boardTurnoverTrend = $state->boardTurnoverTrend > 0.0
                 ? TimeSeries::calculateDistributedLag($state->boardTurnoverTrend, $state->boardTurnoverEma, $dt, self::BOARD_TURNOVER_TREND_YEARS)
                 : $state->boardTurnoverEma;
+        }
+
+        // The rate level is already earned through over half a policy term, so it is trended without a second
+        // smoothing.
+        if ($state->insuranceRateLevel > 0.0) {
+            $state->insuranceRateTrend = $state->insuranceRateTrend > 0.0
+                ? TimeSeries::calculateDistributedLag($state->insuranceRateTrend, $state->insuranceRateLevel, $dt, self::INSURANCE_RATE_TREND_YEARS)
+                : $state->insuranceRateLevel;
         }
 
         $state->naturalRateEma += $emaWeight * ($state->naturalRate - $state->naturalRateEma);

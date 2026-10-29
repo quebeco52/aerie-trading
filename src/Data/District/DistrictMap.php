@@ -71,7 +71,8 @@ class DistrictMap
         // closes the block: what it owns is paper, it is priced on the net asset value of that
         // paper, and it stands where the funds stand rather than beside the works it holds.
         'Capital Markets' => [
-            'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'reinsurance', 'shadow_bank',
+            'credit_services', 'commercial_bank', 'insurance', 'retail_insurance', 'life_insurer', 'insurance_broker',
+            'reinsurance', 'shadow_bank',
             'investment_bank', 'clearing_house', 'exchange_operator', 'financial_data', 'asset_manager', 'hedge_fund',
             'brokerage', 'distressed_debt', 'private_equity', 'investment_company', 'custody_bank',
             'private_bank',
@@ -325,6 +326,7 @@ class DistrictMap
         'hedge_fund' => 'coin', 'brokerage' => 'coin', 'distressed_debt' => 'coin', 'private_equity' => 'coin',
         // Underwriters: an umbrella. Market data: a bar chart.
         'insurance' => 'umbrella', 'reinsurance' => 'umbrella', 'retail_insurance' => 'umbrella', 'health_insurer' => 'umbrella',
+        'life_insurer' => 'umbrella', 'insurance_broker' => 'umbrella',
         'financial_data' => 'chart', 'exchange_operator' => 'chart',
         // Process industry: a factory; wells: a derrick; mines: an ingot; refineries: a flare stack; chemistry: a
         // flask.

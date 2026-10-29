@@ -168,6 +168,7 @@ class OpeningBoardBuilder
         // election is likewise per firm: it decides whether a capital ratio reacts to the curve at
         // all, and a board where everyone elected the same way has no dispersion in who survives.
         $stock->setSecuritiesDuration((float) ($stockData['securities_duration'] ?? $strategy->getDefaultSecuritiesDuration()));
+        $stock->setSecuritiesHtmShare((float) ($stockData['securities_htm_share'] ?? $strategy->getDefaultSecuritiesHtmShare($stock)));
         $stock->setAociFiltered((bool) ($stockData['aoci_filtered'] ?? (
             // The filter is an election the largest institutions do not get. Sized rather than
             // listed per firm, so the dispersion maintains itself as the seed changes: a bank big

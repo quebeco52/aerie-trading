@@ -712,6 +712,30 @@ class MacroAggregateSubsystemTest extends TestCase
     }
 
     /**
+     * The underwriters' rate level opens its trend at the first reading and moves it over the underwriting cycle, so a
+     * hard market reads as hard for years; no reading leaves both where they were.
+     */
+    public function testTheInsuranceRateTrendOpensAtTheFirstReadingAndLagsTheCycle(): void
+    {
+        $state = new MacroState();
+        $dt = 1.0 / 360.0;
+
+        $this->subsystem->updateExponentialMovingAverages($state, $dt);
+        $this->assertSame(0.0, $state->insuranceRateTrend, 'No underwriter has filed.');
+
+        $state->insuranceRateLevel = 0.95;
+        $this->subsystem->updateExponentialMovingAverages($state, $dt);
+        $this->assertSame(0.95, $state->insuranceRateTrend);
+
+        $state->insuranceRateLevel = 1.25;
+        for ($i = 0; $i < 360; $i++) {
+            $this->subsystem->updateExponentialMovingAverages($state, $dt);
+        }
+        $expected = 1.25 - (0.30 * exp(-1.0 / MovingAverages::INSURANCE_RATE_TREND_YEARS));
+        $this->assertEqualsWithDelta($expected, $state->insuranceRateTrend, 0.002);
+    }
+
+    /**
      * A caller that never reports a market -- the simulate command, the headless harness, every unit test
      * written before this channel existed -- must be left exactly where it was.
      */

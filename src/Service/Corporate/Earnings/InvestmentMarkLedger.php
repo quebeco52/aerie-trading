@@ -113,6 +113,7 @@ final class InvestmentMarkLedger
             duration: $stock->getSecuritiesDuration() ?? self::DEFAULT_SECURITIES_DURATION_YEARS,
             floatingShare: $ctx->strategy->getSecuritiesFloatingShare($stock),
             fallbackYield: $ctx->macroState->yield10yEma,
+            htmShare: $stock->getSecuritiesHtmShare(),
         );
 
         $stock->setSecuritiesCarryingYield($mark->carryingYield);

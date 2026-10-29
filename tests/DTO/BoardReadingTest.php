@@ -71,6 +71,20 @@ final class BoardReadingTest extends TestCase
         $this->assertSame(0.0, $spent->strategicStakeCash);
     }
 
+    /** The underwriters' rate level is a standing level: a board with no underwriter filing keeps the last one. */
+    public function testTheInsuranceRateLevelStandsUntilAnUnderwriterReportsAgain(): void
+    {
+        $board = self::board(1.0e12, 8.0e11);
+        $board['board_insurance_rate_level'] = 1.12;
+        $reading = (new BoardReadingDTO())->after($board);
+        $this->assertSame(1.12, $reading->insuranceRateLevel);
+
+        $board['board_insurance_rate_level'] = null;
+        $this->assertSame(1.12, $reading->after($board)->insuranceRateLevel);
+        $this->assertSame(1.12, $reading->spent()->insuranceRateLevel);
+        $this->assertNull((new BoardReadingDTO())->after(self::board(1.0e12, 8.0e11))->insuranceRateLevel);
+    }
+
     public function testNoBoardYetReportsNoLevels(): void
     {
         $empty = new BoardReadingDTO();

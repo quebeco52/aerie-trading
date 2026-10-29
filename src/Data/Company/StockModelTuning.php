@@ -180,6 +180,13 @@ class StockModelTuning
             ModelParam::FloatEquityWeight->value         => 0.05,
         ],
 
+        // --- Wellspring Life (WELL) ---
+        // Two fifths of its reserves were written when long yields were higher and promise to credit at least 2.5%.
+        'WELL' => [
+            ModelParam::GuaranteedCreditingRate->value => 0.025,
+            ModelParam::GuaranteedReserveShare->value  => 0.40,
+        ],
+
         // --- White Dove Insurance (DOVE) ---
         // Retail multi-line P&C and Life insurer spun out of Safe Harbor. Sheds tail risks to reinsurers.
         'DOVE' => [

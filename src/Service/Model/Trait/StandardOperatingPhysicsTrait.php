@@ -238,6 +238,12 @@ trait StandardOperatingPhysicsTrait
         return 0.0;
     }
 
+    /** A firm that underwrites no property or casualty risk writes no premium the market's rate is read on. */
+    public function propertyCasualtyPremiumReading(Stock $stock): array
+    {
+        return ['premium' => 0.0, 'rate_level' => 1.0];
+    }
+
     /** A firm no rule costs productivity carries its committed base at the inputs and wages it is priced at. */
     public function getFixedCostFactor(MacroStateDTO $macroState): float
     {

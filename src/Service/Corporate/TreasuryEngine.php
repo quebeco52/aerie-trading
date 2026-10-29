@@ -270,7 +270,7 @@ class TreasuryEngine
         $ctx->assetSaleProceeds += $proceeds;
 
         // Realized gain/loss on asset liquidation: charge fire-sale haircut and unrecognized held-to-maturity mark.
-        $unrecognizedMark = -$realizedMark * FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
+        $unrecognizedMark = -$realizedMark * $stock->getSecuritiesHtmShare();
         $ctx->assetSaleLoss += ($carryingValueSold * $haircut) + $unrecognizedMark;
 
         if (self::isNewsworthy($ctx->stock, $proceeds)) {

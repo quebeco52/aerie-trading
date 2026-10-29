@@ -338,6 +338,14 @@ class Stock
     private string $unrealizedSecuritiesMark = '0.0000';
 
     /**
+     * @var float|null Share of the securities book carried as held-to-maturity, disclosed rather than marked to equity.
+     *                 Null falls back to FinancialConstants::DEFAULT_HTM_BOOK_SHARE. Seeded once and never moved, since
+     *                 the equity already carries the available-for-sale mark struck at this share.
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $securitiesHtmShare = null;
+
+    /**
      * @var bool Whether this institution elects to filter accumulated other comprehensive income out of
      *           regulatory capital (Basel III). A firm-level election, not a market-wide constant: it is the
      *           difference between a capital ratio that reacts to the curve and one that does not react at all
@@ -1387,6 +1395,18 @@ class Stock
         return $this;
     }
 
+    /** The held-to-maturity share of the securities book: the firm's seeded classification, or the default. */
+    public function getSecuritiesHtmShare(): float
+    {
+        return $this->securitiesHtmShare ?? \App\Service\Math\FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
+    }
+
+    public function setSecuritiesHtmShare(?float $securitiesHtmShare): self
+    {
+        $this->securitiesHtmShare = $securitiesHtmShare === null ? null : max(0.0, min(1.0, $securitiesHtmShare));
+        return $this;
+    }
+
     public function isAociFiltered(): bool
     {
         return $this->aociFiltered;
@@ -1404,7 +1424,7 @@ class Stock
      */
     public function getRecognizedSecuritiesMark(): float
     {
-        return (float) $this->unrealizedSecuritiesMark * (1.0 - \App\Service\Math\FinancialConstants::DEFAULT_HTM_BOOK_SHARE);
+        return (float) $this->unrealizedSecuritiesMark * (1.0 - $this->getSecuritiesHtmShare());
     }
 
     /**
@@ -1415,7 +1435,7 @@ class Stock
      */
     public function getUnrecognizedSecuritiesMark(): float
     {
-        return (float) $this->unrealizedSecuritiesMark * \App\Service\Math\FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
+        return (float) $this->unrealizedSecuritiesMark * $this->getSecuritiesHtmShare();
     }
 
     /**

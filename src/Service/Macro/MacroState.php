@@ -612,6 +612,10 @@ class MacroState
     public float $boardTradedValue;
     public float $boardTurnoverEma;
     public float $boardTurnoverTrend;
+    // The premium rate level the board's property and casualty underwriters earn, and its multi-year trend: what an
+    // insurance broker's commissions are a share of.
+    public float $insuranceRateLevel;
+    public float $insuranceRateTrend;
     // The bank levy the board's banks owe a year at the rate in force, in currency; kept until the board is priced
     // again.
     public float $boardBankLevy;

@@ -52,6 +52,10 @@ enum ModelParam: string
     case CatBondSpreadWeight = 'cat_bond_spread_weight';
     /** Life policy reserves per unit of annual life premium. */
     case LifeReserveToPremiumRatio = 'life_reserve_to_premium_ratio';
+    /** The minimum rate a life book's older policies promise to credit, whatever the bonds behind them yield. */
+    case GuaranteedCreditingRate = 'guaranteed_crediting_rate';
+    /** Share of a life book's policy reserves written with that guarantee. */
+    case GuaranteedReserveShare = 'guaranteed_reserve_share';
 
     // --- Reporting Calendar ---
     /** Calendar quarter index (0-3) in which the fiscal year begins; 0 = calendar year. */

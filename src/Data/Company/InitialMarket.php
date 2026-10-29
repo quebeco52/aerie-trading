@@ -1957,6 +1957,77 @@ class InitialMarket
             'retained_earnings' => 9_000_000_000.00,
         ],
         [
+            'ticker' => 'WELL',
+            'management_style' => 'steward', // Pays out what the spread earns; growth is the pension schemes it buys
+            'name' => 'Wellspring Life',
+            'sector' => 'Financials',
+            'industry' => 'Insurance - Life',
+            'systemic_importance' => 'systemic',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.26, // a life insurer: long bonds, equity fees and guarantees, ~26% realized vol
+            'beta_tilt' => 0.10, // savings fees ride the market and a rally in bonds squeezes the guarantees
+            'jump_intensity' => 0.40,
+            'jump_vol' => 0.08,
+            // What its earnings return at the opening: the spread its reserves keep over what they credit, and a thin
+            // margin on premiums and fees, which pay for the benefits and the administration.
+            'baseline_roe' => 0.12,
+            'capex_ratio' => 0.03,
+            'target_payout_ratio' => 0.45,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'dividend_aristocrat' => true,
+            'fixed_cost_ratio' => 0.30,
+            // Premiums and fees nearly all go on benefits, reserves and running the book: a life insurer's profit is
+            // the investment spread.
+            'operating_margin' => 0.04,
+            'public_float' => 1.00,
+            'sam_ratio' => 0.25,
+            'floating_debt_ratio' => 0.10,
+            'historical_fixed_rate' => 0.035,
+            'credit_spread' => 0.0090,
+            'depreciation_rate' => 0.02,
+            // Reserves are paid out over decades, so the bonds behind them run longer than a composite's.
+            'securities_duration' => 10.0,
+            // The policy reserves its book holds once settled, 4.8 times revenue (six times premium on the 80% of
+            // revenue that is premium), fully backed by liquid assets; 7.2 times equity.
+            'corporate_treasury' => 432_000_000_000.00,
+            'total_equity' => 60_000_000_000.00,
+            'customer_deposits' => 432_000_000_000.00,
+            'aoci_filtered' => true,
+            'wholesale_debt' => 15_000_000_000.00,
+            'retained_earnings' => 30_000_000_000.00,
+        ],
+        [
+            'ticker' => 'HONY',
+            'management_style' => 'empire_builder', // Grows by buying the small brokers it places business beside
+            'name' => 'Honeyguide Partners',
+            'sector' => 'Financials',
+            'industry' => 'Insurance Brokers',
+            'systemic_importance' => 'none',
+            'shares_outstanding' => 1_000_000_000,
+            'volatility' => 0.20, // a broker: renewals in every economy, ~20% realized vol
+            'beta_tilt' => -0.15, // commissions follow the insurance cycle, not the business cycle
+            'jump_intensity' => 0.30,
+            'jump_vol' => 0.06,
+            'baseline_roic' => 0.16,
+            'capex_ratio' => 0.03,
+            'target_payout_ratio' => 0.40,
+            'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
+            'fixed_cost_ratio' => 0.60,
+            'operating_margin' => 0.25,
+            // The partners who sold their firms to it keep part of the equity.
+            'public_float' => 0.92,
+            'sam_ratio' => 0.10,
+            'floating_debt_ratio' => 0.20,
+            'historical_fixed_rate' => 0.040,
+            'credit_spread' => 0.0120,
+            'depreciation_rate' => 0.05,
+            'corporate_treasury' => 3_000_000_000.00,
+            'total_equity' => 12_000_000_000.00,
+            'customer_deposits' => 0.00,
+            'wholesale_debt' => 6_000_000_000.00,
+            'retained_earnings' => 7_000_000_000.00,
+        ],
+        [
             'ticker' => 'ALBT',
             'name' => 'Albatross Deepwaters',
             'sector' => 'Industrials',

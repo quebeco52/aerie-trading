@@ -50,6 +50,8 @@ class Sectors
         'space_systems' => 'Space companies build and fly their own rockets and run satellite networks. Satellites are booked onto the launch manifest about a year ahead, and reusable rockets made reaching orbit cheap enough that launch demand outgrows the economy for years; every launch flown makes the next cheaper, and competition passes part of the saving on. Government agencies buy cargo, crew and defence missions out of their budgets. A satellite internet service opens a few years in and signs up subscribers slowly at first, then fast; how large its market is only the sign-ups reveal, and estimates are revised as they arrive. A failed launch grounds the fleet while the cause is found, and the manifest waits for it.',
         'defense_contractor' => 'Operates on sovereign government "Cost-Plus" procurement contracts (Aerospace & Defense). Highly immune to recessions with guaranteed margin cost escalators.',
         'security_protection' => 'Guarding, private military work, cash carriers and investigators. Each firm is its mix of seven lines: guarding posts paid from the District budget, corporate retainers that move a little with the economy, overseas work bought in panics and credit stress, cash rounds that follow household spending and rise when people fear for their banks, vaults whose fees rise with gold, screening that follows the deals banks do, and fraud and crisis cases that arrive with defaults. Each line carries its own failure: a breach at a guarded site, a heist, a leaked file.',
+        'life_insurer' => 'Sells life cover, annuities and pension buyouts, and manages savings for policyholders. The premiums build reserves many times their size, invested mostly in long bonds, and the insurer keeps what the bonds earn above what the policies credit; older policies promise a minimum rate, which squeezes that margin when yields fall. Annuity and buyout sales rise when long rates are high. Fees on the savings funds follow the markets.',
+        'insurance_broker' => 'Places businesses\' risks with insurers for a share of the premium and advises employers on staff benefits. Commissions rise in a hard insurance market and fall in a soft one. Clients\' premiums held before they are passed on earn the short rate. No underwriting risk and little capital.',
         'exchange_operator' => 'Runs the District\'s share market and its commodity futures market. Trading fees follow the value the board trades: turnover rises in a sell-off while the value it is charged on falls. Futures volume follows commodity price swings. Listing fees, market data and colocation are steady subscriptions. Asset-light with high margins; clearing is a separate house.',
         'clearing_house'  => 'Acts as the ultimate guarantor of all market trades. Holds massive "Initial Margin" deposits from member firms, earning interest on the float. Revenue scales off transaction volume, thriving during market panics (high VIX). Carries extreme apocalyptic tail risk if member defaults exceed the margin pool. Evaluated on ROE.',
         'biotech'         => 'Biotechnology and specialty pharma. CapEx is intangible R&D IP. R&D sets how often pivotal trials read out; approvals step up the marketed franchise and patent expiries erode it on a known schedule. Inelastic demand during recessions.',
@@ -196,12 +198,12 @@ class Sectors
         // capital the first time the market halves.
         'Investment Companies' => ['pe' => 13.00, 'depreciation' => 0.02, 'ebitda_limit' => 1.5, 'equity_limit' => 0.3, 'business_model' => 'investment_company'],
         // Asset light fee business
-        'Insurance Brokers' => ['pe' => 22.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'brokerage'],
+        'Insurance Brokers' => ['pe' => 22.00, 'depreciation' => 0.02, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'insurance_broker'],
         // A multi-line retail carrier writes P&C and Life side by side and cedes its tail upward, which is
         // exactly the retail model's two-stream split. The generic insurance model has no such split, so a
         // diversified carrier priced on it silently discarded its own product mix.
         'Insurance - Diversified' => ['pe' => 12.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 7.0, 'business_model' => 'retail_insurance'],
-        'Insurance - Life' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'retail_insurance'],
+        'Insurance - Life' => ['pe' => 10.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'life_insurer'],
         // P&C is riskier, needs more equity buffer
         'Insurance - Property & Casualty' => ['pe' => 14.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 6.0, 'business_model' => 'retail_insurance'],
         // Taking the riskiest policies, highest capital requirements
@@ -413,6 +415,8 @@ class Sectors
         'steel_manufacturing'            => Sector\SteelManufacturingBusinessModel::class,
         'construction'                   => Sector\ConstructionBusinessModel::class,
         'retail_insurance'               => Sector\RetailInsuranceBusinessModel::class,
+        'life_insurer'                   => Sector\LifeInsurerBusinessModel::class,
+        'insurance_broker'               => Sector\InsuranceBrokerBusinessModel::class,
         'reinsurance'                    => Sector\ReinsuranceBusinessModel::class,
         'waste_management'               => Sector\WasteManagementBusinessModel::class,
         'telecom'                        => Sector\TelecomBusinessModel::class,

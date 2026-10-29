@@ -156,6 +156,8 @@ class MacroFieldRegistryTest extends TestCase
         'boardTradedValue' => 'One tick of value traded; boardTurnoverEma carries the quarter.',
         'boardTurnoverEma' => 'Carried in the Redis state; the exchange\'s filed trading revenue shows what it moved.',
         'boardTurnoverTrend' => 'Carried in the Redis state beside boardTurnoverEma, the trend it is read against.',
+        'insuranceRateLevel' => 'Carried in the Redis state; the underwriters\' filed rate levels and the broker\'s commissions show it.',
+        'insuranceRateTrend' => 'Carried in the Redis state beside insuranceRateLevel, the trend it is read against.',
         'authorityCommitteeSeated' => 'A flag, 1 while politics hands the macro a rate committee; authority_majority records what the committee is.',
         'boardBankLevy' => 'The banks\' levy bill at the rate in force; bank_levy_rate records the rate and corporate_report.bank_levy what each bank paid.',
         'strategicStakeCash' => 'One tick of cash from the District\'s strategic stakes, credited to the fund at once.',

@@ -147,6 +147,8 @@ final class MacroFieldCatalog
         'equity_wealth_ratio' => ['label' => 'Equity market wealth', 'unit' => self::UNIT_LEVEL],
         'board_turnover_ema' => ['label' => 'Share turnover', 'unit' => self::UNIT_LEVEL],
         'board_turnover_trend' => ['label' => 'Share turnover trend', 'unit' => self::UNIT_LEVEL],
+        'insurance_rate_level' => ['label' => 'Insurance premium rates', 'unit' => self::UNIT_INDEX],
+        'insurance_rate_trend' => ['label' => 'Insurance premium rate trend', 'unit' => self::UNIT_INDEX],
         'sovereign_fund_to_gdp' => ['label' => 'Reserve Fund / GDP', 'unit' => self::UNIT_PERCENT],
         'energy_base_price' => ['label' => 'Energy base price', 'unit' => self::UNIT_INDEX],
         'energy_supply_ema' => ['label' => 'Energy supply', 'unit' => self::UNIT_INDEX],

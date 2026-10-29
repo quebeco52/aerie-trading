@@ -28,6 +28,7 @@ class RatingMethodologyTest extends TestCase
         'hedge_fund' => RatingMethodology::BalanceSheetInvestor,
         'insurance' => RatingMethodology::CapitalRated,
         'investment_bank' => RatingMethodology::CapitalRated,
+        'life_insurer' => RatingMethodology::CapitalRated,
         'private_bank' => RatingMethodology::CapitalRated,
         'private_equity' => RatingMethodology::BalanceSheetInvestor,
         'reinsurance' => RatingMethodology::CapitalRated,

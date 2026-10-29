@@ -733,6 +733,13 @@ readonly class MacroStateDTO
         public float $boardTurnoverEma = 0.0,
         /** The same turnover's measured multi-year trend, where its cyclical readers measure an excess from. */
         public float $boardTurnoverTrend = 0.0,
+        /**
+         * The premium rate level the board's property and casualty underwriters earn, weighted by their premium, as a
+         * multiple of the rate their margins were struck at; zero before an underwriter has filed.
+         */
+        public float $insuranceRateLevel = 0.0,
+        /** The same rate level's measured multi-year trend, past the underwriting cycle. */
+        public float $insuranceRateTrend = 0.0,
         public float $boardBankLevy = 0.0,
         public float $strategicStakeCash = 0.0,
         public float $sovereignFundBudgetInflow = 0.0,
@@ -930,6 +937,12 @@ readonly class MacroStateDTO
     public function boardTurnoverDeviation(): float
     {
         return $this->boardTurnoverTrend > 0.0 ? ($this->boardTurnoverEma / $this->boardTurnoverTrend) - 1.0 : 0.0;
+    }
+
+    /** The underwriters' premium rate level against its multi-year trend, as a fraction. Zero before one has filed. */
+    public function insuranceRateDeviation(): float
+    {
+        return $this->insuranceRateTrend > 0.0 ? ($this->insuranceRateLevel / $this->insuranceRateTrend) - 1.0 : 0.0;
     }
 
     /**

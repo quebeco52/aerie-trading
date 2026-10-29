@@ -82,6 +82,11 @@ trait StandardTreasuryTrait
         return 0.0;
     }
 
+    public function getDefaultSecuritiesHtmShare(Stock $stock): float
+    {
+        return FinancialConstants::DEFAULT_HTM_BOOK_SHARE;
+    }
+
     /** Cash is deployed on the firm's own judgement of returns, never automatically. */
     public function deploysFundingIntoEarningAssets(): bool
     {

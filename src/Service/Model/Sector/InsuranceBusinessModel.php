@@ -495,6 +495,23 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
+     * The non-life premium and the rate level it earns, once the book has filed a quarter: the earned rate level the
+     * physics carried, on the revenue the life book does not write.
+     */
+    public function propertyCasualtyPremiumReading(Stock $stock): array
+    {
+        $earned = ($stock->getEarningsMomentumZ() ?? [])[self::STATE_EARNED_RATE_LEVEL] ?? null;
+        if ($earned === null) {
+            return ['premium' => 0.0, 'rate_level' => 1.0];
+        }
+
+        return [
+            'premium' => max(0.0, (float) $stock->getTotalRevenue()) * (1.0 - $this->resolveLifePremiumShare($stock)),
+            'rate_level' => (float) $earned,
+        ];
+    }
+
+    /**
      * The rate level on the firm's whole book: the capacity cycle reaches its property-casualty premium, and life
      * rates, priced on mortality and the long rate, do not follow it.
      */
@@ -1349,6 +1366,21 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         return self::DEFAULT_FLOAT_BOND_DURATION_YEARS;
     }
 
+    /**
+     * Policy-reserve-matching bonds: the bonds held against life policy reserves, which are carried at a locked-in
+     * rate, are carried at amortized cost too (Japan's sekinin junbikin taiou saiken, 2000), so a rate move marks
+     * neither side of the matched book. The rest of the float takes the default split. Marked on the asset side alone,
+     * a life book ten times premium lost a quarter of its equity on every point the curve rose.
+     */
+    public function getDefaultSecuritiesHtmShare(Stock $stock): float
+    {
+        $ratios = $this->resolveReserveRatios($stock);
+        $total = array_sum($ratios);
+        $lifeShare = $total > 0.0 ? $ratios['life'] / $total : 0.0;
+
+        return $lifeShare + ((1.0 - $lifeShare) * FinancialConstants::DEFAULT_HTM_BOOK_SHARE);
+    }
+
     public function getDebtExpansionAggressiveness(float $spreadMultiplier, float $totalDebt = 0.0, float $customerDeposits = 0.0, float $targetOperatingCash = 0.0, float $currentTreasury = 0.0): DebtExpansionAppetiteDTO
     {
         return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
@@ -1571,7 +1603,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * that grow (NAIC, ACLI, Swiss Re); struck for a book that never does, every reserve fell behind its ratio as the
      * economy grew, a life book's to two thirds of it in twenty years.
      */
-    private static function resolveRunoffYearsAtTrend(float $reserveRatio, float $incurred): float
+    protected static function resolveRunoffYearsAtTrend(float $reserveRatio, float $incurred): float
     {
         $ratio = max(0.01, $reserveRatio);
 
