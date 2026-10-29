@@ -291,8 +291,7 @@ class SecurityProtectionBusinessModelTest extends TestCase
         $stock = (new Stock())->setTicker('NCKR');
         $this->assertEqualsWithDelta(0.25, $this->model->resolveLineShares($stock, 0.0)['vaults'], 1e-12);
 
-        // The plan compounds the faded drift on the opening mix; the vault line, its share of the plan, stays on the
-        // industry's path to within what the mix's shift does to the plan's own drift (0.4% here).
+        // The plan compounds the faded drift; the vault line, its share of the plan, compounds none of it.
         $years = 20.0;
         $halfLife = FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS;
         $excess = 0.75 * SecurityProtectionBusinessModel::CASH_USE_DRIFT;
@@ -303,7 +302,7 @@ class SecurityProtectionBusinessModelTest extends TestCase
         }
         $shares = $this->model->resolveLineShares($stock, $years);
 
-        $this->assertEqualsWithDelta(0.25, exp($logPlan) * $shares['vaults'], 0.25 * 0.005);
+        $this->assertEqualsWithDelta(0.25, exp($logPlan) * $shares['vaults'], 1e-6);
         $this->assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
         $this->assertLessThan(0.72, $shares['cash_services']);
 

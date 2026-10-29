@@ -257,47 +257,6 @@ class TimeSeriesTest extends TestCase
         self::assertSame(0.02, TimeSeries::fadeTowardTrend(0.02, 0.02, 5.0, 8.0));
     }
 
-    /**
-     * Each line compounds its own faded drift against a line with none, the shares always sum to one, a line with no
-     * weight never gains one, and the mix settles where the drifts have faded out.
-     */
-    public function testDriftedLineSharesCompoundEachLinesFadedDrift(): void
-    {
-        $weights = ['legacy' => 2.0, 'steady' => 1.0, 'new' => 1.0, 'none' => 0.0];
-        $drifts = ['legacy' => -0.03, 'new' => 0.05, 'none' => 0.10];
-
-        $opening = TimeSeries::driftedLineShares($weights, $drifts, 0.0, 8.0);
-        self::assertEqualsWithDelta(0.5, $opening['legacy'], 1e-12);
-        self::assertEqualsWithDelta(0.25, $opening['steady'], 1e-12);
-
-        $shares = TimeSeries::driftedLineShares($weights, $drifts, 12.0, 8.0);
-        self::assertEqualsWithDelta(1.0, array_sum($shares), 1e-12);
-        self::assertSame(0.0, $shares['none']);
-        self::assertEqualsWithDelta(2.0 * exp(TimeSeries::fadedExcessIntegral(-0.03, 0.0, 12.0, 8.0)), $shares['legacy'] / $shares['steady'], 1e-12);
-        self::assertEqualsWithDelta(exp(TimeSeries::fadedExcessIntegral(0.05, 0.0, 12.0, 8.0)), $shares['new'] / $shares['steady'], 1e-12);
-
-        $settled = TimeSeries::driftedLineShares($weights, $drifts, 1.0e6, 8.0);
-        self::assertEqualsWithDelta(exp(0.05 * 8.0 / M_LN2), $settled['new'] / $settled['steady'], 1e-9);
-        self::assertEqualsWithDelta(0.25, TimeSeries::driftedLineShares($weights, [], 40.0, 8.0)['steady'], 1e-12, 'no drift, no change');
-    }
-
-    /**
-     * A firm with the industry's typical mix grows at the industry's rate; one that leans toward a drifting line grows
-     * by the lean times the drift, however its weights are scaled.
-     */
-    public function testTheLineMixExcessIsTheLeanFromTheTypicalMixTimesEachDrift(): void
-    {
-        $typical = ['legacy' => 0.5, 'steady' => 0.35, 'new' => 0.15];
-        $drifts = ['legacy' => -0.02, 'new' => 0.04];
-
-        self::assertEqualsWithDelta(0.0, TimeSeries::lineMixExcessGrowth($typical, $typical, $drifts), 1e-15);
-        $firm = ['legacy' => 0.2, 'steady' => 0.5, 'new' => 0.3];
-        $expected = ((0.2 - 0.5) * -0.02) + ((0.3 - 0.15) * 0.04);
-        self::assertEqualsWithDelta($expected, TimeSeries::lineMixExcessGrowth($firm, $typical, $drifts), 1e-15);
-        self::assertEqualsWithDelta($expected, TimeSeries::lineMixExcessGrowth(array_map(static fn(float $w): float => 4.0 * $w, $firm), $typical, $drifts), 1e-15);
-        self::assertSame(0.0, TimeSeries::lineMixExcessGrowth([], $typical, $drifts));
-    }
-
     /** What a level compounds is the integral of the faded rate: the closed form matches a fine Riemann sum. */
     public function testTheFadedExcessIntegralIsTheSumOfTheFadedRate(): void
     {

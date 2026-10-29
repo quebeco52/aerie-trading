@@ -6,12 +6,12 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\SectorPhysicsResult;
+
 use App\Entity\Stock;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
-use App\Service\Math\TimeSeries;
 use App\Service\Model\ModelParam;
 use App\Service\Model\StreamContext;
 
@@ -105,35 +105,11 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
      */
     public const SEASONALITY_FACTORS = [0.96, 1.04, 1.00, 1.00];
 
-    /**
-     * Trend real growth plus the sector's measured drift in its share of GDP, and the aftermarket's drift on how far
-     * the firm's mix leans from the industry's typical one.
-     */
+    /** Trend real growth plus the sector's measured drift in its share of GDP. */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
-            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS)
-            + TimeSeries::lineMixExcessGrowth($this->resolveLineWeights($stock), self::typicalLineWeights(), self::LINE_DRIFTS);
-    }
-
-    // --- Line Drifts ---
-    /**
-     * The aftermarket's drift against the industry (+1.5% a year): while spending on new equipment shrinks against GDP
-     * the fleet in service outgrows new orders, and makers sell service contracts on it.
-     */
-    public const AFTERMARKET_MRO_DRIFT = 0.015;
-    /** Each line's drift against the industry; new equipment has none. */
-    public const LINE_DRIFTS = ['aftermarket_mro' => self::AFTERMARKET_MRO_DRIFT];
-
-    /**
-     * Each line's share of the plan: the firm's opening mix with the aftermarket compounding its faded drift against
-     * the industry.
-     *
-     * @return array<string, float>
-     */
-    public function resolveLineShares(Stock $stock, float $simYears): array
-    {
-        return TimeSeries::driftedLineShares($this->resolveLineWeights($stock), self::LINE_DRIFTS, $simYears, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
     // --- Dual-Stream Architecture ---
@@ -210,46 +186,44 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
     /**
      * The plant is staffed to the equipment it has in hand and the fleet it services: the opening workload of the
-     * equipment backlog, and the aftermarket's loading of the order swing, at their share of the plan.
+     * equipment backlog, and the aftermarket's loading of the order swing, at their target weights.
      */
     public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $shares = $this->resolveLineShares($stock, $macroState->totalTime) + ['oem_equipment' => 0.0, 'aftermarket_mro' => 0.0];
-        $workload = StreamContext::openingWorkload($stock->getEarningsMomentumZ() ?? [], 'oem_equipment', self::OEM_BACKLOG_BURN_RATE);
-
-        return ($shares['oem_equipment'] * ($workload - 1.0)) + ($shares['aftermarket_mro'] * self::MRO_CYCLE_LOADING * $this->resolveEquipmentOrderShift($stock, $macroState));
-    }
-
-    /** @return array{oem_equipment: float, aftermarket_mro: float} */
-    private function resolveLineWeights(Stock $stock): array
-    {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::OemEquipmentWeight->value => self::OEM_EQUIPMENT_WEIGHT,
+            ModelParam::OemEquipmentWeight->value  => self::OEM_EQUIPMENT_WEIGHT,
             ModelParam::AftermarketMroWeight->value => self::AFTERMARKET_MRO_WEIGHT,
         ]);
+        $oemWeight = $params[ModelParam::OemEquipmentWeight];
+        $mroWeight = $params[ModelParam::AftermarketMroWeight];
+        if ($oemWeight + $mroWeight <= 0.0) {
+            return 0.0;
+        }
 
-        return ['oem_equipment' => max(0.0, (float) $params[ModelParam::OemEquipmentWeight]), 'aftermarket_mro' => max(0.0, (float) $params[ModelParam::AftermarketMroWeight])];
-    }
+        $workload = StreamContext::openingWorkload($stock->getEarningsMomentumZ() ?? [], 'oem_equipment', self::OEM_BACKLOG_BURN_RATE);
 
-    /**
-     * The industry's typical maker: the model's own weights, before any firm's lore.
-     *
-     * @return array<string, float>
-     */
-    private static function typicalLineWeights(): array
-    {
-        return ['oem_equipment' => self::OEM_EQUIPMENT_WEIGHT, 'aftermarket_mro' => self::AFTERMARKET_MRO_WEIGHT];
+        return (($oemWeight * ($workload - 1.0)) + ($mroWeight * self::MRO_CYCLE_LOADING * $this->resolveEquipmentOrderShift($stock, $macroState))) / ($oemWeight + $mroWeight);
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::OemEquipmentWeight->value  => self::OEM_EQUIPMENT_WEIGHT,
+            ModelParam::AftermarketMroWeight->value => self::AFTERMARKET_MRO_WEIGHT,
+        ]);
+
+        $oemWeight     = $params[ModelParam::OemEquipmentWeight];
+        $mroWeight     = $params[ModelParam::AftermarketMroWeight];
         $pricingPower  = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Revenue Mix ---
-        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveLineShares($stock, $macroState->totalTime));
+        $activeWeights = $streams->resolveActiveStreamWeights([
+            'oem_equipment'   => $params[ModelParam::OemEquipmentWeight],
+            'aftermarket_mro' => $params[ModelParam::AftermarketMroWeight],
+        ]);
 
         $oemWeight = $activeWeights['oem_equipment'];
         $mroWeight = $activeWeights['aftermarket_mro'];
