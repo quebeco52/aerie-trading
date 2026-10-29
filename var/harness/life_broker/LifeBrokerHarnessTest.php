@@ -41,6 +41,9 @@ final class LifeBrokerHarnessTest extends BoardRun
     {
         $s = $report->getStock();
         $t = $s->getTicker();
+        $shares = max(1.0, (float) $s->getSharesOutstanding());
+        // Every firm's price against the engine's fair value, for the board's discount over time.
+        $this->out['pf'][$t][] = [round($this->currentTime, 3), (float) $s->getPrice(), (float) ($s->getFairEquityValue() ?? 0.0) / $shares, (float) ($s->getLeveredBeta() ?? 1.0), $this->currentMacro?->equityValuationShift ?? 0.0];
         if (!in_array($t, self::FIRMS, true)) {
             return $row;
         }
@@ -67,6 +70,8 @@ final class LifeBrokerHarnessTest extends BoardRun
             'tax' => (float) $report->getTaxPaid(), 'gwi' => (float) $report->getGoodwillImpairment(),
             'asl' => (float) $report->getAssetSaleLoss(), 'gw' => (float) $report->getGoodwill(),
             'treas' => (float) $report->getTreasury(),
+            'fv' => (float) ($s->getFairEquityValue() ?? 0.0) / $shares, 'tgt' => (float) $s->getAnalystPriceTarget(),
+            'roe_ttm' => (float) $s->getRoeTtm(), 'cur_roe' => (float) $s->getCurrentRoe(), 'ke' => (float) $report->getCostOfEquity(),
         ];
 
         return $row;

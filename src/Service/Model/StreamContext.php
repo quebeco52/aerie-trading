@@ -350,6 +350,28 @@ class StreamContext
     }
 
     /**
+     * The weights the last report split its revenue by (resolveActiveStreamWeights()), for a reading made outside the
+     * quarter's physics, such as working capital or leases: the plan as it stood then, or the given plan before the
+     * first report.
+     *
+     * @param array<string, mixed> $momentum The stream state map persisted last quarter.
+     * @param array<string, float> $plan
+     * @return array<string, float>
+     */
+    public static function filedWeights(array $momentum, array $plan): array
+    {
+        $filed = [];
+        foreach ($plan as $key => $weight) {
+            if (!isset($momentum["weight:{$key}"])) {
+                return $plan;
+            }
+            $filed[$key] = (float) $momentum["weight:{$key}"];
+        }
+
+        return $filed;
+    }
+
+    /**
      * Records each line's share of the quarter's revenue: the realised mix the industry ledger compares rivals on
      * (IndustryShareLedger). The weights never read it.
      *

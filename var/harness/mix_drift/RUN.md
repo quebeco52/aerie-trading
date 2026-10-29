@@ -25,3 +25,10 @@ line's market terms were counted in its revenue and again in its weight (runaway
 - Revenue: LYRE last 2y +13.5% ±12.5 (ledger plan +12% at 20y); security firms -5..+11%, all within noise; board
   +0.55% ±0.79. Security revenue is identical through q1 and every firm, CORV and FINC included, splits at q2-q4: board
   divergence. The firm effect is pinned by unit tests, not by the arm difference.
+
+## Line drifts, second batch, 10-30
+- Arm `lines2_r` against `lines_r`: brokerage (trading -2%, advisory +3%), exchange (market data +3%), apparel (DTC +3%,
+  wholesale -2%), heavy and specialty machinery (aftermarket +1.5%). `lines.py lines_r lines2_r <tickers>`.
+- All 16 pilot firms' weights match the closed form; no fixed-plan firm outside them moved. 20y mixes: FINC advisory
+  25->35%, SHER DTC 30->39%, ROOK data 30->36%, CHUF aftermarket 65->68%.
+- Revenue differences are board divergence again (CHUF -6% ±3.9 against a +4% plan; board -0.24% ±0.80).

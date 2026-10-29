@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
-
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
@@ -16,8 +15,10 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
+use App\Service\Math\TimeSeries;
 use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\ModelParam;
+use App\Service\Model\StreamContext;
 
 /**
  * Earnings strategy for Apparel Manufacturing, Garment Producers, and Industrial Textile Mills.
@@ -199,12 +200,24 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
      */
     public const SEASONALITY_FACTORS = [0.85, 0.95, 1.05, 1.15];
 
-    /** Trend real growth plus the sector's measured drift in its share of GDP. */
+    /**
+     * Trend real growth plus the sector's measured drift in its share of GDP, and the channels' drifts on how far the
+     * firm's mix leans from the industry's typical one.
+     */
     public function getSecularGrowthRate(Stock $stock): float
     {
         return MacroConstants::TREND_REAL_GROWTH
-            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
+            + MacroTransmission::gdpShareDrift(self::SECULAR_SHARE_1997, self::SECULAR_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS)
+            + TimeSeries::lineMixExcessGrowth($this->resolveLineWeights($stock), self::typicalLineWeights(), self::LINE_DRIFTS);
     }
+
+    // --- Line Drifts ---
+    /** Direct-to-consumer's drift against the industry (+3% a year): brands sell through their own stores and sites. */
+    public const DTC_RETAIL_DRIFT = 0.03;
+    /** Wholesale's drift against the industry (-2% a year): department stores lose their share of clothing sales. */
+    public const WHOLESALE_CHANNEL_DRIFT = -0.02;
+    /** Each line's drift against the industry; contract textile supply has none. */
+    public const LINE_DRIFTS = ['dtc_retail' => self::DTC_RETAIL_DRIFT, 'wholesale_channel' => self::WHOLESALE_CHANNEL_DRIFT];
 
     // --- Analyst Coverage ---
     // Inventory write-downs and brand scandals are reported.
@@ -224,7 +237,7 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getWorkingCapitalIntensity(Stock $stock): float
     {
         return FirmEconomics::revenueWeightedRatio(
-            $this->resolveTargetStreamWeights($stock),
+            $this->resolveFiledWeights($stock),
             [self::DTC_NWC_INTENSITY, self::WHOLESALE_NWC_INTENSITY, self::CONTRACT_NWC_INTENSITY],
         );
     }
@@ -233,17 +246,35 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     public function getLeaseIntensity(Stock $stock): float
     {
         return FirmEconomics::revenueWeightedRatio(
-            $this->resolveTargetStreamWeights($stock),
+            $this->resolveFiledWeights($stock),
             [self::DTC_LEASE_INTENSITY, AbstractBusinessModel::LEASE_LIABILITY_INTENSITY, AbstractBusinessModel::LEASE_LIABILITY_INTENSITY],
         );
     }
 
     /**
-     * The firm's target mix, direct-to-consumer, wholesale and contract supply in that order.
+     * The mix the last report sold, direct-to-consumer, wholesale and contract supply in that order: the stores leased
+     * and the stock carried follow the channels as they drift.
      *
      * @return list<float>
      */
-    private function resolveTargetStreamWeights(Stock $stock): array
+    private function resolveFiledWeights(Stock $stock): array
+    {
+        return array_values(StreamContext::filedWeights($stock->getEarningsMomentumZ() ?? [], $this->resolveLineWeights($stock)));
+    }
+
+    /**
+     * Each line's share of the plan: the firm's opening mix with each line compounding its faded drift against the
+     * industry.
+     *
+     * @return array<string, float>
+     */
+    public function resolveLineShares(Stock $stock, float $simYears): array
+    {
+        return TimeSeries::driftedLineShares($this->resolveLineWeights($stock), self::LINE_DRIFTS, $simYears, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
+    }
+
+    /** @return array{dtc_retail: float, wholesale_channel: float, contract_textile_supply: float} */
+    private function resolveLineWeights(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::DtcRetailWeight->value             => self::DTC_RETAIL_WEIGHT,
@@ -251,7 +282,25 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
             ModelParam::ContractTextileSupplyWeight->value => self::CONTRACT_TEXTILE_SUPPLY_WEIGHT,
         ]);
 
-        return [$params[ModelParam::DtcRetailWeight], $params[ModelParam::WholesaleChannelWeight], $params[ModelParam::ContractTextileSupplyWeight]];
+        return [
+            'dtc_retail'              => max(0.0, (float) $params[ModelParam::DtcRetailWeight]),
+            'wholesale_channel'       => max(0.0, (float) $params[ModelParam::WholesaleChannelWeight]),
+            'contract_textile_supply' => max(0.0, (float) $params[ModelParam::ContractTextileSupplyWeight]),
+        ];
+    }
+
+    /**
+     * The industry's typical maker: the model's own weights, before any firm's lore.
+     *
+     * @return array<string, float>
+     */
+    private static function typicalLineWeights(): array
+    {
+        return [
+            'dtc_retail'              => self::DTC_RETAIL_WEIGHT,
+            'wholesale_channel'       => self::WHOLESALE_CHANNEL_WEIGHT,
+            'contract_textile_supply' => self::CONTRACT_TEXTILE_SUPPLY_WEIGHT,
+        ];
     }
 
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
@@ -279,23 +328,13 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::DtcRetailWeight->value              => self::DTC_RETAIL_WEIGHT,
-            ModelParam::WholesaleChannelWeight->value       => self::WHOLESALE_CHANNEL_WEIGHT,
-            ModelParam::ContractTextileSupplyWeight->value  => self::CONTRACT_TEXTILE_SUPPLY_WEIGHT,
-        ]);
-
         $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Revenue Mix ---
-        $activeWeights = $streams->resolveActiveStreamWeights([
-            'dtc_retail'              => $params[ModelParam::DtcRetailWeight],
-            'wholesale_channel'       => $params[ModelParam::WholesaleChannelWeight],
-            'contract_textile_supply' => $params[ModelParam::ContractTextileSupplyWeight],
-        ]);
+        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveLineShares($stock, $macroState->totalTime));
 
         $dtcWeight       = $activeWeights['dtc_retail'];
         $wholesaleWeight = $activeWeights['wholesale_channel'];

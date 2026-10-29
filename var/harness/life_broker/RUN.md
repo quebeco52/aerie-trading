@@ -17,3 +17,9 @@ sensible size and behave sensibly on the live board? Does DOVE stay sensible wit
 - Arms run 10-29: `v1` (stream shares recorded after the market terms: HONY's fiduciary line compounded to 19% of
   revenue; WELL's seed 2 loss is a $25B goodwill write-off of in-industry bolt-ons when P/B fell below 1) and `v2`
   (shares recorded before the market terms, the shipped state).
+- Arms `fv`/`fv2` (10-30, YEARS=12): the probe also records each firm's price against the engine's fair value before
+  the market's repricing (`pf`: t, price, fair value, levered beta, equity valuation shift) and WELL's fv, analyst
+  target, roe_ttm, current roe and cost of equity. Question: was WELL's live fall (-86% at the trough) a rich opening?
+  No: it opens at its fair value (FV/B 1.54-1.65 on ROE 11-13% against ke 8.3%). The board's price/fair-value gap
+  (0.5-1.7 by year 11) is the market's valuation shift times beta; price against the repriced fair value stays within
+  about ±0.15 log. Live WELL = that discount phase plus its own earnings trough at a 0.75% policy rate.

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\DTO\SectorPhysicsResult;
-
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
@@ -13,6 +12,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\TimeSeries;
 use App\Service\Model\ModelParam;
 
 /**
@@ -60,6 +60,17 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const TRADING_REVENUE_WEIGHT  = 0.60;
     /** Baseline fraction of revenue derived from capital markets advisory, placement, and wealth services. */
     public const ADVISORY_REVENUE_WEIGHT = 0.40;
+
+    // --- Line Drifts ---
+    /** Trading commissions' drift against the industry (-2% a year): the commission on a trade falls toward zero. */
+    public const TRADING_REVENUE_DRIFT = -0.02;
+    /**
+     * Advisory and wealth fees' drift against the industry (+3% a year): clients move from paying per trade to paying
+     * on the assets advised.
+     */
+    public const ADVISORY_REVENUE_DRIFT = 0.03;
+    /** Each line's drift against the industry. */
+    public const LINE_DRIFTS = ['trading' => self::TRADING_REVENUE_DRIFT, 'advisory' => self::ADVISORY_REVENUE_DRIFT];
 
     // --- VIX & Trading Volume ---
     /**
@@ -110,6 +121,44 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /** Most wholesale debt the model carries per unit of equity (8x equity). */
     public const WHOLESALE_LEVERAGE_LIMIT = 8.0;
 
+    /** Trend real growth, and the lines' drifts on how far the broker's mix leans from the industry's typical one. */
+    public function getSecularGrowthRate(Stock $stock): float
+    {
+        return MacroConstants::TREND_REAL_GROWTH + TimeSeries::lineMixExcessGrowth($this->resolveLineWeights($stock), self::typicalLineWeights(), self::LINE_DRIFTS);
+    }
+
+    /**
+     * Each line's share of the plan: the firm's opening mix with each line compounding its faded drift against the
+     * industry.
+     *
+     * @return array<string, float>
+     */
+    public function resolveLineShares(Stock $stock, float $simYears): array
+    {
+        return TimeSeries::driftedLineShares($this->resolveLineWeights($stock), self::LINE_DRIFTS, $simYears, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS);
+    }
+
+    /** @return array{trading: float, advisory: float} */
+    private function resolveLineWeights(Stock $stock): array
+    {
+        $params = $this->resolveModelParameters($stock, [
+            ModelParam::TradingRevenueWeight->value  => self::TRADING_REVENUE_WEIGHT,
+            ModelParam::AdvisoryRevenueWeight->value => self::ADVISORY_REVENUE_WEIGHT,
+        ]);
+
+        return ['trading' => max(0.0, (float) $params[ModelParam::TradingRevenueWeight]), 'advisory' => max(0.0, (float) $params[ModelParam::AdvisoryRevenueWeight])];
+    }
+
+    /**
+     * The industry's typical broker: the model's own weights, before any firm's lore.
+     *
+     * @return array<string, float>
+     */
+    private static function typicalLineWeights(): array
+    {
+        return ['trading' => self::TRADING_REVENUE_WEIGHT, 'advisory' => self::ADVISORY_REVENUE_WEIGHT];
+    }
+
     public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
@@ -128,19 +177,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      */
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
-        $params = $this->resolveModelParameters($stock, [
-            ModelParam::TradingRevenueWeight->value  => self::TRADING_REVENUE_WEIGHT,
-            ModelParam::AdvisoryRevenueWeight->value => self::ADVISORY_REVENUE_WEIGHT,
-        ]);
-
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Revenue Mix ---
-        $activeWeights = $streams->resolveActiveStreamWeights([
-            'trading'  => $params[ModelParam::TradingRevenueWeight],
-            'advisory' => $params[ModelParam::AdvisoryRevenueWeight],
-        ]);
+        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveLineShares($stock, $macroState->totalTime));
 
         $tradingWeight  = $activeWeights['trading'];
         $advisoryWeight = $activeWeights['advisory'];

@@ -78,6 +78,15 @@ class ExchangeOperatorBusinessModel extends StandardCorporateBusinessModel
     /** Market data, index licences and colocation (30%). */
     public const MARKET_DATA_WEIGHT = 0.30;
 
+    // --- Line Drifts ---
+    /**
+     * Market data and index licences' drift against the industry (+3% a year): funds that track an index pay for it,
+     * and trading desks buy ever more of the feed. Share trading, futures and listings follow the industry.
+     */
+    public const MARKET_DATA_DRIFT = 0.03;
+    /** Each line's drift against the industry. */
+    public const LINE_DRIFTS = ['market_data' => self::MARKET_DATA_DRIFT];
+
     // --- Working Capital by Stream (shares of the stream's annual revenue) ---
     /** Trading fees: billed to members monthly and paid in about a month; little owed out. */
     public const TRADING_WORKING_CAPITAL = ['receivables' => 0.08, 'inventory' => 0.0, 'payables' => 0.03];
@@ -126,7 +135,7 @@ class ExchangeOperatorBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        $activeWeights = $streams->resolveActiveStreamWeights(self::targetStreamWeights());
+        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveLineShares($stock, $macroState->totalTime));
 
         $equityZ    = $streams->generateZ('equity_trading', 0.20);
         $commodityZ = $streams->generateZ('commodity_futures', 0.20);
@@ -180,16 +189,26 @@ class ExchangeOperatorBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The activity the cost base is staffed to: share trading and listings at their target weights. The commodity
+     * The activity the cost base is staffed to: share trading and listings at their share of the plan. The commodity
      * term reads persisted state the quarter's physics advances, so it stays out of this pure read.
      */
     public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
     {
-        $weights = self::targetStreamWeights();
-        $totalWeight = array_sum($weights);
+        $shares = $this->resolveLineShares($stock, $macroState->totalTime);
 
-        return (($weights['equity_trading'] * $this->resolveEquityTradingShift($macroState))
-            + ($weights['listings'] * $this->resolveListingShift($macroState))) / $totalWeight;
+        return ($shares['equity_trading'] * $this->resolveEquityTradingShift($macroState))
+            + ($shares['listings'] * $this->resolveListingShift($macroState));
+    }
+
+    /**
+     * Each line's share of the plan: the opening mix with market data compounding its faded drift against the
+     * industry. The exchange's mix is the industry's, so the drift moves its mix and not its growth.
+     *
+     * @return array{equity_trading: float, commodity_futures: float, listings: float, market_data: float}
+     */
+    public function resolveLineShares(Stock $stock, float $simYears): array
+    {
+        return TimeSeries::driftedLineShares(self::targetStreamWeights(), self::LINE_DRIFTS, $simYears, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS) + self::targetStreamWeights();
     }
 
     /**
@@ -255,10 +274,10 @@ class ExchangeOperatorBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    /** Trading bills monthly, listings a year ahead, data on subscription terms. */
+    /** Trading bills monthly, listings a year ahead, data on subscription terms, at the mix the last report sold. */
     protected function resolveWorkingCapitalShares(Stock $stock): array
     {
-        $weights = self::targetStreamWeights();
+        $weights = StreamContext::filedWeights($stock->getEarningsMomentumZ() ?? [], self::targetStreamWeights());
 
         return FirmEconomics::blendWorkingCapitalShares(
             [$weights['equity_trading'] + $weights['commodity_futures'], $weights['listings'], $weights['market_data']],

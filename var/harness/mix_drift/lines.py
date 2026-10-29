@@ -2,9 +2,15 @@
 import glob, json, math, statistics as st, sys
 
 a, b = (sys.argv[1], sys.argv[2]) if len(sys.argv) > 2 else ('after_r', 'lines_r')
+FIRMS = sys.argv[3].split(',') if len(sys.argv) > 3 else ['LYRE', 'WATCH', 'OSPR', 'NJAR', 'NCKR']
 HL = 8.0
 DRIFTS = {'advertising_agency': {'media_buying_commissions': -0.02, 'martech_consulting': 0.04},
-          'security_protection': {'cash_services': -0.02}}
+          'security_protection': {'cash_services': -0.02},
+          'brokerage': {'trading': -0.02, 'advisory': 0.03},
+          'exchange_operator': {'market_data': 0.03},
+          'apparel_manufacturing': {'dtc_retail': 0.03, 'wholesale_channel': -0.02},
+          'heavy_manufacturing': {'aftermarket_mro': 0.015},
+          'specialty_industrial_machinery': {'aftermarket_services': 0.015}}
 def faded(g, t):
     k = math.log(2) / HL
     return g * (1 - math.exp(-k * t)) / k
@@ -42,7 +48,7 @@ print('other firms whose weights differ between arms (any seed):', sorted(touche
 def ms(x):
     return st.mean(x), st.stdev(x) / math.sqrt(len(x))
 print(f'paired 20y revenue and net income, {b} vs {a}, n={len(seeds)}')
-for t in ['LYRE', 'WATCH', 'OSPR', 'NJAR', 'NCKR', 'board']:
+for t in FIRMS + ['board']:
     rv, ni = [], []
     for s in seeds:
         fa = A[s] if t == 'board' else {t: A[s][t]}
