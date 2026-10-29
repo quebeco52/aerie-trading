@@ -51,7 +51,7 @@ class ExchangeOperatorBusinessModelTest extends TestCase
         );
     }
 
-    public function testRookeryIsTheListedExchangeAndTheDistrictHoldsAFifth(): void
+    public function testRookeryIsTheListedExchangeAndTheDistrictHoldsAFifthOfTheCapital(): void
     {
         $rows = array_values(array_filter(InitialMarket::STOCKS, static fn(array $row): bool => $row['ticker'] === 'ROOK'));
         $this->assertCount(1, $rows);

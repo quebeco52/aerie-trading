@@ -1941,8 +1941,9 @@ class InitialMarket
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'fixed_cost_ratio' => 0.75,
             'operating_margin' => 0.60,
-            // The District's block is StrategicHoldings', taken off in AnchorHoldings::tradableFloat; the institutions
-            // that hold the rest trade it.
+            // Control sits in unlisted Class B voting shares (the District, LAKE, SWAN, SAFE), which carry little of
+            // the capital; the District's 20% of the capital is StrategicHoldings', taken off in
+            // AnchorHoldings::tradableFloat.
             'public_float' => 1.00,
             'sam_ratio' => 0.06, // the only licensed venue: the District's own turnover is the room it has
             'floating_debt_ratio' => 0.20,
