@@ -53,3 +53,10 @@ that real economies span, so a change is judged on the board, not on one firm.
   spike that reversed within a year. The viability test read trailing EBITDA; it now reads through-the-cycle EBITDA
   (getNormalEbitda: long-run return on capital + depreciation; TERN's was +6.3%), falling back to trailing before a
   long-run return exists. Arm `viab` vs `accr`: identical (no seed reached the liquidation branch; failures are rare).
+- 10-30 P/B extremes: the >10x firm-quarters are JDAW, staples, tobacco, restaurants, exchanges on ROE 27-53%
+  (P/B = ROE x P/E). The standard now counts only extremes ROE does not explain (>10x on ROE <20%, <0.3x on ROE
+  >10%): 0.2% of firm-quarters.
+- 10-30 goodwill: BoardRun rows carry `gwi` (impairment). The test read the model's fair value only, which sat far below
+  the market at impairments (HUMM 191 vs 417bn cap, a $193bn write-off). It now reads the higher of the model's value
+  and the quoted equity. Arm `gwm` vs `gwi` (4 seeds): impairments 52 -> 39, written $730bn -> $276bn, none while
+  market P/B > 1 (was 27%). Most are full because goodwill is 1-5% of equity (ASU 2017-04 arithmetic).

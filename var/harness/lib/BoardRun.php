@@ -442,6 +442,7 @@ abstract class BoardRun extends KernelTestCase
             'capex' => (float) $report->getCapitalExpenditures(),
             'dep' => (float) $report->getDepreciation(),
             'gw' => (float) $report->getGoodwill(),
+            'gwi' => (float) $report->getGoodwillImpairment(),
             'ppe' => (float) $report->getNetPpe(),
             'ta' => (float) $report->getTotalAssets(),
             'ea' => (float) $report->getEarningAssets(),

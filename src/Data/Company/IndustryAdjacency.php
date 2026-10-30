@@ -70,8 +70,8 @@ final class IndustryAdjacency
         ['Software - Application', 'Education & Training Services', self::DISTANT],
         ['Information Technology Services', 'Consulting Services', self::CLOSE],
         ['Information Technology Services', 'Security & Protection Services', self::DISTANT],
-        ['Financial Data & Stock Exchanges', 'Software - Application', self::DISTANT],
-        ['Financial Data & Stock Exchanges', 'Information Technology Services', self::DISTANT],
+        ['Financial Data & Ratings', 'Software - Application', self::DISTANT],
+        ['Financial Data & Ratings', 'Information Technology Services', self::DISTANT],
         // Services.
         ['Consulting Services', 'Legal Services', self::RELATED],
         ['Consulting Services', 'Education & Training Services', self::DISTANT],
@@ -151,7 +151,7 @@ final class IndustryAdjacency
      */
     private const SOURCES_ONLY = [
         'Tobacco',
-        'Financial Data & Stock Exchanges',
+        'Financial Data & Ratings',
         'Securities & Commodity Exchanges',
         'Healthcare Plans',
         'Railroads',

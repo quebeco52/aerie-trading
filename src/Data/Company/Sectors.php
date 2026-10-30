@@ -164,7 +164,7 @@ class Sectors
         'Farm & Heavy Construction Machinery' => ['pe' => 15.00, 'depreciation' => 0.08, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'heavy_manufacturing'],
         'Farm Products' => ['pe' => 16.00, 'depreciation' => 0.06, 'ebitda_limit' => 3.5, 'equity_limit' => 1.0, 'business_model' => 'consumer_staples'],
         // Monopolies, high P/E
-        'Financial Data & Stock Exchanges' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'financial_data'],
+        'Financial Data & Ratings' => ['pe' => 26.00, 'depreciation' => 0.03, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'financial_data'],
         // A licensed venue, but its volumes follow the market
         'Securities & Commodity Exchanges' => ['pe' => 24.00, 'depreciation' => 0.05, 'ebitda_limit' => 3.0, 'equity_limit' => 0.75, 'business_model' => 'exchange_operator'],
         'Financial Clearinghouses' => ['pe' => 18.00, 'depreciation' => 0.02, 'ebitda_limit' => null, 'equity_limit' => 50.0, 'business_model' => 'clearing_house'],

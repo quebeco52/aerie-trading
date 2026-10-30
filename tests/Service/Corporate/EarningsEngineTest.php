@@ -3002,13 +3002,15 @@ class EarningsEngineTest extends TestCase
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, equityRiskPremium: 0.05);
         $ticksPerQuarter = 63;
 
-        $build = function (string $ticker): Stock {
+        // The market agrees with the books: the shares trade at a fifth of book value.
+        $build = function (string $ticker, float $priceToBook = 0.2): Stock {
             $stock = $this->buildMatureIndustrial($ticker);
             $stock->setGoodwill('5000000000');
             $stock->setOperatingMargin('0.03');            // acquired businesses earn well below the hurdle
             $stock->setBaselineRoic('0.02');
             $stock->setRoicTtm('0.02');
             $stock->setLifecycleStage(LifecycleStage::Mature);
+            $stock->setPrice((string) ($priceToBook * (float) $stock->getTotalEquity() / (float) $stock->getSharesOutstanding()));
             return $stock;
         };
 
@@ -3028,6 +3030,12 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $impairment, 'goodwill must be impaired when trailing ROIC sits below WACC');
         $this->assertLessThanOrEqual(5_000_000_000.0, $impairment);
         $this->assertLessThan($equityBefore, (float) $q4->getTotalEquity(), 'the write-down is charged against equity');
+
+        // The same books with the shares quoted at twice book: the market's value of the unit clears its carrying
+        // amount, so the auditor does not write the acquisition off on the model's value alone.
+        $quoted = $build('GDWL', 2.0);
+        $this->earningsEngine->calculate($quoted, $macroState, $q4Tick);
+        $this->assertEqualsWithDelta(5_000_000_000.0, (float) $quoted->getGoodwill(), 1.0, 'a unit the market values above its books keeps its goodwill');
     }
 
     /**
@@ -3066,6 +3074,8 @@ class EarningsEngineTest extends TestCase
         // Debt keeps invested capital large enough that the seeded plant is real rather than the floor.
         $stock = $this->buildMatureIndustrial('NEGQ');
         $stock->setTotalEquity('3000000000');
+        // The market agrees: the shares trade at a fifth of book.
+        $stock->setPrice((string) (0.2 * 3_000_000_000.0 / (float) $stock->getSharesOutstanding()));
         $stock->setWholesaleDebt('40000000000');
         // The cash its $80B of revenue needs and no more: surplus cash is worth its face beside the business.
         $stock->setCorporateTreasury('4000000000');
@@ -3105,6 +3115,8 @@ class EarningsEngineTest extends TestCase
         });
         $stock = $this->buildMatureIndustrial('STRT');
         $stock->setTotalEquity('3000000000');
+        // The market agrees: the shares trade at a fifth of book.
+        $stock->setPrice((string) (0.2 * 3_000_000_000.0 / (float) $stock->getSharesOutstanding()));
         $stock->setWholesaleDebt('40000000000');
         // The cash its $80B of revenue needs and no more: surplus cash is worth its face beside the business.
         $stock->setCorporateTreasury('4000000000');

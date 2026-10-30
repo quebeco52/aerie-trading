@@ -716,18 +716,16 @@ class StockModelTuning
         ],
 
         // --- Redwing Ore Line (REDW) ---
-        // The heavy-haul line off the northern orefields to the ice-free quays: ore, then timber and
-        // finished steel on the return working. A pure freight hauler, so the commuter sleeve KSTL runs at
-        // half its network is zero here and the other three account for the whole line. That makes it the
-        // board's one railway whose revenue answers to mining output rather than to employment, and the
-        // rail leg of the same cycle WING, CNDR and FULM are already exposed to.
+        // The heavy-haul line from the inland mines, quarries and farms to the deepwater quays. Bulk tonnage runs under
+        // take-or-pay contracts, so the bulk line holds through the cycle; steel, timber and containers on the return
+        // working follow factory output and trade. A pure freight hauler: the commuter line KSTL runs is zero here.
         'REDW' => [
-            // No passenger franchise: the line exists for the orefields
-            ModelParam::SubscriptionWeight->value       => 0.00,
-            ModelParam::BulkCommoditiesWeight->value    => 0.60, // Unit ore trains under long-term tonnage agreements
+            ModelParam::SubscriptionWeight->value       => 0.00, // No passenger service
+            // Ore, stone and grain under take-or-pay tonnage contracts
+            ModelParam::BulkCommoditiesWeight->value    => 0.60,
             ModelParam::IndustrialCarloadsWeight->value => 0.30, // Timber, pellets and finished steel
             ModelParam::IntermodalFreightWeight->value  => 0.10, // Containerised backhaul on otherwise empty returns
-            // A single-track monopoly on the corridor, bounded by what the mine can bear
+            // The only track on the corridor, bounded by what trucks and barges would charge
             ModelParam::PricingPowerIndex->value        => 0.75,
         ],
 

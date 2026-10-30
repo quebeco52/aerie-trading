@@ -176,7 +176,7 @@ final class IndustryBetas
         'Entertainment' => 'Entertainment',
         'Farm & Heavy Construction Machinery' => 'Machinery',
         'Farm Products' => 'Farming/Agriculture',
-        'Financial Data & Stock Exchanges' => 'Information Services',
+        'Financial Data & Ratings' => 'Information Services',
         'Financial Clearinghouses' => 'Financial Svcs. (Non-bank & Insurance)',
         'Securities & Commodity Exchanges' => 'Financial Svcs. (Non-bank & Insurance)',
         'Food Distribution' => 'Food Wholesalers',

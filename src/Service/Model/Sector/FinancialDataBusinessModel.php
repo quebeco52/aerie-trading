@@ -16,7 +16,7 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\ModelParam;
 
 /**
- * Earnings strategy for Financial Data & Stock Exchanges (Rating Agencies, Market Data).
+ * Earnings strategy for Financial Data & Ratings (Rating Agencies, Market Data).
  *
  * Financial Physics:
  * - Asset-light, ultra-high margin monopolies.

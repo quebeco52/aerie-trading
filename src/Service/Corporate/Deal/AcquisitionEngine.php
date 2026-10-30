@@ -390,7 +390,7 @@ class AcquisitionEngine
         }
 
         $ctx->config = $config;
-        $ctx->target = PrivateCompany::procedural($this->mathUtility);
+        $nameDraws = PrivateCompany::drawName($this->mathUtility);
         // A company none of whose markets wants more plant buys into an industry next to its own where one is worth
         // it; otherwise a company that keeps plant by segment buys into one of its markets, drawn in proportion to its
         // plant.
@@ -403,6 +403,7 @@ class AcquisitionEngine
         } elseif ($segmentDraw !== null) {
             $ctx->segment = SegmentBooks::acquiringSegment($stock, $segmentDraw);
         }
+        $ctx->target = ['name' => PrivateCompany::name($nameDraws, $this->targetIndustry($ctx))];
         $this->drawTargetEconomics($ctx);
 
         // The target is a private firm in the market the acquirer buys into, so the deal is sized to the largest
@@ -445,6 +446,18 @@ class AcquisitionEngine
         $proFormaEbitda = $ctx->health->rawMetrics->ebitda + $this->valueTarget($ctx, $ctx->purchasePrice)['operating_income'];
 
         return $this->debtEngine->priceAcquisitionDebt($ctx->acquirer, $ctx->macroState, $ctx->currentDebt - $ctx->treasury, $ctx->purchasePrice, $proFormaEbitda);
+    }
+
+    /** The industry the target trades in: the one the deal enters, or the buyer's segment it joins. */
+    private function targetIndustry(AcquisitionContext $ctx): ?string
+    {
+        if ($ctx->entry !== null) {
+            return $ctx->entry['industry'];
+        }
+
+        return Segments::enteredIndustry($ctx->segment)
+            ?? (Segments::forTicker((string) $ctx->acquirer->getTicker())['segments'][$ctx->segment]['industry'] ?? null)
+            ?? $ctx->acquirer->getIndustry();
     }
 
     /** Cuts the price to a limit below it and records that limit as the one the deal was sized to. */

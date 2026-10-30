@@ -369,7 +369,7 @@ class InitialMarket
             'management_style' => 'steward',
             'name' => 'Shrike Standard Ratings',
             'sector' => 'Financials',
-            'industry' => 'Financial Data & Stock Exchanges',
+            'industry' => 'Financial Data & Ratings',
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.25, // a ratings house, ~26% realized vol
@@ -764,7 +764,7 @@ class InitialMarket
             // is not cosmetic: it picks which demand factor the stream draws on and which cohort
             // the P/E anchor shrinks toward.
             'sector' => 'Financials',
-            'industry' => 'Financial Data & Stock Exchanges',
+            'industry' => 'Financial Data & Ratings',
             'systemic_importance' => 'systemic',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.25,
@@ -2815,7 +2815,7 @@ class InitialMarket
             'systemic_importance' => 'base',
             'shares_outstanding' => 1_000_000_000,
             'volatility' => 0.22,
-            'beta_tilt' => 0.10, // volumes follow the mining cycle
+            'beta_tilt' => 0.10, // steel, timber and container traffic follows the factory cycle
             'jump_intensity' => 0.35,
             'jump_vol' => 0.09,
             'baseline_roic' => 0.13,

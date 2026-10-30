@@ -989,11 +989,12 @@ class EarningsEngine
     /**
      * Annual goodwill impairment test (ASC 350 as simplified by ASU 2017-04), run in the fiscal fourth quarter: one
      * step, the carrying amount of the reporting unit less its fair value, capped at the goodwill it carries. The firm
-     * is its own reporting unit and its fair value is the one the market strikes on its books (MarketEngine), which
-     * discounts expected returns with their persistence rather than capitalizing one trailing year forever, so a
-     * cyclical dip in returns does not write off the acquisition. It is read before any holding-company discount. The
-     * charge is non-cash: it hits reported (GAAP) earnings, equity and the goodwill balance, never free cash flow, and
-     * analysts do not forecast it.
+     * is its own reporting unit. Its fair value is the higher of two readings an auditor reconciles: the value struck
+     * on its books (MarketEngine), which discounts expected returns with their persistence, so a dip in the price does
+     * not write off an acquisition; and its quoted equity (ASC 820 ranks a quoted price first), so a business the
+     * market values above its books is not written down on the model's word alone. Both are read before any
+     * holding-company discount. The charge is non-cash: it hits reported (GAAP) earnings, equity and the goodwill
+     * balance, never free cash flow, and analysts do not forecast it.
      */
     private function testGoodwillForImpairment(EarningsSimulationContext $ctx): void
     {
@@ -1006,7 +1007,7 @@ class EarningsEngine
         // The unit is valued before any closed-end discount: that wedge is on the holder's own shares, not on the
         // business it bought, and struck after it a trust writes off every acquisition at its next year-end.
         $unitDiscount = $ctx->strategy->getStructuralValuationDiscount($ctx->macroState);
-        $fairValue = $ctx->fairValueBeforeReport * max(0.0, $ctx->sharesOutstanding) / (1.0 - $unitDiscount);
+        $fairValue = max($ctx->fairValueBeforeReport, (float) $stock->getPrice()) * max(0.0, $ctx->sharesOutstanding) / (1.0 - $unitDiscount);
         $impairment = min($goodwill, max(0.0, (float) $stock->getTotalEquity() - $fairValue));
         if ($impairment < $goodwill * self::MIN_GOODWILL_IMPAIRMENT_FRACTION) {
             return;

@@ -37,6 +37,9 @@ def gdp_at(run, t):
 
 
 SPLIT_RATIO = 1.4
+# Returns on equity that explain an extreme price to book: above 20% for 10x book, below 10% for 0.3x.
+PB_HIGH_ROE = 0.20
+PB_LOW_ROE = 0.10
 
 
 def split_adjusted(q):
@@ -120,8 +123,12 @@ def score(run):
             if r.get('rating') in LOW_GRADES:
                 low_grade += 1
             bvps = r['eq'] / r['shares'] if r.get('shares') else 0.0
-            if bvps > 0 and r['price'] > 0 and (r['price'] / bvps > 10 or r['price'] / bvps < 0.3):
-                pb_extreme += 1
+            if bvps > 0 and r['price'] > 0:
+                # Price to book is return on equity times the earnings multiple: 10x book on a 40% ROE is a brand or a
+                # tobacco firm, so only extremes the return does not explain count.
+                pb, roe = r['price'] / bvps, 4 * r['ni'] / r['eq']
+                if (pb > 10 and roe < PB_HIGH_ROE) or (pb < 0.3 and roe > PB_LOW_ROE):
+                    pb_extreme += 1
         # Price: worst drawdown over the run.
         d = max_drawdown(split_adjusted(q))
         dd.append(d)
@@ -173,7 +180,7 @@ STANDARDS = [
     ('firms with goodwill > equity', 'firms_gw_over_eq', '{:.1f}', (0, 3)),
     ('median worst drawdown', 'dd_median', '{:+.2f}', (-0.70, -0.30)),
     ('firms with drawdown >80%', 'firms_dd_80', '{:.1f}', (0, 10)),
-    ('firm-quarters P/B >10 or <0.3', 'pb_extreme_share', '{:.3f}', (0.0, 0.03)),
+    ('P/B >10 or <0.3 unexplained by ROE', 'pb_extreme_share', '{:.3f}', (0.0, 0.03)),
     ('firm-quarters rated CCC or below', 'low_grade_share', '{:.3f}', (0.0, 0.03)),
     ('firm-quarters with negative equity', 'neg_equity_share', '{:.3f}', (0.0, 0.005)),
 ]
