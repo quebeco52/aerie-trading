@@ -533,10 +533,35 @@ class AcquisitionEngineTest extends TestCase
         $deal = $this->engine->evaluatePrivateAcquisition($stock, $macroState, 1.0);
 
         $this->assertIsArray($deal, 'the levered deal must execute');
-        $this->assertCount(1, $priced, 'the deal must borrow and be priced');
+        // Priced once for the accretion screen and once at funding, on the same terms.
+        $this->assertCount(2, $priced, 'the deal must borrow and be priced');
+        $this->assertSame($priced[0], $priced[1]);
         $this->assertSame([0.065], $borrowed, 'the notes carry the coupon they were priced at');
         $this->assertEqualsWithDelta($netDebtBefore, $priced[0]['net_debt'], 1.0);
         $this->assertEqualsWithDelta((float) $deal['spent'], $priced[0]['price'], 1.0);
+    }
+
+    /**
+     * Borrowed buying stops where it would dilute earnings per share: the fixture's target earns 0.25 x 1.10 after tax
+     * on its price, so notes costing more than that grossed up for tax call the deal off, and cheaper ones let it
+     * through.
+     */
+    public function testADealWhoseDebtCostsMoreThanItEarnsIsCalledOff(): void
+    {
+        $macroState = new MacroStateDTO(policyRateEma: 0.03, corporateTaxRate: 0.21, yield5yEma: 0.035);
+        $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
+        $this->bookIssuedDebt();
+        $coupon = 0.065;
+        $this->debtEngineMock->method('priceAcquisitionDebt')->willReturnCallback(static function () use (&$coupon): float {
+            return $coupon;
+        });
+
+        $cheap = $this->engine->evaluatePrivateAcquisition($this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 3_000_000_000.0, shares: 100_000_000.0), $macroState, 1.0);
+        $this->assertIsArray($cheap, 'an accretive borrowed deal goes ahead');
+
+        $coupon = 0.60;
+        $dear = $this->engine->evaluatePrivateAcquisition($this->buildLedgeredAcquirer('LEVR', treasury: 1_000_000_000.0, debt: 3_000_000_000.0, shares: 100_000_000.0), $macroState, 1.0);
+        $this->assertNull($dear, 'a dilutive borrowed deal is called off');
     }
 
     /**

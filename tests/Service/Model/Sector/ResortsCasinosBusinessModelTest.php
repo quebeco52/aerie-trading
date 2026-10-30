@@ -284,4 +284,30 @@ class ResortsCasinosBusinessModelTest extends TestCase
         $this->assertSame(0, array_search(min($factors), $factors, true));
     }
 
+    public function testTheSeasonFallsOnVisitorsAndPercentageRentOnly(): void
+    {
+        $model = new ResortsCasinosBusinessModel();
+        $macro = $this->createMacroState();
+        $stock = $this->stock('GULL', ['state:in_place_rent' => 0.0]);
+        $summer = 2;
+        $resort = ResortsCasinosBusinessModel::SEASONALITY_FACTORS[$summer];
+        $rentSeason = 1.0 + (ResortsCasinosBusinessModel::OVERAGE_RENT_SHARE * ($resort - 1.0));
+
+        // GULL's firm season is its mix's: 30% on the resort's, 70% on rent's.
+        $firmSeason = $model->resolveSeasonalityFactors($stock)[$summer];
+        $this->assertEqualsWithDelta((0.30 * $resort) + (0.70 * $rentSeason), $firmSeason, 1e-9);
+        $this->assertEqualsWithDelta(1.0, array_sum($model->resolveSeasonalityFactors($stock)) / 4.0, 0.005);
+        // A casino without a rent roll keeps the resort's.
+        $this->assertEqualsWithDelta(ResortsCasinosBusinessModel::SEASONALITY_FACTORS, $model->resolveSeasonalityFactors($this->stock('CASINO')), 1e-12);
+
+        $flat = $model->computeActualFinancials($stock, 10_000.0, 0.33, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]));
+        $peak = $model->computeActualFinancials($stock, 10_000.0 * $firmSeason, 0.33, 2000.0, 0.15, $macro, $this->createMathUtilityMock([0.0, 0.0, 0.0, 0.0, 0.0]), $summer);
+
+        $this->assertEqualsWithDelta($resort, $peak->streamRevenue['gaming'] / $flat->streamRevenue['gaming'], 1e-9);
+        $this->assertEqualsWithDelta($resort, $peak->streamRevenue['non_gaming'] / $flat->streamRevenue['non_gaming'], 1e-9);
+        $this->assertEqualsWithDelta($rentSeason, $peak->streamRevenue['cre'] / $flat->streamRevenue['cre'], 1e-9);
+        // The lines add back to the season the engine expected.
+        $this->assertEqualsWithDelta($firmSeason, $peak->actualRevenue / $flat->actualRevenue, 1e-9);
+    }
+
 }

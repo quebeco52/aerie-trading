@@ -39,3 +39,13 @@ that real economies span, so a change is judged on the board, not on one firm.
   firms whose share moved x3 1.0 -> 0.4 (t -2.4), opening cap/GDP 3.88 -> 3.88, P/B extremes 3.4% -> 3.7% (t +1.2),
   median margin sd 0.049 -> 0.053 (t +4.0). TERN worst falls -58..-97% -> -61..-93%; cost of equity 9-11.5% through
   a trough where it was 20-22%.
+- 10-30 GULL live read (6 debt-funded deals in 7.9y, price 135 -> 70). Two changes, arm `accr` vs `head` (2336e876;
+  BoardRun now records every "executed a $" deal, so deal counts before this line undercount):
+  - Resort seasonality per line (ResortsCasinosBusinessModel::resolveSeasonalityFactors): base rent no longer
+    follows the casino season. GULL's quarter-on-quarter revenue sd 0.167 -> 0.076.
+  - Accretion screen on borrowed deals (AcquisitionEngine::addsToEarningsPerShare): barely bites. Debt-funded
+    deals 884 -> 810 over 8 runs; all deals 188 -> 183 a run (t -0.5); GULL 9.5 -> 8.8 deals a run. Board
+    unchanged within noise: reorganisations 0.5 -> 0.2 (t -1.5), defaulters 0.6 -> 0.4 (t -1.0). Why: a target
+    earns ~6.4% after tax on its price (ROIC 8% / 1.25 hubris) against ~4.3% after-tax interest.
+  - Board: 188 deals a run (0.16 per firm-year). Every empire builder does 5+ in most seeds (HUMM, SILC, WREN,
+    TRIV, GULL, ...). Succession does not fire GULL's manager because its EVA spread is strongly positive.

@@ -174,6 +174,46 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
      */
     public const SEASONALITY_FACTORS = [0.90, 0.99, 1.18, 0.93];
 
+    /**
+     * The firm's season: the resort's on the floor and in the hotel, and on the rent roll only through percentage rent,
+     * weighted by the quarter's revenue mix. A landlord's base rent is contracted and does not follow the tourist
+     * season.
+     *
+     * @return array<int, float>
+     */
+    public function resolveSeasonalityFactors(Stock $stock): array
+    {
+        $weights = StreamContext::planWeights($stock->getTicker(), $stock->getEarningsMomentumZ() ?? [], $this->resolveTargetWeights($stock));
+
+        $factors = [];
+        foreach (array_keys(self::SEASONALITY_FACTORS) as $quarter) {
+            $seasons = $this->streamSeasons($quarter);
+            $factors[$quarter] = 0.0;
+            foreach ($weights as $key => $weight) {
+                $factors[$quarter] += $weight * $seasons[$key];
+            }
+        }
+
+        return $factors;
+    }
+
+    /**
+     * Each stream's own season in a calendar quarter: the resort's on gaming and the hotel; on rent, the percentage
+     * rent share of it.
+     *
+     * @return array{gaming: float, non_gaming: float, cre: float}
+     */
+    private function streamSeasons(int $calendarQuarter): array
+    {
+        $resort = self::SEASONALITY_FACTORS[$calendarQuarter];
+
+        return [
+            'gaming'     => $resort,
+            'non_gaming' => $resort,
+            'cre'        => 1.0 + (self::OVERAGE_RENT_SHARE * ($resort - 1.0)),
+        ];
+    }
+
     // --- Secular Demand ---
     /**
      * Amusements, gambling and recreation plus accommodation value added as a share of US nominal GDP in 1997 (BEA GDP
@@ -256,14 +296,19 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $shifts = $this->resolveStreamShifts($visitorShift, $streams->getRegimeElapsed(self::CRACKDOWN_REGIME) > 0, $rolledInPlaceRent, $tenantDefaultLoss);
         // Each stream's level over the one expected revenue was built at.
         $relative = static fn(float $shift): float => ((1.0 + $shift) / max(0.01, 1.0 + $rootShift)) - 1.0;
+        // Expected revenue carries the firm's season; each stream swaps it for its own.
+        $calendarQuarter = $this->reportedCalendarQuarter();
+        $streamSeasons = $calendarQuarter !== null ? $this->streamSeasons($calendarQuarter) : ['gaming' => 1.0, 'non_gaming' => 1.0, 'cre' => 1.0];
+        $firmSeason = $calendarQuarter !== null ? $this->resolveSeasonalityFactors($stock)[$calendarQuarter] : 1.0;
+        $season = static fn(string $key): float => $streamSeasons[$key] / max(0.01, $firmSeason);
 
         // --- Gaming: volume on the visitor cycle, hold luck on the high-limit tables ---
-        $gamingVolumeRevenue = max(0.0, $expectedRevenue * $gamingWeight
+        $gamingVolumeRevenue = max(0.0, $expectedRevenue * $gamingWeight * $season('gaming')
             * (1.0 + $relative($shifts['gaming']) + ($gamingZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR)));
         $holdLuck = $holdZ * self::HIGH_LIMIT_SHARE_OF_GAMING * self::HIGH_LIMIT_HOLD_VOLATILITY;
         $gamingRevenue = max(0.0, $gamingVolumeRevenue * (1.0 + $holdLuck));
 
-        $nonGamingRevenue = max(0.0, $expectedRevenue * $nonGamingWeight
+        $nonGamingRevenue = max(0.0, $expectedRevenue * $nonGamingWeight * $season('non_gaming')
             * (1.0 + $relative($shifts['non_gaming']) + ($nonGamingZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::NON_GAMING_VOLATILITY_SCALAR)));
 
         $streamRevenues = [
@@ -281,8 +326,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
             $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
 
             // The leased footprint carries the operating cost; the rent it earns moves with the roll and tenant sales.
-            $creLeasedRevenue = max(0.0, $expectedRevenue * $creWeight * (1.0 + $leasingShock + $relative(0.0)));
-            $streamRevenues['cre'] = max(0.0, $expectedRevenue * $creWeight * (1.0 + $leasingShock + $relative($shifts['cre'])));
+            $creLeasedRevenue = max(0.0, $expectedRevenue * $creWeight * $season('cre') * (1.0 + $leasingShock + $relative(0.0)));
+            $streamRevenues['cre'] = max(0.0, $expectedRevenue * $creWeight * $season('cre') * (1.0 + $leasingShock + $relative($shifts['cre'])));
 
             $kpis = [
                 'walt_years' => self::CRE_LEASE_WALT_YEARS,

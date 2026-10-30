@@ -6,6 +6,7 @@ A second arm prints both side by side with the paired difference over the seeds 
 import glob
 import json
 import math
+import re
 import statistics as st
 import sys
 from collections import Counter
@@ -67,6 +68,13 @@ def score(run):
     offenders = Counter()
     out = {}
 
+    # Deals: each acquisition the run announced ("<buyer> executed a $X ...").
+    deals = Counter(t for t, ev in run.get('events', {}).items() for x in ev if re.search(r'executed a \$', x['d']))
+    out['deals'] = sum(deals.values())
+    out['firms_5_deals'] = sum(1 for n in deals.values() if n >= 5)
+    for t, n in deals.items():
+        if n >= 5:
+            offenders[(t, '5+ deals')] += 1
     out['deaths'] = len(run['dead'])
     out['reorgs'] = len(run['reorgs'])
     out['defaulters'] = len(run['defaults'])
@@ -159,6 +167,8 @@ STANDARDS = [
     ('firms whose share moved x3', 'firms_share_x3', '{:.1f}', (0, 5)),
     ('median margin sd (operating)', 'margin_sd_median', '{:.3f}', (0.0, 0.05)),
     ('firms with margin sd >10pp', 'firms_margin_sd_10pp', '{:.1f}', (0, 3)),
+    ('acquisitions', 'deals', '{:.1f}', (0, 60)),
+    ('firms with 5+ deals', 'firms_5_deals', '{:.1f}', (0, 2)),
     ('peak goodwill / equity p90', 'gw_eq_p90', '{:.2f}', (0.0, 1.0)),
     ('firms with goodwill > equity', 'firms_gw_over_eq', '{:.1f}', (0, 3)),
     ('median worst drawdown', 'dd_median', '{:+.2f}', (-0.70, -0.30)),

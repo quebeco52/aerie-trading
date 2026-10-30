@@ -335,18 +335,30 @@ class StreamContext
      */
     public function resolveActiveStreamWeights(array $targetWeights): array
     {
-        $split = SegmentBooks::splitToTargets($this->ticker, $this->previousMomentum, $targetWeights);
-        foreach ($split === null ? $targetWeights : [] as $key => $weight) {
-            $targetWeights[$key] = $weight * SegmentOutlook::tilt($this->previousMomentum, (string) $key);
-        }
-        $targetWeights = $split ?? $targetWeights;
-
-        $activeWeights = ResponseCurves::normalizeWeightsSimplex($targetWeights);
+        $activeWeights = self::planWeights($this->ticker, $this->previousMomentum, $targetWeights);
         foreach ($activeWeights as $key => $weight) {
             $this->registerZ("weight:{$key}", $weight);
         }
 
         return $activeWeights;
+    }
+
+    /**
+     * The weights resolveActiveStreamWeights() gives a quarter opening on this carried state, without recording them:
+     * for a reader outside the physics that needs the plan's mix (a firm-level season built from its lines').
+     *
+     * @param array<string, mixed> $momentum
+     * @param array<string, float> $targetWeights Map of stream keys to the plan's weights
+     * @return array<string, float>
+     */
+    public static function planWeights(?string $ticker, array $momentum, array $targetWeights): array
+    {
+        $split = SegmentBooks::splitToTargets($ticker, $momentum, $targetWeights);
+        foreach ($split === null ? $targetWeights : [] as $key => $weight) {
+            $targetWeights[$key] = $weight * SegmentOutlook::tilt($momentum, (string) $key);
+        }
+
+        return ResponseCurves::normalizeWeightsSimplex($split ?? $targetWeights);
     }
 
     /**

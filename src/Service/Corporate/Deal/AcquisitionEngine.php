@@ -411,9 +411,40 @@ class AcquisitionEngine
         $this->capPurchasePrice($ctx, $market['price'], $market['limit']);
         $this->capPurchasePrice($ctx, $this->resolveLargestCapitalClearedDeal($ctx), self::LIMIT_CAPITAL_TEST);
         $this->capPurchasePrice($ctx, $this->resolveLargestCovenantClearedDeal($ctx), self::LIMIT_COVENANT);
-        if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE) {
+        if ($ctx->purchasePrice < self::MA_MIN_DEAL_SIZE || !$this->addsToEarningsPerShare($ctx)) {
             $ctx->dealExecuted = false;
         }
+    }
+
+    /**
+     * Whether a deal that borrows adds to earnings per share: the after-tax operating profit it buys at the price paid
+     * against the after-tax interest on the new debt and on the cash it spends. Managers screen deals on accretion
+     * (Graham, Harvey & Rajgopal 2005), so borrowed buying follows the acquirer's own credit: a wider spread, a fallen
+     * share price or the debt of the last deal makes the next one dilutive. A deal paid from cash or in shares is not
+     * screened.
+     */
+    private function addsToEarningsPerShare(AcquisitionContext $ctx): bool
+    {
+        if (!($ctx->config['use_leverage'] ?? false) || $ctx->purchasePrice <= $ctx->usableTreasury) {
+            return true;
+        }
+
+        $debt = $ctx->purchasePrice - $ctx->usableTreasury;
+        $interest = ($debt * $this->priceDealDebt($ctx)) + ($ctx->usableTreasury * $ctx->macroState->policyRate);
+        $afterTax = 1.0 - $ctx->strategy->getEffectiveTaxRate($ctx->macroState->corporateTaxRate);
+
+        return $this->valueTarget($ctx, $ctx->purchasePrice)['nopat'] > $interest * $afterTax;
+    }
+
+    /**
+     * The rate the deal's notes price at: the rating the pro-forma balance sheet carries, with the combined EBITDA the
+     * acquirer's trailing figure plus the operating income the target is bought for.
+     */
+    private function priceDealDebt(AcquisitionContext $ctx): float
+    {
+        $proFormaEbitda = $ctx->health->rawMetrics->ebitda + $this->valueTarget($ctx, $ctx->purchasePrice)['operating_income'];
+
+        return $this->debtEngine->priceAcquisitionDebt($ctx->acquirer, $ctx->macroState, $ctx->currentDebt - $ctx->treasury, $ctx->purchasePrice, $proFormaEbitda);
     }
 
     /** Cuts the price to a limit below it and records that limit as the one the deal was sized to. */
@@ -638,10 +669,7 @@ class AcquisitionEngine
             $ctx->debtIssued = $ctx->purchasePrice - $ctx->usableTreasury;
             $stock->setCorporateTreasury((string) ($ctx->treasury - $ctx->usableTreasury));
 
-            // The deal's notes price at the rating the pro-forma balance sheet carries: the combined EBITDA is the
-            // acquirer's trailing figure plus the operating income the target is bought for.
-            $proFormaEbitda = $ctx->health->rawMetrics->ebitda + $this->valueTarget($ctx, $ctx->purchasePrice)['operating_income'];
-            $ctx->costOfNewDebt = $this->debtEngine->priceAcquisitionDebt($stock, $ctx->macroState, $ctx->currentDebt - $ctx->treasury, $ctx->purchasePrice, $proFormaEbitda);
+            $ctx->costOfNewDebt = $this->priceDealDebt($ctx);
 
             $this->debtEngine->issueDebt($stock, $ctx->debtIssued, $ctx->costOfNewDebt);
         }

@@ -580,7 +580,7 @@ abstract class BoardRun extends KernelTestCase
                 $this->onEvent($e);
                 // Treasury distress lines ride inside the earnings description as bullets: keep only those.
                 foreach (preg_split('/\n/', (string) $e->getDescription()) ?: [] as $line) {
-                    if (preg_match('/borrow|revolv|bond market|stave off|repay|default|record of dividend|Chapter|liquidat|rescue|covenant|restructur|in bonds for|Deployed/i', $line)) {
+                    if (preg_match('/borrow|revolv|bond market|stave off|repay|default|record of dividend|Chapter|liquidat|rescue|covenant|restructur|in bonds for|Deployed|executed a \$/i', $line)) {
                         $this->events[$e->getStock()->getTicker()][] = ['t' => round($this->currentTime, 3), 'd' => substr(ltrim($line, "• "), 0, 160)];
                     }
                 }
