@@ -40,6 +40,25 @@ final class ManagementValuationTest extends TestCase
         $this->assertGreaterThan($eps(0.05, 0.15), $eps(0.05, 0.25));
     }
 
+    /**
+     * The board's multiple carries the market factor's repricing at the stock's beta, as the market's fair value does,
+     * so a market-wide fall leaves the stock no cheaper against the board's own multiple.
+     */
+    public function testTheBoardsMultipleMovesWithTheMarketsRepricing(): void
+    {
+        $stock = (new Stock())->setTicker('MGMT')->setIndustry('Specialty Industrial Machinery');
+        $stock->setTotalEquity('1000000000');
+        $stock->setSharesOutstanding('10000000');
+        $stock->setEarningsMomentumZ([EarningsEngine::STATE_TRAILING_RETURN => 0.15, EarningsEngine::STATE_ANCHOR_RETURN => 0.15]);
+        $strategy = Sectors::strategyFor('Specialty Industrial Machinery');
+        $health = DebtHealthBuilder::healthy()->withLeveredBeta(1.3)->build();
+        $pe = static fn(float $shift): float => ManagementValuation::fairValuePE($strategy, $stock, $health, new MacroStateDTO(corporateTaxRate: 0.21, equityValuationShift: $shift));
+
+        foreach ([-0.5, 0.5] as $shift) {
+            $this->assertEqualsWithDelta(exp(1.3 * $shift), $pe($shift) / $pe(0.0), 1e-9);
+        }
+    }
+
     /** A lender's good or bad year fades at a lender's persistence, an operating firm's at its own. */
     public function testEachModelFadesARecentYearAtItsOwnPersistence(): void
     {

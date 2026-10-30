@@ -66,3 +66,7 @@ g = log(P/F), its persistence and its attribution to price channels.
   firms under 5% ROE, SWAN ROE and margin, cash/equity, low-return hoarders), `franchise.py` and `momentum.py` on the
   same arms. The hoarder count also flags lenders whose cash is their balance sheet; read the names before acting on
   it. ~2.5 min an arm.
+- Board multiple (10-30): `mv1` = working tree on ac0ae3ae with ManagementValuation::fairValuePE repriced by the market
+  factor at the stock's beta (MacroStateDTO::equityRepricing()), as fair value is; base `fhl3`. `market_board.py 1-8 fhl3
+  mv1`: buyback yield and its correlation and slope on V (the factor rebuilt from the probe's mkt + jS channels at the
+  5-year fade), median split-adjusted share count y20/y1, board P/E min / max / sd log, sd V, deals.

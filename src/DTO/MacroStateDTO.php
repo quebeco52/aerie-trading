@@ -1008,6 +1008,15 @@ readonly class MacroStateDTO
     }
 
     /**
+     * The factor the valuation shift puts on an equity of this beta. The market's fair value and the board's own
+     * multiple both carry it, so a market-wide move opens no gap for a buyback, an issue or a deal to trade on.
+     */
+    public function equityRepricing(float $beta): float
+    {
+        return exp($beta * $this->equityValuationShift);
+    }
+
+    /**
      * The cost of equity at a beta of one: the smoothed ten-year plus the equity risk premium (Sharpe-Lintner CAPM).
      */
     public function marketCostOfEquity(): float

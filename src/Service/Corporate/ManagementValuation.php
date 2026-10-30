@@ -18,7 +18,8 @@ use App\Service\Model\BusinessModelInterface;
  * The multiple a firm's board holds its own stock to be worth, and the earnings it is struck on. The buyback, issuance
  * and M&A engines all compare the price over those earnings against the multiple, so both are struck in one place, the
  * way the market strikes them: the cost of equity on the return on equity, shrunk toward the industry's baseline
- * multiple (Sectors::baselineIndustryPe()).
+ * multiple (Sectors::baselineIndustryPe()), repriced by the market factor at the stock's beta
+ * (MacroStateDTO::equityRepricing()).
  */
 final class ManagementValuation
 {
@@ -26,7 +27,7 @@ final class ManagementValuation
     {
         $equityRates = self::equityRates($strategy, $stock, $health, $macroState);
 
-        return Valuation::calculateManagementFairValuePE(
+        return $macroState->equityRepricing($health->leveredBeta) * Valuation::calculateManagementFairValuePE(
             $equityRates['costOfEquity'],
             $equityRates['equityReturn'],
             SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime),
