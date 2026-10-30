@@ -220,7 +220,10 @@ class ShockEvent
 
     public const SECURITY_BREACH = 'security_breach';
     public const GEOPOLITICAL_CONFLICT = 'geopolitical_conflict';
+    /** Fulfilment-centre workers struck at an online retailer; parcels backed up and overtime ran. */
     public const LABOR_STRIKE = 'labor_strike';
+    /** Assembly-line workers walked out at a carmaker's plants; vehicle output stopped until the strike settled. */
+    public const ASSEMBLY_STRIKE = 'assembly_strike';
     /** Dock crews walked off a container terminal; ships wait or divert until the strike is settled. */
     public const DOCK_STRIKE = 'dock_strike';
     /** A large generating unit tripped or was found unsafe and is out of service for repair. */

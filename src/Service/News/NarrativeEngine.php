@@ -276,6 +276,11 @@ class NarrativeEngine
                 "Mass warehouse worker walkouts and picket lines halted regional package distribution.",
                 "Coordinated labour strikes across key fulfilment hubs triggered widespread delivery delays and emergency overtime costs.",
             ]),
+            ShockEvent::ASSEMBLY_STRIKE => $this->getRandomPhrase([
+                "Assembly-line workers walked out over pay and line speeds, halting vehicle output at the main plants.",
+                "A strike on the assembly lines stopped production for weeks, leaving dealers short of new vehicles.",
+                "Car plant workers struck over a new labour contract; output was lost while fixed plant costs kept running.",
+            ]),
             ShockEvent::DOCK_STRIKE => $this->getRandomPhrase([
                 "Dock crews walked off the container terminals over pay and shift rosters, idling the cranes.",
                 "A strike at the free port's container quays left ships waiting at anchor and lines diverting calls to rival hubs.",

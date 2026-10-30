@@ -25,7 +25,7 @@ use App\Service\Model\ModelParam;
  *   as a Trojan horse, bearing heavy fixed-cost operating leverage and high sensitivity to policy interest rates.
  * - Tri-Stream Mobility Architecture:
  *   1. Mass-Market Fleet Sales: High-volume commuter vehicle manufacturing (interest-rate sensitive, consumer
- *      sentiment driven, exposed to UAW labor strikes and supply chain inflation).
+ *      sentiment driven, exposed to assembly-line strikes and supply chain inflation).
  *   2. Apex Division Luxury Hypercars: Hyper-exclusive Veblen hypercars sold to corporate oligarchs and the elite
  *      at astronomical profit margins, cross-subsidizing the mass-market fleet.
  *   3. Connected Telematics: Sticky recurring software tolls and telemetry subscriptions on the fleet on the road.
@@ -246,11 +246,11 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
     /** Variable margin penalty applied during safety recalls to cover warranty replacements and legal damages. */
     public const MASSIVE_RECALL_PENALTY = 0.05;
 
-    /** Negative Z-score threshold indicating an auto-worker union labor strike. */
-    public const UAW_STRIKE_Z_SCORE = -2.50;
+    /** Negative Z-score threshold indicating an assembly-line strike. */
+    public const ASSEMBLY_STRIKE_Z_SCORE = -2.50;
 
     /** Revenue throughput multiplier applied during factory assembly shutdowns from labor strikes. */
-    public const UAW_STRIKE_MULT = 0.80;
+    public const ASSEMBLY_STRIKE_MULT = 0.80;
 
     /**
      * A vehicle is sold from stock, not built to an order book: the purchase swing lands on expected revenue, which the
@@ -343,9 +343,9 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $salesMultiplier = 1.0;
         $recallPenalty = 0.0;
 
-        if ($eventZ < self::UAW_STRIKE_Z_SCORE) {
-            $eventType = ShockEvent::LABOR_STRIKE;
-            $salesMultiplier = self::UAW_STRIKE_MULT;
+        if ($eventZ < self::ASSEMBLY_STRIKE_Z_SCORE) {
+            $eventType = ShockEvent::ASSEMBLY_STRIKE;
+            $salesMultiplier = self::ASSEMBLY_STRIKE_MULT;
         } elseif ($eventZ < self::MASSIVE_RECALL_Z_SCORE) {
             $eventType = ShockEvent::PRODUCT_RECALL;
             $recallPenalty = self::MASSIVE_RECALL_PENALTY;

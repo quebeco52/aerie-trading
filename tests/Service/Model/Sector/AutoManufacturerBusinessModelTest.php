@@ -150,7 +150,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(27_500_000.0, $wealthBoomResult->streamRevenue['apex_luxury'], 1.0);
     }
 
-    public function testLaborStrikeObservableShockBounded(): void
+    public function testAssemblyStrikeObservableShockBounded(): void
     {
         $mathMock = new ScriptedDraws(generatePersistentZ: -3.0);
 
@@ -173,7 +173,7 @@ class AutoManufacturerBusinessModelTest extends TestCase
             mathUtility: $mathMock,
         );
 
-        $this->assertSame(\App\Service\Event\ShockEvent::LABOR_STRIKE, $result->eventType);
+        $this->assertSame(\App\Service\Event\ShockEvent::ASSEMBLY_STRIKE, $result->eventType);
     }
 
     public function testCoverageProfile(): void
