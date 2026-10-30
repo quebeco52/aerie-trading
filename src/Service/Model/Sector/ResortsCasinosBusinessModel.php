@@ -95,8 +95,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const SENTIMENT_SENSITIVITY_SCALAR = 0.25;
     /** Visitor volume per unit of the foreign bloc's output gap: inbound tourism and convention traffic. */
     public const FOREIGN_DEMAND_SENSITIVITY = 1.00;
-    /** AR(1) persistence of the firm's own visitor volume shocks (hotel occupancy, convention backlog, gaming drop). */
-    public const VISITOR_DEMAND_PERSISTENCE = 0.35;
     /** Scalar for how much variable margins compress via promotional comps when sentiment drops. */
     public const PROMOTIONAL_COMP_DRAG_SCALAR = 0.15;
 
@@ -152,8 +150,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     public const RETAIL_TENANT_DEFAULT_RENT_LOSS = ReitBusinessModel::RETAIL_DEFAULT_VACANCY_SCALAR;
     /** Volatility dampener applied to commercial real estate leases due to long-term lockups. */
     public const CRE_VOLATILITY_SCALAR = 0.20;
-    /** AR(1) persistence of leasing noise on the rent roll. */
-    public const CRE_LEASING_PERSISTENCE = 0.50;
     /** Persisted state key: in-place rent relative to trend, carried across quarters as the roll turns over. */
     public const STATE_IN_PLACE_RENT = 'state:in_place_rent';
 
@@ -268,8 +264,8 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $rootShift = $this->resolveRootShift($stock, $macroState, $visitorShift);
         $tenantDefaultLoss = $this->resolveTenantDefaultLoss($macroState);
 
-        $gamingZ    = $streams->generateZ('gaming', self::VISITOR_DEMAND_PERSISTENCE);
-        $nonGamingZ = $streams->generateZ('non_gaming', self::VISITOR_DEMAND_PERSISTENCE);
+        $gamingZ    = $streams->generateDemandZ('gaming');
+        $nonGamingZ = $streams->generateDemandZ('non_gaming');
         $holdZ      = $streams->generateExogenousZ('hold', 0.0);
         $eventZ     = $streams->generateExogenousZ('event', 0.0);
 
@@ -321,7 +317,7 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
         $creLeasedRevenue = 0.0;
         $kpis = [];
         if ($creWeight > 0.0) {
-            $creZ = $streams->generateZ('cre', self::CRE_LEASING_PERSISTENCE);
+            $creZ = $streams->generateDemandZ('cre');
             $leasingShock = $creZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * self::CRE_VOLATILITY_SCALAR;
             $streams->registerState(self::STATE_IN_PLACE_RENT, $rolledInPlaceRent);
 

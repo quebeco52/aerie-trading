@@ -1018,7 +1018,7 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
         // Premium volume loads on the firm and sector demand factors; claims are the firm's own large losses
         // plus its share of the district's storm season, which every carrier pays together.
-        $revenueZ = $streams->generateZ('revenue', 0.25);
+        $revenueZ = $streams->generateDemandZ('revenue');
         $claims   = $this->resolveExcessClaims($streams, $macroState, 1.0, $catThreshold, $catScalar);
 
         $actualRevenue = $expectedRevenue * (1.0 + ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));

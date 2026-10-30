@@ -130,8 +130,8 @@ class ExchangeOperatorBusinessModel extends StandardCorporateBusinessModel
 
         $equityZ    = $streams->generateZ('equity_trading', 0.20);
         $commodityZ = $streams->generateZ('commodity_futures', 0.20);
-        $listingZ   = $streams->generateZ('listings', 0.40);
-        $dataZ      = $streams->generateZ('market_data', 0.50);
+        $listingZ   = $streams->generateDemandZ('listings');
+        $dataZ      = $streams->generateDemandZ('market_data');
 
         $tradingNoise = $baselineVol * self::TRADING_VARIANCE_SCALAR;
         $subscriptionNoise = $baselineVol * self::SUBSCRIPTION_VARIANCE_SCALAR;

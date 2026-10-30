@@ -184,8 +184,8 @@ class LuxuryBusinessModel extends StandardCorporateBusinessModel
         $accessibleWeight = $activeWeights['accessible_luxury'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $hauteZ      = $streams->generateZ('haute_couture', 0.40); // UHNW leather goods / couture demand
-        $accessibleZ = $streams->generateZ('accessible_luxury', 0.15); // Fragrance & cosmetics retail volume
+        $hauteZ      = $streams->generateDemandZ('haute_couture'); // UHNW leather goods / couture demand
+        $accessibleZ = $streams->generateDemandZ('accessible_luxury'); // Fragrance & cosmetics retail volume
         $eventZ      = $streams->generateExogenousZ('event', 0.05);
 
         $hauteRevenue      = $expectedRevenue * $hauteWeight * (1.0 + ($hauteZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR)));

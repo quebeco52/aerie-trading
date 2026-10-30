@@ -332,11 +332,11 @@ class AutoManufacturerBusinessModel extends HeavyManufacturingBusinessModel
         $captiveWeight  = $activeWeights['captive_finance'] ?? 0.0;
 
         // Independent stream Z-scores with persistent AR(1) momentum
-        $salesZ    = $streams->generateZ('mass_market_sales', 0.25);
-        $apexZ     = $streams->generateZ('apex_luxury', 0.35);
-        $softwareZ = $streams->generateZ('software_telematics', 0.40);
+        $salesZ    = $streams->generateDemandZ('mass_market_sales');
+        $apexZ     = $streams->generateDemandZ('apex_luxury');
+        $softwareZ = $streams->generateDemandZ('software_telematics');
         $eventZ    = $streams->generateExogenousZ('event', 0.10);
-        $captiveZ  = $captiveWeight > 0.0 ? $streams->generateZ('captive_finance', 0.40) : 0.0;
+        $captiveZ  = $captiveWeight > 0.0 ? $streams->generateDemandZ('captive_finance') : 0.0;
 
         // --- Tail Risk & Labor Events ---
         $eventType = null;

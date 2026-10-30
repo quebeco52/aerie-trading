@@ -170,7 +170,7 @@ class FinancialDataBusinessModel extends StandardCorporateBusinessModel
         $transactionWeight  = $activeWeights['transaction'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $subscriptionZ = $streams->generateZ('subscription', 0.50); // Recurring seat subscriptions & data licenses
+        $subscriptionZ = $streams->generateDemandZ('subscription'); // Recurring seat subscriptions & data licenses
         $transactionZ  = $streams->generateZ('transaction', 0.15); // Debt issuance credit rating mandates & API usage
 
         // DCM Debt Rating & Data Feed API Macro Channel: Rating issuance mandates (SHRK) surge when corporate debt

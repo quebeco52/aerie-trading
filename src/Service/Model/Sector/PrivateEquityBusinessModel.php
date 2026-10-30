@@ -314,7 +314,7 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
         $principalWeight = $activeWeights['principal_investments'] ?? 0.0;
 
         // 1. Independent stream Z-scores with tailored persistence
-        $mgmtZ  = $streams->generateZ('management_fees', 0.50);
+        $mgmtZ  = $streams->generateDemandZ('management_fees');
         $carryZ = $streams->generateZ('carried_interest', 0.15);
         $principalZ = $principalWeight > 0.0 ? $streams->generateZ('principal_investments', 0.20) : 0.0;
 

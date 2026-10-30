@@ -285,4 +285,27 @@ class CorporateMetricsTest extends TestCase
         $this->assertEqualsWithDelta(480_000_000.0, CorporateMetrics::rollLeaseLiability(490_000_000.0, 800_000_000.0, 0.60, 0.25), 1e-6, 'and no further than the capacity still in use');
     }
 
+    /**
+     * The normal working capital capacity reads is what the ledger books at the same days, gross of allowances, so a
+     * firm whose balances sit at their normal days has no shift in its capacity base.
+     */
+    public function testNormalWorkingCapitalIsWhatTheLedgerBooksAtTheSameDays(): void
+    {
+        $days = ['dso' => 40.0, 'dio' => 25.0, 'dpo' => 55.0];
+        $stock = new Stock();
+        $booked = $this->metrics->buildWorkingCapitalBalances($stock, $days, 800.0, 600.0);
+
+        $this->assertEqualsWithDelta($booked, CorporateMetrics::normalWorkingCapital($days, 800.0, 600.0), 1e-9);
+        $this->assertEqualsWithDelta((800.0 * 40.0 + 600.0 * (25.0 - 55.0)) / FinancialConstants::DAYS_PER_YEAR, $booked, 1e-9);
+    }
+
+    /** A working-capital shift moves invested capital above its floor and not below it. */
+    public function testAWorkingCapitalShiftMovesInvestedCapitalOnlyAboveItsFloor(): void
+    {
+        $stock = (new Stock())->setTotalEquity('100')->setCorporateTreasury('20');
+
+        $this->assertEqualsWithDelta(80.0, $stock->getInvestedCapital(), 1e-9);
+        $this->assertEqualsWithDelta(70.0, $stock->getInvestedCapital(-10.0), 1e-9);
+        $this->assertEqualsWithDelta(50.0, $stock->getInvestedCapital(-60.0), 1e-9, 'half of equity is the floor');
+    }
 }

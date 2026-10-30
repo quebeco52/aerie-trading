@@ -285,15 +285,15 @@ class SecurityProtectionBusinessModel extends StandardCorporateBusinessModel
 
         // Each line's own draw, in a fixed order, for the lines the firm sells.
         $z = [];
-        foreach (['government_contracts' => 0.60, 'corporate_retainers' => 0.40, 'expeditionary_ops' => 0.10] as $key => $phi) {
-            $z[$key] = $has($key) ? $streams->generateZ($key, $phi) : 0.0;
+        foreach (['government_contracts', 'corporate_retainers', 'expeditionary_ops'] as $key) {
+            $z[$key] = $has($key) ? $streams->generateDemandZ($key) : 0.0;
         }
         $eventZ = $has('corporate_retainers', 'expeditionary_ops') ? $streams->generateExogenousZ('event', 0.05) : 0.0;
-        $z['cash_services'] = $has('cash_services') ? $streams->generateZ('cash_services', 0.60) : 0.0;
-        $z['vaults'] = $has('vaults') ? $streams->generateZ('vaults', 0.40) : 0.0;
+        $z['cash_services'] = $has('cash_services') ? $streams->generateDemandZ('cash_services') : 0.0;
+        $z['vaults'] = $has('vaults') ? $streams->generateDemandZ('vaults') : 0.0;
         $heistZ = $has('cash_services', 'vaults') ? $streams->generateExogenousZ('heist', 0.0) : 0.0;
-        $z['screening'] = $has('screening') ? $streams->generateZ('screening', 0.40) : 0.0;
-        $z['investigations'] = $has('investigations') ? $streams->generateZ('investigations', 0.20) : 0.0;
+        $z['screening'] = $has('screening') ? $streams->generateDemandZ('screening') : 0.0;
+        $z['investigations'] = $has('investigations') ? $streams->generateDemandZ('investigations') : 0.0;
         $leakZ = $has('screening', 'investigations') ? $streams->generateExogenousZ('leak', 0.0) : 0.0;
 
         // --- Asymmetric Tail Risk Events ---

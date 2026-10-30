@@ -118,12 +118,6 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
     public const TRANSSHIPMENT_VARIANCE_SCALAR = 0.25;
     /** Volatility multiplier on yard and services revenue. */
     public const STORAGE_VARIANCE_SCALAR = 0.15;
-    /** Quarterly persistence of the gateway box-count shock: a shipper's sourcing shift lasts a few quarters. */
-    public const GATEWAY_PERSISTENCE = 0.40;
-    /** Quarterly persistence of the relay shock: an alliance that moves a service keeps it there for a year or so. */
-    public const TRANSSHIPMENT_PERSISTENCE = 0.50;
-    /** Quarterly persistence of the yard-revenue shock. */
-    public const STORAGE_PERSISTENCE = 0.30;
     /** Quarterly persistence of the event draw that sets off strikes. */
     public const EVENT_SHOCK_PERSISTENCE = 0.10;
 
@@ -220,9 +214,9 @@ class PortTerminalBusinessModel extends StandardCorporateBusinessModel
         $transshipmentWeight = $active['transshipment'];
         $storageWeight = $active['storage_services'];
 
-        $gatewayZ = $streams->generateZ('gateway_handling', self::GATEWAY_PERSISTENCE);
-        $transshipmentZ = $streams->generateZ('transshipment', self::TRANSSHIPMENT_PERSISTENCE);
-        $storageZ = $streams->generateZ('storage_services', self::STORAGE_PERSISTENCE);
+        $gatewayZ = $streams->generateDemandZ('gateway_handling');
+        $transshipmentZ = $streams->generateDemandZ('transshipment');
+        $storageZ = $streams->generateDemandZ('storage_services');
         $eventZ = $streams->generateExogenousZ('event', self::EVENT_SHOCK_PERSISTENCE);
 
         // --- Dock Strike ---

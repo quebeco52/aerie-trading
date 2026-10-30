@@ -231,8 +231,8 @@ class ComputerHardwareBusinessModel extends StandardCorporateBusinessModel
         $consumerWeight   = $activeWeights['consumer_hardware'];
 
         // Consumer hardware is volatile, enterprise hardware is stickier
-        $enterpriseZ = $streams->generateZ('enterprise_hardware', 0.15);
-        $consumerZ   = $streams->generateZ('consumer_hardware', 0.05);
+        $enterpriseZ = $streams->generateDemandZ('enterprise_hardware');
+        $consumerZ   = $streams->generateDemandZ('consumer_hardware');
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         $pricingPower = $this->resolvePricingPower($stock);

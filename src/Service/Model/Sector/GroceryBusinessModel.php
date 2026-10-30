@@ -165,8 +165,8 @@ class GroceryBusinessModel extends StandardCorporateBusinessModel
         $total = array_sum($weights);
         $plan = $total > 0.0 ? $expectedRevenue / $total : 0.0;
 
-        $groceryZ = $streams->generateZ('groceries', 0.60);
-        $fuelZ = $streams->generateZ('fuel_forecourts', 0.30);
+        $groceryZ = $streams->generateDemandZ('groceries');
+        $fuelZ = $streams->generateDemandZ('fuel_forecourts');
 
         // --- Price war: measured against its stationary share, so a war costs what the peace between them carries ---
         $warElapsed = $streams->evolveRegime(self::REGIME_PRICE_WAR, self::PRICE_WAR_ONSET_HAZARD, self::PRICE_WAR_EXIT_HAZARD);

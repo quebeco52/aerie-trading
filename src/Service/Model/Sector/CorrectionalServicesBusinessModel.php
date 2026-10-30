@@ -172,9 +172,9 @@ class CorrectionalServicesBusinessModel extends StandardCorporateBusinessModel
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
         $weights = $streams->resolveActiveStreamWeights($this->resolveLineWeights($stock));
 
-        $custodyZ = $streams->generateZ('custody', 0.70);
-        $detentionZ = $streams->generateZ('detention', 0.40);
-        $taggingZ = $streams->generateZ('escort_tagging', 0.40);
+        $custodyZ = $streams->generateDemandZ('custody');
+        $detentionZ = $streams->generateDemandZ('detention');
+        $taggingZ = $streams->generateDemandZ('escort_tagging');
         $disturbanceZ = $streams->generateExogenousZ('disturbance', 0.0);
         $isDisturbance = $disturbanceZ < self::DISTURBANCE_Z_SCORE;
 

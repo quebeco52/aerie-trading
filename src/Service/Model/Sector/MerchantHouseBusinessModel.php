@@ -182,7 +182,7 @@ class MerchantHouseBusinessModel extends ConglomerateBusinessModel
         $floatWeight     = $activeWeights['financial_investments'];
 
         $merchantZ  = $streams->generateZ('merchant_trading', 0.20);
-        $tollboothZ = $streams->generateZ('defensive_staples', 0.45);
+        $tollboothZ = $streams->generateDemandZ('defensive_staples');
         $floatZ     = $streams->generateZ('financial_investments', 0.15);
         $eventZ     = $streams->generateExogenousZ('event', 0.10);
 

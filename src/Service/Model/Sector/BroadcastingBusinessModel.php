@@ -188,8 +188,8 @@ class BroadcastingBusinessModel extends StandardCorporateBusinessModel
         $airtimeSeason = $quarter !== null ? self::AIRTIME_SEASONALITY[$quarter] : 1.0;
         $plan = $totalWeight > 0.0 ? $expectedRevenue / $firmSeason / $totalWeight : 0.0;
 
-        $carriageZ = $streams->generateZ('carriage_fees', 0.80);
-        $airtimeZ = $streams->generateZ('airtime_advertising', 0.40);
+        $carriageZ = $streams->generateDemandZ('carriage_fees');
+        $airtimeZ = $streams->generateDemandZ('airtime_advertising');
         $politicalZ = $streams->generateZ('political_advertising', 0.10);
         $disputeZ = $streams->generateExogenousZ('carriage_dispute', 0.0);
 

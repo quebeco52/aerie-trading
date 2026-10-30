@@ -182,7 +182,7 @@ class SpecialtyIndustrialMachineryBusinessModel extends HeavyManufacturingBusine
 
         // Independent stream Z-scores
         $equipmentZ = $streams->generateZ('equipment_sales', 0.20);
-        $servicesZ  = $streams->generateZ('aftermarket_services', 0.05);
+        $servicesZ  = $streams->generateDemandZ('aftermarket_services');
         $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---

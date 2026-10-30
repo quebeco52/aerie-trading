@@ -230,8 +230,8 @@ abstract class BoardRun extends KernelTestCase
             }
         }
 
-        // The industry outlook salts its draws from entropy unless one is written first: 1000 + SEED, so two runs of one
-        // seed draw the same outlooks (a topic's onStart may write its own).
+        // The industry outlook salts its draws from entropy unless one is written first: 1000 + SEED, so two runs of
+        // one seed draw the same outlooks (a topic's onStart may write its own).
         $c->get(App\Service\Corporate\Industry\IndustryShareStoreInterface::class)->writeOutlooks(['salt' => 1000 + $this->seed, 'quarter' => -1, 'industries' => []]);
         $this->onStart();
 
@@ -477,6 +477,9 @@ abstract class BoardRun extends KernelTestCase
             'hedge' => (float) ($kpis['hedge_gain'] ?? 0.0),
             'capture' => (float) ($kpis['capture_rate'] ?? 0.0),
             'power_kpi' => (float) ($kpis['power_price_index'] ?? 0.0),
+            // The capacity gap and spare plant the capital budget reads (CapitalBudgetEngine), as last filed.
+            'cgap' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])[\App\Service\Corporate\Earnings\CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0),
+            'spare' => (float) (($report->getStock()->getEarningsMomentumZ() ?? [])[\App\Service\Corporate\Earnings\CapitalBudgetEngine::STATE_CAPACITY_SPARE] ?? 0.0),
         ];
     }
 

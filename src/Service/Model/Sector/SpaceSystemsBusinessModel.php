@@ -329,7 +329,7 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
 
         $launchZ = $streams->generateZ('launch_services', 0.30);
         $governmentZ = $streams->generateZ('government_missions', 0.50);
-        $broadbandZ = $streams->generateZ('satellite_broadband', 0.90);
+        $broadbandZ = $streams->generateDemandZ('satellite_broadband');
 
         // --- Launch failure: likelier for a young rocket; the fleet stays down while the cause is found, and the
         // manifest waits for it ---

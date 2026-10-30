@@ -208,9 +208,9 @@ class AdvertisingAgencyBusinessModel extends StandardCorporateBusinessModel
         // drops
         $macroAdSpendShift = $this->resolveAdSpendShift($stock, $macroState);
 
-        $mediaZ   = $streams->generateZ('media_buying_commissions', 0.25);
-        $brandZ   = $streams->generateZ('creative_brand_retainers', 0.50);
-        $martechZ = $streams->generateZ('martech_consulting', 0.40);
+        $mediaZ   = $streams->generateDemandZ('media_buying_commissions');
+        $brandZ   = $streams->generateDemandZ('creative_brand_retainers');
+        $martechZ = $streams->generateDemandZ('martech_consulting');
 
         $mediaRevenue   = max(0.0, $expectedRevenue * $mediaWeight   * (1.0 + ($mediaZ * ($baselineVol * self::MEDIA_VARIANCE_SCALAR)) + $macroAdSpendShift));
         $brandRevenue   = max(0.0, $expectedRevenue * $brandWeight   * (1.0 + ($brandZ * ($baselineVol * self::BRAND_VARIANCE_SCALAR))));

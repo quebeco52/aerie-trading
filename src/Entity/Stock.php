@@ -2169,8 +2169,11 @@ class Stock
      * Deferred tax is included as an equity equivalent, the standard economic-profit adjustment. It is tax
      * the firm has postponed rather than paid, so the money is financing the business interest free, and
      * leaving it out would understate the capital the return is being earned on.
+     *
+     * $workingCapitalShift reads it at a different working capital, inside the floor: capacity reads it at the firm's
+     * normal working capital rather than the quarter's (OperatingCapacityEngine::operatingCapital()).
      */
-    public function getInvestedCapital(): float
+    public function getInvestedCapital(float $workingCapitalShift = 0.0): float
     {
         $equity = (float) $this->totalEquity;
         $debt = (float) $this->getTotalDebt();
@@ -2179,7 +2182,7 @@ class Stock
         // capital (it is a claim on future tax, not plant), so it comes out like cash.
         $deferredTax = (float) $this->deferredTaxLiability - (float) $this->deferredTaxAsset;
 
-        return max(1.0, max($equity * 0.50, ($equity + $debt + $deferredTax - $cash)));
+        return max(1.0, max($equity * 0.50, ($equity + $debt + $deferredTax - $cash + $workingCapitalShift)));
     }
 
     /**

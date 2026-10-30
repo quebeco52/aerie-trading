@@ -230,7 +230,7 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
 
         // Independent stream Z-scores
         $oemZ = $streams->generateZ('oem_equipment', 0.20);
-        $mroZ = $streams->generateZ('aftermarket_mro', 0.40);
+        $mroZ = $streams->generateDemandZ('aftermarket_mro');
 
         $mroShock = $mroZ * ($baselineVol * self::MRO_VARIANCE_SCALAR);
         // Equipment orders take the cycle and reach revenue through the order book; the aftermarket, which follows the

@@ -194,9 +194,9 @@ class LogisticsBusinessModel extends StandardCorporateBusinessModel
         $deliveryZ = ($macroState->supplierDeliveryTimesEma - MacroConstants::SUPPLIER_DELIVERIES_NEUTRAL) / MacroConstants::SUPPLY_CHAIN_DELIVERY_SD;
         $spotFreightBoost = ($freightShift * self::SPOT_FREIGHT_SENSITIVITY) + ($deliveryZ * self::DELIVERY_SPOT_SENSITIVITY);
 
-        $fleetZ = $streams->generateZ('dedicated_fleet_contracts', 0.40);
+        $fleetZ = $streams->generateDemandZ('dedicated_fleet_contracts');
         $spotZ  = $streams->generateZ('spot_freight_brokerage', 0.15);
-        $whZ    = $streams->generateZ('value_added_warehousing', 0.50);
+        $whZ    = $streams->generateDemandZ('value_added_warehousing');
 
         $eventType = $spotZ > self::SPOT_SURGE_Z_SCORE ? ShockEvent::LOGISTICS_SURGE_PRICING : null;
 

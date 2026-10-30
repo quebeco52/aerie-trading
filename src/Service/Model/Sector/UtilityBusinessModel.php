@@ -291,7 +291,7 @@ class UtilityBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores
         $weatherZ     = $streams->generateZ('regulated_weather_load', 0.05); // Weather is random, low persistence
         // Merchant generation: wind and solar resource, availability
-        $unregulatedZ = $streams->generateZ('unregulated_merchant', 0.20);
+        $unregulatedZ = $streams->generateDemandZ('unregulated_merchant');
         $eventZ       = $streams->generateExogenousZ('event', 0.10); // Infrastructure tail risks
 
         // --- Clamped Revenue Streams --- Weather deviations drive regulated volume. High Z = Heatwaves/Freezes (high

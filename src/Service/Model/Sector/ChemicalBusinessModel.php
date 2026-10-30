@@ -101,10 +101,6 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
     public const SPECIALTY_CHEM_VARIANCE = 0.08;
     /** Volatility multiplier for agrochemical demand shocks. */
     public const AGROCHEM_VARIANCE = 0.15;
-    /** AR(1) persistence coefficient for base petrochemical revenue shocks. */
-    public const BASE_PETRO_PERSISTENCE = 0.30;
-    /** AR(1) persistence coefficient for specialty chemical revenue shocks. */
-    public const SPECIALTY_CHEM_PERSISTENCE = 0.15;
     /** AR(1) persistence coefficient for agrochemical revenue shocks. */
     public const AGROCHEM_PERSISTENCE = 0.25;
     /** AR(1) persistence coefficient for feedstock crack spread margin shocks. */
@@ -277,8 +273,8 @@ class ChemicalBusinessModel extends StandardCorporateBusinessModel
         $agriWeight       = $activeWeights['agrochemicals'];
 
         // Z-scores
-        $basePetroZ  = $streams->generateZ('base_petrochemicals', self::BASE_PETRO_PERSISTENCE);
-        $specialtyZ  = $streams->generateZ('specialty_chemicals', self::SPECIALTY_CHEM_PERSISTENCE);
+        $basePetroZ  = $streams->generateDemandZ('base_petrochemicals');
+        $specialtyZ  = $streams->generateDemandZ('specialty_chemicals');
         $agriZ       = $streams->generateZ('agrochemicals', self::AGROCHEM_PERSISTENCE);
         $feedstockZ  = $streams->generateZ('feedstock_crack', self::FEEDSTOCK_CRACK_PERSISTENCE);
 

@@ -178,9 +178,9 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         $transitWeight    = $activeWeights['transit_subscriptions'] ?? 0.0;
 
         // Independent stream Z-scores
-        $intermodalZ = $streams->generateZ('intermodal_freight', 0.20);
-        $bulkZ       = $streams->generateZ('bulk_commodities', 0.40);
-        $industrialZ = $streams->generateZ('industrial_carloads', 0.30);
+        $intermodalZ = $streams->generateDemandZ('intermodal_freight');
+        $bulkZ       = $streams->generateDemandZ('bulk_commodities');
+        $industrialZ = $streams->generateDemandZ('industrial_carloads');
 
         // Macro cyclicality: each stream carries its own elasticity to the cycle (the root shift carries FX only).
         $macroShifts = $this->resolveStreamMacroShifts($stock, $macroState);
@@ -201,7 +201,7 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
         if ($transitWeight > 0.0) {
             // Ridership follows employment rather than trade, and a subscription lags the decision to stop
             // commuting, so the output gap reaches this stream at a fraction of the freight elasticity.
-            $transitZ = $streams->generateZ('transit_subscriptions', 0.55);
+            $transitZ = $streams->generateDemandZ('transit_subscriptions');
             $transitMacroShift = $macroShifts['transit_subscriptions'];
 
             $streamRevenues['transit_subscriptions'] = max(0.0, $expectedRevenue * $transitWeight

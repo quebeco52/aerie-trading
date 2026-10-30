@@ -100,9 +100,9 @@ class LifeInsurerBusinessModel extends InsuranceBusinessModel
 
         $activeWeights = $streams->resolveActiveStreamWeights(self::targetStreamWeights());
 
-        $protectionZ = $streams->generateZ('protection', 0.50);
-        $annuityZ    = $streams->generateZ('annuities', 0.25);
-        $savingsZ    = $streams->generateZ('savings_fees', 0.50);
+        $protectionZ = $streams->generateDemandZ('protection');
+        $annuityZ    = $streams->generateDemandZ('annuities');
+        $savingsZ    = $streams->generateDemandZ('savings_fees');
 
         $streamRevenues = [
             'protection'   => max(0.0, $expectedRevenue * $activeWeights['protection'] * (1.0 + ($protectionZ * $baselineVol * self::PROTECTION_VARIANCE_SCALAR))),

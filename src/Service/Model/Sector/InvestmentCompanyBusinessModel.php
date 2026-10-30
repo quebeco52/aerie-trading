@@ -212,7 +212,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         $listedWeight = $activeWeights['listed_portfolio'];
         $floatWeight  = $activeWeights['financial_investments'];
 
-        $ownedZ  = $ownedWeight > 0.0 ? $streams->generateZ('wholly_owned', 0.30) : 0.0;
+        $ownedZ  = $ownedWeight > 0.0 ? $streams->generateDemandZ('wholly_owned') : 0.0;
         $listedZ = $listedWeight > 0.0 ? $streams->generateZ('listed_portfolio', 0.55) : 0.0;
         $floatZ  = $floatWeight > 0.0 ? $streams->generateZ('financial_investments', 0.15) : 0.0;
         $eventZ  = $streams->generateExogenousZ('event', 0.10);

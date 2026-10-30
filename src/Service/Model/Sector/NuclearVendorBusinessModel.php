@@ -199,7 +199,7 @@ class NuclearVendorBusinessModel extends StandardCorporateBusinessModel
         $plan = $total > 0.0 ? $expectedRevenue / $total : 0.0;
 
         $fuelZ = $streams->generateZ('fuel', 0.20);
-        $servicesZ = $streams->generateZ('plant_services', 0.40);
+        $servicesZ = $streams->generateDemandZ('plant_services');
 
         // --- Accident and overrun: each measured against its stationary share, so the years without one carry what
         // it costs ---

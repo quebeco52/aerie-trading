@@ -122,7 +122,7 @@ class ReinsuranceBusinessModel extends InsuranceBusinessModel
         $catBondWeight = $activeWeights['catastrophe_bonds'];
 
         // Independent stream Z-scores
-        $treatyZ  = $streams->generateZ('treaty_reinsurance', 0.30);
+        $treatyZ  = $streams->generateDemandZ('treaty_reinsurance');
         $catBondZ = $streams->generateZ('catastrophe_bonds', 0.15);
         // Claims fall on the treaty book: the reinsurer's share of the district season plus its own large losses.
         $claims   = $this->resolveExcessClaims($streams, $macroState, 1.0, $catThreshold, $catScalar);

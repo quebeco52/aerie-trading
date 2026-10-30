@@ -785,7 +785,7 @@ class EarningsEngineTest extends TestCase
         $support = $empire->stock->getManagementProfile()->weakSegmentSupport();
         $this->assertEqualsWithDelta($support + ((1.0 - $support) * $shrunk->plantReplaced), $empire->plantReplaced, 1e-9, 'an empire builder keeps up much of the rest');
 
-        $cheap = $report(0.5, ManagementStyle::Operator, 0.04);
+        $cheap = $report(0.5, ManagementStyle::Operator, 0.035);
         $this->assertGreaterThanOrEqual($cheap->stock->getManagementProfile()->growthHurdle($cheap->strategy->getHurdleRate($cheap->health), false), CapitalBudgetEngine::returnOnNewPlant($cheap), 'the fixture needs plant above the hurdle');
         $this->assertSame(1.0, $cheap->plantReplaced, 'plant that pays is kept up, however far ahead of its market');
     }

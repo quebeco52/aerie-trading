@@ -191,9 +191,9 @@ class WasteManagementBusinessModel extends StandardCorporateBusinessModel
         $recyclingWeight   = $activeWeights['recycling_and_rng'];
 
         // Independent stream Z-scores
-        $residentialZ = $streams->generateZ('residential_collection', 0.40);
-        $commercialZ  = $streams->generateZ('commercial_disposal', 0.20);
-        $recyclingZ   = $streams->generateZ('recycling_and_rng', 0.10);
+        $residentialZ = $streams->generateDemandZ('residential_collection');
+        $commercialZ  = $streams->generateDemandZ('commercial_disposal');
+        $recyclingZ   = $streams->generateDemandZ('recycling_and_rng');
         $eventZ       = $streams->generateExogenousZ('event', 0.05);
 
         // --- Macro Demand & Pricing Sensitivities ---

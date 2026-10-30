@@ -124,8 +124,6 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
     public const COMMERCIAL_VARIANCE_SCALAR = 0.15;
     /** Volatility multiplier for lumpy pre-commercial clinical milestone and licensing revenue. */
     public const PIPELINE_VARIANCE_SCALAR = 0.45;
-    /** AR(1) persistence of recurring commercial prescription volumes across quarters. */
-    public const COMMERCIAL_PERSISTENCE_PHI = 0.40;
     /** AR(1) persistence of lumpy collaboration and milestone revenue across quarters. */
     public const PIPELINE_PERSISTENCE_PHI = 0.10;
 
@@ -760,7 +758,7 @@ class BiotechBusinessModel extends StandardCorporateBusinessModel
         $pipelineWeight    = $activeWeights['pipeline_licensing_milestones'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $establishedZ = $streams->generateZ('commercial_therapeutics', self::COMMERCIAL_PERSISTENCE_PHI);
+        $establishedZ = $streams->generateDemandZ('commercial_therapeutics');
         $pipelineZ    = $streams->generateZ('pipeline_licensing_milestones', self::PIPELINE_PERSISTENCE_PHI);
 
         // --- Marketed Book: age every cohort one quarter on its known launch and exclusivity schedule ---

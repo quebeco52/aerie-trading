@@ -306,8 +306,8 @@ class ConglomerateBusinessModel extends StandardCorporateBusinessModel
 
         // Independent stream Z-scores with persistent AR(1) momentum. A dormant stream is never drawn, so
         // adding one to the architecture leaves every firm that does not run it bit-for-bit unchanged.
-        $industrialZ = $industrialWeight > 0.0 ? $streams->generateZ('industrial_manufacturing', 0.25) : 0.0;
-        $defensiveZ  = $defensiveWeight > 0.0 ? $streams->generateZ('defensive_staples', 0.45) : 0.0;
+        $industrialZ = $industrialWeight > 0.0 ? $streams->generateDemandZ('industrial_manufacturing') : 0.0;
+        $defensiveZ  = $defensiveWeight > 0.0 ? $streams->generateDemandZ('defensive_staples') : 0.0;
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---

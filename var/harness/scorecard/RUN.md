@@ -60,3 +60,16 @@ that real economies span, so a change is judged on the board, not on one firm.
   the market at impairments (HUMM 191 vs 417bn cap, a $193bn write-off). It now reads the higher of the model's value
   and the quoted equity. Arm `gwm` vs `gwi` (4 seeds): impairments 52 -> 39, written $730bn -> $276bn, none while
   market P/B > 1 (was 27%). Most are full because goodwill is 1-5% of equity (ASU 2017-04 arithmetic).
+- 10-30 revenue noise. Live: the median firm's deseasonalised quarterly revenue reversed (lag-1 autocorrelation -0.32,
+  variance ratio 0.51). Arms: `rbase` = BASE tree dd940779; `rnoise2` = working tree with
+  - demand lines at a shared persistence (StreamContext::generateDemandZ, mean life 3.5y);
+  - the engine's own timing noise at a third (IDIOSYNCRATIC_REV_VOL_RATIO 0.08);
+  - capacity read at normal working capital on the trailing year's revenue (OperatingCapacityEngine::operatingCapital).
+  `rnoise2u` = rnoise2 with OVR EarningsEngine scaling the noise by E/(D+E). `rnoise` was a first cut whose normal
+  working capital used the run-rate revenue, which moved with the quarter and so did nothing outside seasonality.
+  `python3 revenue_noise.py rbase rnoise2 rnoise2u` (revenue_noise_8s.out): rnoise2 vs rbase, median sd q/q
+  0.059 -> 0.039, AC1 -0.30 -> -0.16, VR 0.50 -> 0.75, sd y/y 0.088 -> 0.072, growth 0.042 unchanged, drop-and-bounce
+  quarters 4.0 -> 1.9 per 100 firm-years; scorecard unchanged or better (reorganisations 0.8 -> 0.2, t -2.6). The
+  unlevered scale (rnoise2u) cut y/y sd to 0.063 for little more persistence; not taken. BoardRun rows carry `cgap` and
+  `spare` from here; spare plant above 10% stays at 0 in every arm.
+

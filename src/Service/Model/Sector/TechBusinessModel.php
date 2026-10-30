@@ -255,7 +255,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         // Enterprise SaaS ARR & Cloud compute contract volume
         $subscriptionZ = $streams->generateZ('subscription', 0.45);
         // Digital advertising auction demand & impression volume
-        $adZ           = $streams->generateZ('advertising', 0.30);
+        $adZ           = $streams->generateDemandZ('advertising');
         // Fat-tail regulatory antitrust / data breach Z-score
         $eventZ        = $streams->generateExogenousZ('event', 0.10);
 
@@ -312,7 +312,7 @@ class TechBusinessModel extends StandardCorporateBusinessModel
         $cloudZ = 0.0;
         if ($cloudWeight > 0.0) {
             // High persistence, sticky enterprise contracts
-            $cloudZ = $streams->generateZ('cloud_infrastructure', 0.60);
+            $cloudZ = $streams->generateDemandZ('cloud_infrastructure');
             $cloudRevenue = max(0.0, $expectedRevenue * $cloudWeight * (1.0 + ($cloudZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR * 0.4) + $cycleShares['cloud_infrastructure']));
             $streamRevenues['cloud_infrastructure'] = $cloudRevenue;
         }

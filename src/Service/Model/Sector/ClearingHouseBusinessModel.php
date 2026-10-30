@@ -194,8 +194,8 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         $dataWeight     = $activeWeights['data_licensing'];
 
         $revenueZ = $streams->generateZ('clearing_fees', 0.25);
-        $custodyZ = $streams->generateZ('custody_float', 0.20);
-        $dataZ    = $streams->generateZ('data_licensing', 0.45); // Separate Z-score for sticky data subscriptions
+        $custodyZ = $streams->generateDemandZ('custody_float');
+        $dataZ    = $streams->generateDemandZ('data_licensing'); // Separate Z-score for sticky data subscriptions
 
         // Clearing volume: equity volatility and rates hedging flow, on the clearing stream alone.
         $vixEma = $macroState->marketVolatilityEma;

@@ -42,8 +42,11 @@ final class OperatingCapacityEngine
     /** Coefficient for margin volatility relative to baseline stock volatility. */
     public const MARGIN_VOLATILITY_COEFFICIENT = 0.15;
 
-    /** Multiplier applied to baseline volatility to derive base idiosyncratic revenue volatility. */
-    public const IDIOSYNCRATIC_REV_VOL_RATIO = 0.25;
+    /**
+     * Multiplier on baseline volatility for the quarter's own timing noise (orders shipped a little early or late), on
+     * top of the demand lines: about 1% of revenue a quarter at a volatility of 0.25.
+     */
+    public const IDIOSYNCRATIC_REV_VOL_RATIO = 0.08;
 
     // --- Capacity & Seasonality Limits ---
     /** Hard ceiling on capacity utilization to bound physical operations and depreciation. */
@@ -253,7 +256,7 @@ final class OperatingCapacityEngine
         // the premium paid over the plant — so an impairment cannot shrink capacity. A financial's base is
         // its earning assets, which never contained goodwill.
         $revenueGeneratingCapital = CorporateMetrics::revenueGeneratingCapital(
-            $ctx->investedCapital,
+            $this->operatingCapital($ctx),
             $stock->getTotalCipAmount(),
             $strategy->isFinancial() ? 0.0 : (float) $stock->getGoodwill(),
         );
@@ -655,13 +658,40 @@ final class OperatingCapacityEngine
      * the company's queue completed this quarter (SegmentBooks::completePending()), and lets each segment built into a
      * new industry learn its trade for the quarter.
      */
+    /**
+     * Invested capital as capacity reads it: working capital at the firm's normal days on its trailing year's revenue,
+     * not at the quarter's balances. A strong quarter's prepayments and unpaid bills raise cash, and so lower invested
+     * capital, without removing any plant; read as capacity they cut the next quarter and turned noise into a sawtooth.
+     * A year of filed revenue carries no season and a quarter of any one quarter's noise. A non-financial's capital is
+     * Stock::getInvestedCapital(), which takes the shift inside its floor.
+     */
+    private function operatingCapital(EarningsSimulationContext $ctx): float
+    {
+        $stock = $ctx->stock;
+        if (!$stock->hasWorkingCapitalLedger() || $ctx->strategy->isFinancial()) {
+            return $ctx->investedCapital;
+        }
+        $history = $stock->getQuarterlyOperatingHistory() ?? [];
+        $revenue = count($history) >= EarningsEngine::TTM_QUARTERS
+            ? array_sum(array_map(static fn(array $quarter): float => (float) ($quarter['revenue'] ?? 0.0), $history))
+            : (float) $stock->getTotalRevenue();
+        if ($revenue <= 0.0) {
+            return $ctx->investedCapital;
+        }
+        // Gross of allowances on both sides: a provision is a working-capital charge, not a change in plant.
+        $actual = (float) $stock->getReceivables() + (float) $stock->getInventory() - (float) $stock->getPayables();
+        $normal = CorporateMetrics::normalWorkingCapital($ctx->strategy->getWorkingCapitalDays($stock), $revenue, $revenue * (1.0 - $ctx->stableMargin));
+
+        return $stock->getInvestedCapital($normal - $actual);
+    }
+
     private function completeVenturePlant(EarningsSimulationContext $ctx): void
     {
         $stock = $ctx->stock;
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $construction = (float) $stock->getCipBalance() + $ctx->completedCip;
         // The shares are of the capital the plant sells on, which the plant placed this quarter has just joined.
-        $capital = CorporateMetrics::revenueGeneratingCapital($ctx->investedCapital, $stock->getTotalCipAmount(), (float) $stock->getGoodwill());
+        $capital = CorporateMetrics::revenueGeneratingCapital($this->operatingCapital($ctx), $stock->getTotalCipAmount(), (float) $stock->getGoodwill());
         $state = SegmentBooks::completePending($momentum, $construction > 0.0 ? $ctx->completedCip / $construction : 1.0, $capital)
             + SegmentBooks::learn($momentum, $ctx->dt);
         if ($state !== []) {

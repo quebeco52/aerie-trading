@@ -582,6 +582,11 @@ class EarningsEngineReportTest extends TestCase
         );
     }
 
+    /**
+     * A retailer's holiday quarter files far more revenue than its off-peak quarter while the seasonally adjusted run
+     * rate stays put. Cash settles each quarter's working capital, as the treasury does beside the engine in the game,
+     * so the season's swing in payables moves invested capital and nothing else.
+     */
     public function testSeasonalityProducesOperatingLeverageWithoutSpuriousSurprise(): void
     {
         $stock = new Stock();
@@ -589,6 +594,7 @@ class EarningsEngineReportTest extends TestCase
         $stock->setIndustry('Internet Retail');
         $stock->setSharesOutstanding('1000000');
         $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('20000000');
         $stock->setBaselineRoic('0.15');
         $stock->setOperatingMargin('0.15');
         $stock->setVolatility('0.15');
@@ -598,28 +604,30 @@ class EarningsEngineReportTest extends TestCase
         $ticksPerQuarter = 63;
         $reportingTick = $this->getReportingTick('RETAIL_SEAS');
 
-        // Q1 results (seasonal factor 0.85), filed in the Q2 reporting season
-        $q1Tick = $ticksPerQuarter + $reportingTick;
-        $this->engine->calculate($stock, $macro, $q1Tick, 252);
-        $q1Revenue = $this->filedQuarterRevenue($stock);
-        $q1RunRate = (float) $stock->getTotalRevenue();    // seasonally adjusted annual rate
+        $revenue = [];
+        $runRate = [];
+        $workingCapital = null;
+        for ($quarter = 1; $quarter <= 8; $quarter++) {
+            $this->engine->calculate($stock, $macro, ($quarter * $ticksPerQuarter) + $reportingTick, 252);
+            $revenue[$quarter] = $this->filedQuarterRevenue($stock);
+            $runRate[$quarter] = (float) $stock->getTotalRevenue();
+            $closing = (float) $stock->getNetWorkingCapital();
+            if ($workingCapital !== null) {
+                $stock->setCorporateTreasury((string) ((float) $stock->getCorporateTreasury() - ($closing - $workingCapital)));
+            }
+            $workingCapital = $closing;
+        }
 
-        // Q4 holiday results (seasonal factor 1.35), filed in the next year's first season
-        $q4Tick = (4 * $ticksPerQuarter) + $reportingTick;
-        $this->engine->calculate($stock, $macro, $q4Tick, 252);
-        $q4Revenue = $this->filedQuarterRevenue($stock);
-        $q4RunRate = (float) $stock->getTotalRevenue();
-
-        // Peak holiday Q4 reported revenue must significantly exceed trough Q1 reported revenue
+        // Q5 is off-peak (seasonal factor 0.85) and Q8 the holiday quarter (1.35), both filed with the ledger running.
         $this->assertGreaterThan(
-            $q1Revenue * 1.30,
-            $q4Revenue,
+            $revenue[5] * 1.30,
+            $revenue[8],
             'Seasonal holiday quarter (Q4) revenue must exceed off-peak quarter (Q1) for Internet Retail.',
         );
 
         // ...while the seasonally adjusted run-rate is the same structural capacity in both quarters: the
         // season is not mistaken for a change in the business.
-        $this->assertEqualsWithDelta($q1RunRate, $q4RunRate, $q1RunRate * 0.01, 'SAAR must not carry seasonal swings');
+        $this->assertEqualsWithDelta($runRate[5], $runRate[8], $runRate[5] * 0.01, 'SAAR must not carry seasonal swings');
     }
 
     /**

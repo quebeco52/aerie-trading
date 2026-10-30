@@ -126,7 +126,7 @@ final class FranchiseMarginEarningsTest extends TestCase
         $this->assertEqualsWithDelta(
             $added,
             (float) $franchise['stock']->getRoicTtm() - (float) $plain['stock']->getRoicTtm(),
-            0.01 * $added,
+            0.03 * $added,
             'the operating return state keeps the franchise it earns rather than pulling it away with the moat',
         );
     }

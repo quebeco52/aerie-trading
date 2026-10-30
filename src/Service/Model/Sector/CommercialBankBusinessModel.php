@@ -368,10 +368,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const MACRO_DEMAND_BETA_SENSITIVITY = 0.50;
     /** Pricing power multiplier for banks, passing structural yields to expectations. */
     public const MACRO_PRICING_POWER_MULT = 1.0;
-    /** Persistence (AR1) parameter for Net Interest Income (NII) Z-score drift. */
-    public const STREAM_Z_PERSISTENCE_NII = 0.35;
-    /** Persistence (AR1) parameter for Fee Income Z-score drift. */
-    public const STREAM_Z_PERSISTENCE_FEE = 0.25;
     /** Minimum base expansion probability floor. */
     public const DEBT_EXPANSION_PROB_MIN = 0.05;
     /** Minimum base expansion aggressiveness floor. */
@@ -849,9 +845,9 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         // Independent stream Z-scores with AR(1) persistence
         // NII loan origination volume
-        $revenueZ = $streams->generateZ('net_interest_income', self::STREAM_Z_PERSISTENCE_NII);
+        $revenueZ = $streams->generateDemandZ('net_interest_income');
         // Non-interest custodial / payment fee volume
-        $feeZ     = $streams->generateZ('fee_income', self::STREAM_Z_PERSISTENCE_FEE);
+        $feeZ     = $streams->generateDemandZ('fee_income');
 
         $outputGap = $macroState->outputGapEma;
 
@@ -870,7 +866,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $proprietaryDividendZ = 0.0;
         if ($proprietaryDividendWeight > 0.0) {
             // Proprietary dividends are highly cyclical and tie to corporate expansion
-            $proprietaryDividendZ = $streams->generateZ('proprietary_dividend', self::STREAM_Z_PERSISTENCE_FEE);
+            $proprietaryDividendZ = $streams->generateDemandZ('proprietary_dividend');
             $proprietaryDividendRevenue = max(0.0, $expectedRevenue * $proprietaryDividendWeight * (1.0 + ($proprietaryDividendZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR * 1.5)) + ($outputGap * self::SECTOR_SHOCK_FEE_OUTPUT_GAP_MULT * 2.0)));
             $streamRevenues['proprietary_dividend'] = $proprietaryDividendRevenue;
         }

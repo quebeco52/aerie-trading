@@ -257,9 +257,9 @@ class MedicalCareFacilityBusinessModel extends StandardCorporateBusinessModel
         $arbitrageWeight  = $activeWeights['insurance_arbitrage'];
 
         // Independent stream Z-scores with persistent momentum
-        $inpatientZ  = $streams->generateZ('inpatient_care', 0.35);
-        $outpatientZ = $streams->generateZ('elective_outpatient', 0.25);
-        $arbitrageZ  = $streams->generateZ('insurance_arbitrage', 0.40);
+        $inpatientZ  = $streams->generateDemandZ('inpatient_care');
+        $outpatientZ = $streams->generateDemandZ('elective_outpatient');
+        $arbitrageZ  = $streams->generateDemandZ('insurance_arbitrage');
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Demand Sensitivities ---

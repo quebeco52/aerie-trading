@@ -277,7 +277,7 @@ class ConstructionBusinessModel extends StandardCorporateBusinessModel
         // Independent stream Z-scores with persistent auto-regressive momentum
         $civilZ       = $streams->generateZ('civil_infrastructure', 0.40);
         $commercialZ  = $streams->generateZ('commercial_epc', 0.20);
-        $maintenanceZ = $streams->generateZ('facilities_maintenance', 0.50);
+        $maintenanceZ = $streams->generateDemandZ('facilities_maintenance');
         $eventZ       = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities (hit ORDERS in full; the backlog below cushions recognized revenue) ---

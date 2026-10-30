@@ -180,7 +180,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $revenueZ = $streams->generateZ('revenue', 0.25);
+        $revenueZ = $streams->generateDemandZ('revenue');
 
         $revenueShock = ($revenueZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR));
         $actualRevenue = $expectedRevenue * (1.0 + $revenueShock);

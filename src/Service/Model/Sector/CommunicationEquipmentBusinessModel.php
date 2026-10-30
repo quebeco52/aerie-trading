@@ -297,8 +297,8 @@ class CommunicationEquipmentBusinessModel extends StandardCorporateBusinessModel
 
         // Tender outcomes persist for a few quarters; royalties are a slow-moving device base; retail is noise.
         $networkZ    = $streams->generateZ('carrier_networks', 0.25);
-        $licensingZ  = $streams->generateZ('sep_licensing', 0.50);
-        $consumerZ   = $streams->generateZ('consumer_terminals', 0.10);
+        $licensingZ  = $streams->generateDemandZ('sep_licensing');
+        $consumerZ   = $streams->generateDemandZ('consumer_terminals');
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
         $litigationZ = $streams->generateExogenousZ('litigation', 0.10);
 

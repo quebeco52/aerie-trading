@@ -319,8 +319,8 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $securitizationWeight = $activeWeights['securitization_income'] ?? 0.0;
         $longevityWeight      = $activeWeights['longevity_bond_yield'] ?? 0.0;
 
-        $revenueZ     = $streams->generateZ('lease', 0.25);
-        $hospitalityZ = $streams->generateZ('hospitality', 0.25);
+        $revenueZ     = $streams->generateDemandZ('lease');
+        $hospitalityZ = $streams->generateDemandZ('hospitality');
         $securitizationZ = $securitizationWeight > 0.0 ? $streams->generateZ('securitization_income', 0.40) : 0.0;
         $longevityZ      = $longevityWeight > 0.0 ? $streams->generateZ('longevity_bond_yield', 0.60) : 0.0;
         $tenantDefaultZ  = $streams->generateExogenousZ('tenant_default', 0.20);

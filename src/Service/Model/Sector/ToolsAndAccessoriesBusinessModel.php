@@ -191,8 +191,8 @@ class ToolsAndAccessoriesBusinessModel extends StandardCorporateBusinessModel
         $consumerWeight   = $activeWeights['consumer'];
 
         // Commercial is highly sticky, Consumer is volatile
-        $commercialZ = $streams->generateZ('commercial', 0.02);
-        $consumerZ   = $streams->generateZ('consumer', 0.30);
+        $commercialZ = $streams->generateDemandZ('commercial');
+        $consumerZ   = $streams->generateDemandZ('consumer');
         $eventZ      = $streams->generateExogenousZ('event', 0.10);
 
         $pricingPower = $this->resolvePricingPower($stock);

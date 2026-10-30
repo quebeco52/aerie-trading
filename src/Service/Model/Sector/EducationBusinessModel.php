@@ -224,7 +224,7 @@ class EducationBusinessModel extends StandardCorporateBusinessModel
 
         $tuitionZ    = $streams->generateZ('degree_tuition_enrollment', 0.50);
         $enterpriseZ = $streams->generateZ('enterprise_b2b_training', 0.20);
-        $lmsZ        = $streams->generateZ('digital_lms_licensing', 0.60);
+        $lmsZ        = $streams->generateDemandZ('digital_lms_licensing');
 
         // Tuition is billed at enrollment and recognized ratably over the term from deferred revenue.
         $tuitionBook = $streams->recognizeBacklog(

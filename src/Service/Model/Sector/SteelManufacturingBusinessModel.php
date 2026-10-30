@@ -232,8 +232,8 @@ class SteelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $importDumpingShift = $this->resolveImportDumpingShift($macroState);
         $spotMetalsRepricing = $this->resolveSpotMetalsRepricing(($macroState->industrialMetalsIndexEma - 100.0) / 100.0, $pricingPower, $realizedVariableMargin);
 
-        $contractZ = $streams->generateZ('contracted_oem_steel', 0.35);
-        $spotZ     = $streams->generateZ('spot_hrc_market', 0.15);
+        $contractZ = $streams->generateDemandZ('contracted_oem_steel');
+        $spotZ     = $streams->generateDemandZ('spot_hrc_market');
 
         $contractRevenue = max(0.0, $expectedRevenue * $contractWeight * (1.0 + ($contractZ * ($baselineVol * self::CONTRACT_VARIANCE_SCALAR)) + $cycleShift + $tariffPriceShift));
         $spotRevenue     = max(0.0, $expectedRevenue * $spotWeight     * (1.0 + ($spotZ     * ($baselineVol * self::SPOT_VARIANCE_SCALAR)) + $spotMetalsRepricing + $cycleShift + $importDumpingShift + $tariffPriceShift));

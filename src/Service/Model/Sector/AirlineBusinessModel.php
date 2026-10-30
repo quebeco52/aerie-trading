@@ -218,10 +218,10 @@ class AirlineBusinessModel extends StandardCorporateBusinessModel
         $total = array_sum($weights);
         $plan = $total > 0.0 ? $expectedRevenue / $total : 0.0;
 
-        $leisureZ = $streams->generateZ('leisure_passengers', 0.30);
-        $businessZ = $streams->generateZ('business_passengers', 0.40);
-        $cargoZ = $streams->generateZ('air_cargo', 0.30);
-        $loyaltyZ = $streams->generateZ('loyalty_miles', 0.70);
+        $leisureZ = $streams->generateDemandZ('leisure_passengers');
+        $businessZ = $streams->generateDemandZ('business_passengers');
+        $cargoZ = $streams->generateDemandZ('air_cargo');
+        $loyaltyZ = $streams->generateDemandZ('loyalty_miles');
         $labourZ = $streams->generateExogenousZ('crew_labour', 0.0);
 
         // --- Schedule: the seats planned, and the share of its flights that fly ---

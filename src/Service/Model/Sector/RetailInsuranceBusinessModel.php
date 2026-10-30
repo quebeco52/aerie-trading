@@ -83,8 +83,8 @@ class RetailInsuranceBusinessModel extends InsuranceBusinessModel
         $lifeWeight   = $activeWeights['life_insurance_premiums'];
 
         // Independent stream Z-scores; claims fall on the property and casualty book alone.
-        $pcZ    = $streams->generateZ('property_casualty_premiums', 0.25);
-        $lifeZ  = $streams->generateZ('life_insurance_premiums', 0.50);
+        $pcZ    = $streams->generateDemandZ('property_casualty_premiums');
+        $lifeZ  = $streams->generateDemandZ('life_insurance_premiums');
         $claims = $this->resolveExcessClaims($streams, $macroState, 1.0, $catThreshold, $catScalar);
 
         $pcRevenue   = max(0.0, $expectedRevenue * $pcWeight * (1.0 + ($pcZ * ($baselineVol * self::PC_VARIANCE_SCALAR))));

@@ -289,8 +289,8 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         $lendingWeight  = $activeWeights['direct_lending'];
 
         // Independent stream Z-scores
-        $originationZ = $streams->generateZ('origination_fees', 0.20);
-        $lendingZ     = $streams->generateZ('direct_lending', 0.45);
+        $originationZ = $streams->generateDemandZ('origination_fees');
+        $lendingZ     = $streams->generateDemandZ('direct_lending');
 
         // 1. Mortgage Origination Volume Channel:
         // Mortgage rates over their neutral destroy refinancing demand and freeze home purchases; under it, both

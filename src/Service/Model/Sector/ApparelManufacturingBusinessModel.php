@@ -302,9 +302,9 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
         $contractWeight  = $activeWeights['contract_textile_supply'];
 
         // Independent stream Z-scores
-        $dtcZ       = $streams->generateZ('dtc_retail', 0.25);
-        $wholesaleZ = $streams->generateZ('wholesale_channel', 0.30);
-        $contractZ  = $streams->generateZ('contract_textile_supply', 0.40);
+        $dtcZ       = $streams->generateDemandZ('dtc_retail');
+        $wholesaleZ = $streams->generateDemandZ('wholesale_channel');
+        $contractZ  = $streams->generateDemandZ('contract_textile_supply');
         $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // --- Tail Risk Events ---

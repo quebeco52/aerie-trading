@@ -72,8 +72,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     public const DEFAULT_QUANT_ALPHA_WEIGHT = 0.30;
 
     // --- Stream Volatility & AR(1) Persistence ---
-    /** AR(1) persistence coefficient for recurring management fees. */
-    public const MGMT_PERSISTENCE = 0.50;
     /** AR(1) persistence coefficient for tactical directional bets. */
     public const DIR_PERSISTENCE = 0.15;
     /** AR(1) persistence coefficient for quantitative statistical arbitrage models. */
@@ -291,7 +289,7 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
         $dirWeight   = $activeWeights['directional_bets'];
         $quantWeight = $activeWeights['quant_alpha'];
 
-        $mgmtZ  = $streams->generateZ('management_fees', self::MGMT_PERSISTENCE);
+        $mgmtZ  = $streams->generateDemandZ('management_fees');
         $dirZ   = $streams->generateZ('directional_bets', self::DIR_PERSISTENCE);
         $quantZ = $streams->generateZ('quant_alpha', self::QUANT_PERSISTENCE);
 

@@ -6,6 +6,7 @@ namespace App\Service\Model;
 
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentOutlook;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MathUtility;
 use App\Service\Math\ResponseCurves;
@@ -21,6 +22,13 @@ class StreamContext
 
     /** Firm-wide N(0,1) demand innovation shared by every loaded stream this quarter (drawn lazily). */
     private ?float $firmInnovation = null;
+
+    // --- Customer Demand ---
+    /**
+     * Mean life of a firm's own demand news, in years: a customer won stays won for years, not a quarter (sales follow
+     * close to Gibrat's random walk), so a demand line keeps about 93% of a shock from one quarter to the next.
+     */
+    public const DEMAND_STREAM_MEAN_LIFE_YEARS = 3.5;
 
     /** Namespace prefix under which regime clocks are persisted in the stream state map. */
     public const REGIME_STATE_PREFIX = 'state:regime:';
@@ -111,6 +119,22 @@ class StreamContext
         $this->nextZ[$key] = $newZ;
 
         return $newZ;
+    }
+
+    /**
+     * Generates the Z-score of a customer-demand line at the shared demand persistence (demandStreamPersistence()).
+     * Lines whose draw is not lasting demand keep their own persistence through generateZ(): order intake a backlog
+     * already carries, trading and deal flow, investment returns, weather and operating outages.
+     */
+    public function generateDemandZ(string $key, ?float $commonLoading = null): float
+    {
+        return $this->generateZ($key, self::demandStreamPersistence(), $commonLoading);
+    }
+
+    /** Quarterly persistence of a customer-demand line: exp(-quarter / DEMAND_STREAM_MEAN_LIFE_YEARS), about 0.93. */
+    public static function demandStreamPersistence(): float
+    {
+        return exp(-FinancialConstants::QUARTER_YEARS / self::DEMAND_STREAM_MEAN_LIFE_YEARS);
     }
 
     /**

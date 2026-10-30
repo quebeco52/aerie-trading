@@ -252,8 +252,8 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
         $commodityWeight = $activeWeights['commodity_trading'] ?? 0.0;
 
         // Independent stream Z-scores with AR(1) persistence
-        $brandedZ = $streams->generateZ('branded', 0.15);
-        $volumeZ  = $streams->generateZ('volume', 0.15);
+        $brandedZ = $streams->generateDemandZ('branded');
+        $volumeZ  = $streams->generateDemandZ('volume');
         $eventZ   = $streams->generateExogenousZ('event', 0.05);
 
         $brandedRevenue = max(0.0, $expectedRevenue * $brandedWeight * (1.0 + ($brandedZ * ($baselineVol * self::REVENUE_VARIANCE_SCALAR))));

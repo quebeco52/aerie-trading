@@ -163,8 +163,8 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
         $this->advanceBookYields($stock, $macroState, $streams);
 
         // Independent stream Z-scores with AR(1) persistence
-        $lendingZ = $streams->generateZ('lending', 0.25); // Revolving credit loan origination volume
-        $swipeZ   = $streams->generateZ('swipe', 0.25); // Payment gateway transaction swipe volume
+        $lendingZ = $streams->generateDemandZ('lending'); // Revolving credit loan origination volume
+        $swipeZ   = $streams->generateDemandZ('swipe'); // Payment gateway transaction swipe volume
 
         // Inflation Bonus (Interchange Swipe Fees):
         // Swipe fees (Visa/MC network) are a percentage of transaction value — higher prices = higher revenue.

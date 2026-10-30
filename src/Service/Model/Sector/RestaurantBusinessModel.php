@@ -197,9 +197,9 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
         $leaseWeight     = $activeWeights['franchise_real_estate_leases'];
 
         // Independent stream Z-scores
-        $corporateZ = $streams->generateZ('company_operated_stores', 0.10);
-        $franchiseZ = $streams->generateZ('franchise_royalties', 0.20);
-        $leaseZ     = $streams->generateZ('franchise_real_estate_leases', 0.50);
+        $corporateZ = $streams->generateDemandZ('company_operated_stores');
+        $franchiseZ = $streams->generateDemandZ('franchise_royalties');
+        $leaseZ     = $streams->generateDemandZ('franchise_real_estate_leases');
         $eventZ     = $streams->generateExogenousZ('event', 0.10);
 
         // Tail Risk Events

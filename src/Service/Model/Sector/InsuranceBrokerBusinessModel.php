@@ -93,8 +93,8 @@ class InsuranceBrokerBusinessModel extends StandardCorporateBusinessModel
             'fiduciary'   => self::FIDUCIARY_WEIGHT,
         ]);
 
-        $commissionZ = $streams->generateZ('commissions', 0.30);
-        $benefitsZ   = $streams->generateZ('benefits', 0.40);
+        $commissionZ = $streams->generateDemandZ('commissions');
+        $benefitsZ   = $streams->generateDemandZ('benefits');
 
         $streamRevenues = [
             'commissions' => max(0.0, $expectedRevenue * $activeWeights['commissions'] * (1.0 + ($commissionZ * $baselineVol * self::COMMISSION_VARIANCE_SCALAR) + (self::COMMISSION_RATE_PASS_THROUGH * $macroState->insuranceRateDeviation()))),

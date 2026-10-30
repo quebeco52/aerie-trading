@@ -296,9 +296,9 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $adsWeight = $activeWeights['digital_ads_cloud'];
 
         // Independent stream Z-scores
-        $fpZ  = $streams->generateZ('first_party_retail', 0.25);
-        $tpZ  = $streams->generateZ('third_party_seller', 0.40); // High persistence tollbooth
-        $adsZ = $streams->generateZ('digital_ads_cloud', 0.20);
+        $fpZ  = $streams->generateDemandZ('first_party_retail');
+        $tpZ  = $streams->generateDemandZ('third_party_seller'); // High persistence tollbooth
+        $adsZ = $streams->generateDemandZ('digital_ads_cloud');
         $eventZ = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---

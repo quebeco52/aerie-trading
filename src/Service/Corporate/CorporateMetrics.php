@@ -328,6 +328,20 @@ class CorporateMetrics
     }
 
     /**
+     * The net working capital a set of day counts implies on a year's revenue and cash costs, by the arithmetic
+     * buildWorkingCapitalBalances() books, before allowances.
+     *
+     * @param array{dso?: float, dio?: float, dpo?: float} $days
+     */
+    public static function normalWorkingCapital(array $days, float $annualRevenue, float $annualCosts): float
+    {
+        $revenue = max(0.0, $annualRevenue);
+        $costs = max(0.0, $annualCosts);
+
+        return (($revenue * ($days['dso'] ?? 0.0)) + ($costs * (($days['dio'] ?? 0.0) - ($days['dpo'] ?? 0.0)))) / FinancialConstants::DAYS_PER_YEAR;
+    }
+
+    /**
      * Writes the three trade balances implied by a set of day counts and returns the resulting net figure.
      *
      * Receivables scale with revenue (they are billed sales); inventory and payables scale with the cost

@@ -133,8 +133,6 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
     public const RESOURCE_PERSISTENCE = 0.50;
     /** Volatility multiplier for capacity payments: contracted, so a sigma moves them a fraction of a percent. */
     public const CAPACITY_VARIANCE_SCALAR = 0.02;
-    /** Quarterly persistence of capacity payment shocks (contract resets and availability bonuses). */
-    public const CAPACITY_PERSISTENCE = 0.30;
     /** Quarterly persistence of the firm's own tail-event draw. */
     public const EVENT_SHOCK_PERSISTENCE = 0.10;
 
@@ -252,7 +250,7 @@ class IndependentPowerBusinessModel extends StandardCorporateBusinessModel
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        $capacityZ = $streams->generateZ('capacity_payments', self::CAPACITY_PERSISTENCE);
+        $capacityZ = $streams->generateDemandZ('capacity_payments');
         $resourceZ = $streams->generateExogenousZ('wholesale_generation', self::RESOURCE_PERSISTENCE);
         $eventZ = $streams->generateExogenousZ('event', self::EVENT_SHOCK_PERSISTENCE);
 

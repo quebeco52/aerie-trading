@@ -363,7 +363,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         $perfWeight = $activeWeights['alpha'];
 
         // Independent stream Z-scores with AR(1) persistence
-        $baseFeeZ = $streams->generateZ('base_fee', 0.45); // Sticky recurring AUM management fees
+        $baseFeeZ = $streams->generateDemandZ('base_fee'); // Sticky recurring AUM management fees
         $alphaZ   = $streams->generateZ('alpha', 0.15); // Fund alpha / activist execution
 
         // 1. AUM net client flows & mark-to-market (Base Management Fee Stream).

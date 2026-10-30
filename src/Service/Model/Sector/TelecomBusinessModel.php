@@ -278,8 +278,8 @@ class TelecomBusinessModel extends StandardCorporateBusinessModel
         $equipmentWeight    = $activeWeights['equipment_sales'];
 
         // Independent stream Z-scores
-        $subscriptionZ = $streams->generateZ('wireless_subscriptions', 0.40); // High persistence
-        $equipmentZ    = $streams->generateZ('equipment_sales', 0.15); // Low persistence, driven by hardware cycles
+        $subscriptionZ = $streams->generateDemandZ('wireless_subscriptions'); // High persistence
+        $equipmentZ    = $streams->generateDemandZ('equipment_sales'); // Low persistence, driven by hardware cycles
         $eventZ        = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Demand Sensitivities ---

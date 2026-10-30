@@ -89,8 +89,6 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
      * dependent coverage, is lower at 0.57 (Cawley, Moriya & Simon 2015), its 1.97 for men alone.
      */
     public const ENROLLMENT_UNEMPLOYMENT_ELASTICITY = 0.95;
-    /** Quarterly persistence of the plan's own membership shock (the standard corporate default). */
-    public const MEMBERSHIP_SHOCK_PERSISTENCE = 0.25;
 
     // --- Claims Float ---
     /**
@@ -165,7 +163,7 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
     ): SectorPhysicsResult {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
-        $membershipZ = $streams->generateZ('premiums', self::MEMBERSHIP_SHOCK_PERSISTENCE);
+        $membershipZ = $streams->generateDemandZ('premiums');
         $premium = max(0.0, $expectedRevenue * (1.0 + ($membershipZ * $baselineVol * self::REVENUE_VARIANCE_SCALAR)));
 
         // --- Underwriting Cycle ---

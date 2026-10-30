@@ -170,7 +170,7 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
         $loanToOwnWeight = $activeWeights['loan_to_own'] ?? 0.0;
 
         // Independent stream Z-scores
-        $advisoryZ = $streams->generateZ('restructuring_advisory', 0.50);
+        $advisoryZ = $streams->generateDemandZ('restructuring_advisory');
         $recoveryZ = $streams->generateZ('turnaround_recovery', 0.15);
 
         if ($recoveryZ > self::LORE_RESTRUCTURING_Z_SCORE && $distressMultiplier > 0.0) {

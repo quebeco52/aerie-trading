@@ -265,9 +265,9 @@ class LawFirmBusinessModel extends StandardCorporateBusinessModel
         $restructuringWeight = $activeWeights['restructuring_advisory'];
 
         // Independent stream Z-scores with persistent AR(1) momentum
-        $retainerZ      = $streams->generateZ('corporate_retainers', 0.40);
+        $retainerZ      = $streams->generateDemandZ('corporate_retainers');
         $litigationZ    = $streams->generateZ('litigation_settlements', 0.10);
-        $restructuringZ = $streams->generateZ('restructuring_advisory', 0.30);
+        $restructuringZ = $streams->generateDemandZ('restructuring_advisory');
         $eventZ         = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities & Restructuring Surge ---
