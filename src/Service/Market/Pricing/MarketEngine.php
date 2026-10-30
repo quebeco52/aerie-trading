@@ -42,11 +42,11 @@ class MarketEngine
 
     // --- Franchise News ---
     /**
-     * Half-life, in years, of the franchise power a firm's own news gives its margin: an edge rivals compete away over
-     * about a decade. Near the cap rate the fade keeps the power a unit of value news needs, and so its spread, least.
+     * Half-life, in years, of the franchise power a firm's own news gives its margin: rivals compete an edge away
+     * within a few years (Fama & French 2000 find about 38% of excess profitability gone in a year).
      */
-    public const FRANCHISE_HALF_LIFE_YEARS = 10.0;
-    /** The franchise power's fade per year, ln 2 over its half-life (~0.069). */
+    public const FRANCHISE_HALF_LIFE_YEARS = 3.0;
+    /** The franchise power's fade per year, ln 2 over its half-life (~0.23). */
     public const FRANCHISE_FADE_SPEED = M_LN2 / self::FRANCHISE_HALF_LIFE_YEARS;
     /**
      * Share of the variance of a name's own diffusion, its sector factor aside, that is news about its franchise, which
@@ -58,10 +58,10 @@ class MarketEngine
     /**
      * Fastest the franchise power moves, per square root of a year. A name whose franchise is a small part of its value
      * (a long-lived business at a low cap rate) would need its margin to swing many times over to carry half its news,
-     * so less of its news is the franchise's. At the 10-year half-life the power settles within about +/-0.9 (one sd)
-     * of zero: a 20% margin between about 9% and 39%.
+     * so less of its news is the franchise's. At the 3-year half-life the power settles within about +/-0.3 (one sd)
+     * of zero: a 40% margin between about 33% and 47%.
      */
-    public const FRANCHISE_POWER_VOLATILITY = 0.35;
+    public const FRANCHISE_POWER_VOLATILITY = 0.20;
 
     // --- Institutional & Market Architecture ---
     /**

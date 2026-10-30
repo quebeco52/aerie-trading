@@ -23,7 +23,9 @@ case "$1" in
   fbase) BASEV=${BASE:?set BASE=<tree>} ;;  # franchise fix: frozen tree of 2b345931 (git archive + vendor symlink)
   ffix) BASEV="" ;;  # working tree: power steps on the elasticity at the current power, news share capped by vol 0.35
   ffix50) BASEV=""; : "${OVR:?set OVR=<dir>}" ;;  # ffix with FRANCHISE_POWER_VOLATILITY 0.50 (OVR copy of MarketEngine)
-  *) echo "usage: run.sh head|base|d1|d2|d2b|c1|f1|crash|b1|a1|mbase|mbase2|mom1|mom2|mom3|chk|fbase|ffix|ffix50 <seed>" >&2; exit 2 ;;
+  fnow) BASEV="" ;;  # franchise life (10-30): working tree at 625e9ca8, 10-year half-life, power vol 0.35
+  fhl3) BASEV="" ;;  # working tree: 3-year half-life, power vol 0.20
+  *) echo "usage: run.sh head|base|d1|d2|d2b|c1|f1|crash|b1|a1|mbase|mbase2|mom1|mom2|mom3|chk|fbase|ffix|ffix50|fnow|fhl3 <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" VAL_OUT="$H/runs/$1-$2.val.json" \

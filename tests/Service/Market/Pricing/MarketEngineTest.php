@@ -911,6 +911,7 @@ class MarketEngineTest extends TestCase
      * runs at e^p and the power moves value fastest, and a margin worn thin, where it barely moves it. A reinsurer's
      * 1.5% margin stepped at its zero-power rate took value many times the news there. Where little of the value is
      * left to move, less of the news is the franchise's and the power moves no faster than FRANCHISE_POWER_VOLATILITY.
+     * Value is measured from where the step's fade leaves the power, so the news is all that moves it.
      */
     public function testFairValueTakesTheNewsWhereverThePowerStandsAndThePowerMovesBoundedly(): void
     {
@@ -919,7 +920,7 @@ class MarketEngineTest extends TestCase
             $this->mathUtilityMock->script(generateStandardNormal: $z);
             $context = $this->franchiseContext($power, 'none', $margin);
             $faded = $power * exp(-MarketEngine::FRANCHISE_FADE_SPEED * $context->dt);
-            $before = $this->engine->strikeFairValue($context)['perceived_fair_value'];
+            $before = $this->engine->strikeFairValue($this->franchiseContext($faded, 'none', $margin))['perceived_fair_value'];
             $result = $this->engine->calculateNextPrice($context);
 
             $expected = self::franchiseNews($context, $z);
@@ -970,9 +971,9 @@ class MarketEngineTest extends TestCase
     }
 
     /**
-     * Equity news is operating news levered: on the same draw a firm whose equity return moves three times its
-     * operating return moves its power less, while its fair value still takes the news it is given. A lender's return
-     * is struck on its equity already, so its balance sheet does not scale the map.
+     * Equity news is operating news levered: a firm whose equity return moves three times its operating return moves
+     * its power less for each unit of news, while its fair value still takes the news it is given. A lender's return is
+     * struck on its equity already, so its balance sheet does not scale the map.
      */
     public function testEquityNewsMovesTheFranchiseAtTheLeverageFairValueIsStruckOn(): void
     {
@@ -988,7 +989,7 @@ class MarketEngineTest extends TestCase
         $unlevered = $step('none', 30.0);
         $levered = $step('none', 90.0);
         $this->assertGreaterThan(0.0, $levered['power']);
-        $this->assertLessThan($unlevered['power'], $levered['power'], 'less operating news for the same equity news');
+        $this->assertLessThan($unlevered['power'] / $unlevered['news'], $levered['power'] / $levered['news'], 'less operating news for the same equity news');
         foreach ([$unlevered, $levered] as $arm) {
             $this->assertEqualsWithDelta($arm['news'], $arm['move'], 0.05 * abs($arm['news']), 'the equity takes the news either way');
         }

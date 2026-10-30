@@ -60,3 +60,9 @@ g = log(P/F), its persistence and its attribution to price channels.
   OVR=<dir> holding MarketEngine.php at 0.50. `BASE=<tree> bin/harness-batch $V/run.sh 1-8 fbase ffix && OVR=<dir>
   bin/harness-batch $V/run.sh 1-8 ffix50`, then `momentum.py 1-8 fbase ffix ffix50` and `franchise.py 1-8 fbase ffix
   ffix50` (power sd / max / count > 2, SAFE, P/E max and p90, top cap share, P/F max at the end). ~8 min for 24 runs.
+- Franchise life (10-30): `fnow` = working tree at 625e9ca8 (10-year half-life, power vol 0.35), `fhl3` = working tree
+  with a 3-year half-life and vol 0.20. Both arms ran on the working tree, `fnow` before the edit. Run
+  `bin/harness-batch $V/run.sh 1-8 fhl3`, then `franchise_life.py 1-8 fnow fhl3` (margin and ROE drift from structure,
+  firms under 5% ROE, SWAN ROE and margin, cash/equity, low-return hoarders), `franchise.py` and `momentum.py` on the
+  same arms. The hoarder count also flags lenders whose cash is their balance sheet; read the names before acting on
+  it. ~2.5 min an arm.
