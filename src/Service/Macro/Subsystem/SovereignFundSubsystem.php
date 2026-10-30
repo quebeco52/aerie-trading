@@ -243,7 +243,8 @@ class SovereignFundSubsystem
      *
      * The domestic sleeve is a cap-weighted slice of the float, so it earns the board's float-weighted price return;
      * its dividends arrive as cash in the paper sleeve, and it tenders into buybacks and takes up issues pro rata. The
-     * foreign equity market loads on the home market factor at its measured correlation; the paper is marked on the
+     * foreign equity market loads on the home market factor at its measured correlation and gives that move back as the
+     * home market does (foreignEquityValuationShift); the paper is marked on the
      * foreign curve. Neither is rebalanced here: between the fund's own reviews each sleeve drifts with its market.
      * Everything booked here is return; money paid in from outside arrives after, in receiveInflows().
      *
@@ -258,6 +259,8 @@ class SovereignFundSubsystem
         $previousIndex = $state->foreignEquityIndex;
         $state->foreignEquityIndex = $this->foreignEquityIndexStep($state, $dt);
         $state->foreignEquityIndex *= exp($state->foreignEquityValuationChange);
+        $state->foreignEquityValuationShift = ($state->foreignEquityValuationShift * exp(-AssetMarketSubsystem::equityValuationShiftFade() * $dt))
+            + (self::FOREIGN_EQUITY_MARKET_CORRELATION * self::FOREIGN_EQUITY_VOLATILITY * $state->marketZ * sqrt($dt));
         if ($previousIndex > 0.0) {
             $state->sovereignFundForeignEquity *= $state->foreignEquityIndex / $previousIndex;
         }
@@ -277,18 +280,20 @@ class SovereignFundSubsystem
 
     /**
      * The foreign equity index a tick on: a GBM drifting at the foreign policy rate plus the equity risk premium,
-     * loading on the global market factor at the foreign correlation, with its own residual draw.
+     * loading on the global market factor at the foreign correlation, with its own residual draw. The factor's move is
+     * discount-rate news abroad as at home, so the drift earns back the repricing it has left as that repricing fades.
      */
     protected function foreignEquityIndexStep(MacroState $state, float $dt): float
     {
         $idiosyncraticVolatility = self::FOREIGN_EQUITY_VOLATILITY
             * sqrt(1.0 - (self::FOREIGN_EQUITY_MARKET_CORRELATION * self::FOREIGN_EQUITY_MARKET_CORRELATION));
+        $repricingFade = $state->foreignEquityValuationShift * (exp(-AssetMarketSubsystem::equityValuationShiftFade() * $dt) - 1.0) / $dt;
 
         return StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: $state->foreignEquityIndex,
             idiosyncraticVolatility: $idiosyncraticVolatility,
             drift: $state->foreignPolicyRate + MacroConstants::BASE_EQUITY_RISK_PREMIUM,
-            gravityDrift: 0.0,
+            gravityDrift: $repricingFade,
             dt: $dt,
             beta: self::FOREIGN_EQUITY_MARKET_CORRELATION,
             marketVol: self::FOREIGN_EQUITY_VOLATILITY,

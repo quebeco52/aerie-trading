@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroState;
+use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
@@ -311,6 +312,38 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($index * exp(-0.05), $state->foreignEquityIndex, 1e-9);
         $this->assertEqualsWithDelta($equity * exp(-0.05), $fund->foreignEquityHomeValue($state), 1e-3);
         $this->assertEqualsWithDelta($paper, $fund->foreignHomeValue($state) - $fund->foreignEquityHomeValue($state), 1e-3);
+    }
+
+    /**
+     * The home market factor's move is discount-rate news abroad as at home: the foreign index takes it at its loading,
+     * then runs exactly its fading shift above the path it would have taken without it, half of it gone at the home
+     * market's half-life.
+     */
+    public function testAMarketShockAbroadFadesAtTheHomeMarketsHalfLife(): void
+    {
+        $tpy = 360;
+        $dt = 1.0 / $tpy;
+        $calmFund = new SovereignFundSubsystem($this->stillMarket());
+        $hitFund = new SovereignFundSubsystem($this->stillMarket());
+        $calm = $this->openFund($calmFund, $tpy, 0.03);
+        $hit = $this->openFund($hitFund, $tpy, 0.03);
+
+        $hit->marketZ = -3.0;
+        $this->step($hitFund, $hit, $dt);
+        $hit->marketZ = 0.0;
+        $this->step($calmFund, $calm, $dt);
+        $shock = SovereignFundSubsystem::FOREIGN_EQUITY_MARKET_CORRELATION * SovereignFundSubsystem::FOREIGN_EQUITY_VOLATILITY * -3.0 * sqrt($dt);
+        $this->assertEqualsWithDelta($shock, $hit->foreignEquityValuationShift, 1e-12);
+        $this->assertEqualsWithDelta($shock, log($hit->foreignEquityIndex / $calm->foreignEquityIndex), 1e-9);
+
+        $halfLifeTicks = (int) round(AssetMarketSubsystem::EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS * $tpy);
+        for ($tick = 0; $tick < $halfLifeTicks; ++$tick) {
+            $this->step($hitFund, $hit, $dt);
+            $this->step($calmFund, $calm, $dt);
+        }
+
+        $this->assertEqualsWithDelta(0.5 * $shock, $hit->foreignEquityValuationShift, 1e-9);
+        $this->assertEqualsWithDelta(0.5 * $shock, log($hit->foreignEquityIndex / $calm->foreignEquityIndex), 1e-9);
     }
 
     public function testStampDutyIsPaidIntoTheFundAndReportedForTheYear(): void

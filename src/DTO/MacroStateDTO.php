@@ -714,6 +714,11 @@ readonly class MacroStateDTO
         public float $foreignEquityRiskPremium = MacroConstants::BASE_EQUITY_RISK_PREMIUM,
         public float $foreignEquityValuation = 0.0,
         public float $foreignEquityValuationChange = 0.0,
+        /**
+         * The log repricing the home market factor has put on the foreign equity market, fading as the home market's
+         * does (SovereignFundSubsystem::markToMarket()).
+         */
+        public float $foreignEquityValuationShift = 0.0,
         public float $foreignBondYield = 0.0,
         public float $boardFloatCap = 0.0,
         public float $boardPriceReturn = 0.0,

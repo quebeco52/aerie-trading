@@ -151,6 +151,7 @@ class MacroFieldRegistryTest extends TestCase
         'boardDividendCash' => 'One tick of dividend cash; same objection.',
         'foreignEquityValuation' => 'A function of foreign_equity_risk_premium, which is recorded.',
         'foreignEquityValuationChange' => 'One tick of re-rating; foreign_equity_index records its effect.',
+        'foreignEquityValuationShift' => 'Carried in the Redis state; foreign_equity_index records its effect.',
         'sovereignFundStampDutyYearToDate' => 'Currency accumulator for the budget year; sovereign_fund_stamp_duty_to_gdp records the year.',
         'boardStampDuty' => 'One tick of stamp duty; sovereign_fund_stamp_duty_to_gdp records the year.',
         'boardTradedValue' => 'One tick of value traded; boardTurnoverEma carries the quarter.',

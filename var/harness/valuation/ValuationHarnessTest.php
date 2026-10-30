@@ -183,6 +183,7 @@ final class ValuationHarnessTest extends BoardRun
             'y10' => $m->yield10y, 'credit' => $m->macroCreditSpread, 'tips' => $m->tipsBreakeven,
             'mood' => $m->sentimentResidual(), 'mz_latent' => $m->marketZLatent, 'vol_ema' => $m->marketVolatilityEma,
             'ebp' => $m->excessBondPremium, 'gap_ema' => $m->outputGapEma,
+            'v' => $m->equityValuationShift, 'fidx' => $m->foreignEquityIndex, 'fshift' => $m->foreignEquityValuationShift ?? null,
         ];
     }
 

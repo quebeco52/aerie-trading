@@ -591,6 +591,8 @@ class MacroState
     public float $foreignEquityRiskPremium;
     public float $foreignEquityValuation;
     public float $foreignEquityValuationChange;
+    // The log repricing the home market factor has put on that market, fading at the home market's half-life.
+    public float $foreignEquityValuationShift;
     // Yield on the foreign sovereign index the paper sleeve holds, at its duration, at the last close. Zero until
     // priced.
     public float $foreignBondYield;

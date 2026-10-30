@@ -70,3 +70,8 @@ g = log(P/F), its persistence and its attribution to price channels.
   factor at the stock's beta (MacroStateDTO::equityRepricing()), as fair value is; base `fhl3`. `market_board.py 1-8 fhl3
   mv1`: buyback yield and its correlation and slope on V (the factor rebuilt from the probe's mkt + jS channels at the
   5-year fade), median split-adjusted share count y20/y1, board P/E min / max / sd log, sd V, deals.
+- Mainland fade (10-30): `fx0` = BASE tree of 17923936, `fx1` = working tree where the foreign equity index gives its
+  market-factor move back at the home half-life (MacroState::foreignEquityValuationShift); both write quarterly macro
+  rows (`v`, `fidx`, `fshift` added to macroRow). `BASE=<tree> bin/harness-batch $V/run.sh 1-8 fx0 fx1`, then
+  `mainland.py 1-8 fx0 fx1` (mainland return, vol, variance ratios, board-mainland 5-year drift and correlation, fund
+  over GDP) and `market_board.py 1-8 fx0 fx1`. ~5.5 min for 16 runs.
