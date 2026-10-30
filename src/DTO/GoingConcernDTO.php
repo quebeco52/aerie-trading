@@ -28,12 +28,21 @@ class GoingConcernDTO
          * lender's deposits not.
          */
         public readonly float $claims,
+        /**
+         * Through-the-cycle EBITDA: the firm's long-run return on its capital, before tax, plus depreciation. Null
+         * before it has a long-run return.
+         */
+        public readonly ?float $normalEbitda = null,
     ) {}
 
-    /** The business covers its cash operating costs, so it is worth more alive than broken up. */
+    /**
+     * The business covers its cash operating costs through the cycle, so it is worth more alive than broken up. A
+     * trough year that does not (an airline through a fuel spike) leaves a business a court reorganizes; the trailing
+     * year decides only for a firm with no long-run return yet.
+     */
     public function isViable(): bool
     {
-        return $this->trailingEbitda > 0.0;
+        return ($this->normalEbitda ?? $this->trailingEbitda) > 0.0;
     }
 
     /** The firm's assets cover every claim ahead of the equity, so the equity is still in the money. */

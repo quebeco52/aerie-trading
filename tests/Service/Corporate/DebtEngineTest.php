@@ -1570,8 +1570,8 @@ class DebtEngineTest extends TestCase
     /**
      * The firm's assets are valued where the market values them: the Merton asset value its equity price
      * implies at the business's own asset volatility. Below the debt's face the equity is out of the money,
-     * which a collapsed share price says long before a trailing year does. Viability is read off the year's
-     * cash operating earnings.
+     * which a collapsed share price says long before a trailing year does. Viability is read through the cycle,
+     * and off the year's cash operating earnings only before the firm has a long-run return.
      */
     public function testTheGoingConcernIsTheAssetValueTheEquityPriceImplies(): void
     {
@@ -1601,6 +1601,17 @@ class DebtEngineTest extends TestCase
 
         $stock->setQuarterlyOperatingHistory(array_fill(0, 4, ['revenue' => 200_000_000.0, 'ebit' => -150_000_000.0]));
         $this->assertFalse($engine->assessGoingConcern($stock, $macro)->isViable(), 'a year that does not cover its cash costs');
+
+        // The same trough year at a firm that earns 6% on its capital through the cycle: a business worth reorganizing.
+        $stock->setLongRunReturn('0.06');
+        $trough = $engine->assessGoingConcern($stock, $macro);
+        $this->assertLessThan(0.0, $trough->trailingEbitda);
+        $this->assertGreaterThan(0.0, (float) $trough->normalEbitda);
+        $this->assertTrue($trough->isViable(), 'a trough year at a business that pays through the cycle');
+
+        // One that loses money through the cycle is broken up.
+        $stock->setLongRunReturn('-0.10');
+        $this->assertFalse($engine->assessGoingConcern($stock, $macro)->isViable(), 'a business that does not pay through the cycle');
     }
 
     /**

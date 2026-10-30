@@ -49,3 +49,7 @@ that real economies span, so a change is judged on the board, not on one firm.
     earns ~6.4% after tax on its price (ROIC 8% / 1.25 hubris) against ~4.3% after-tax interest.
   - Board: 188 deals a run (0.16 per firm-year). Every empire builder does 5+ in most seeds (HUMM, SILC, WREN,
     TRIV, GULL, ...). Succession does not fire GULL's manager because its EVA spread is strongly positive.
+- 10-30 live TERN was liquidated (Chapter 7) at t 14.1 with $42bn book equity, after four loss quarters in a fuel
+  spike that reversed within a year. The viability test read trailing EBITDA; it now reads through-the-cycle EBITDA
+  (getNormalEbitda: long-run return on capital + depreciation; TERN's was +6.3%), falling back to trailing before a
+  long-run return exists. Arm `viab` vs `accr`: identical (no seed reached the liquidation branch; failures are rare).

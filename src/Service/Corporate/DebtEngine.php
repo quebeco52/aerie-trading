@@ -630,7 +630,7 @@ class DebtEngine
      * & Bohn 2003). That is the reorganization value a plan divides, and below the debt's face it is the
      * point at which the equity is out of the money. Capitalizing the trailing year instead valued any
      * business in a cyclical trough at nothing. Whether the business covers its cash operating costs is read
-     * off the last twelve months.
+     * through the cycle, on its long-run return, for the same reason.
      */
     public function assessGoingConcern(Stock $stock, MacroStateDTO $macroState, ?\App\DTO\DebtHealthDTO $health = null): \App\DTO\GoingConcernDTO
     {
@@ -656,6 +656,7 @@ class DebtEngine
             assetValue: $assetValue,
             cash: max(0.0, (float) $stock->getCorporateTreasury()),
             claims: $debtValue,
+            normalEbitda: $strategy->getNormalEbitda($stock, $macroState->corporateTaxRate, $health->rawMetrics->depreciation),
         );
     }
 
