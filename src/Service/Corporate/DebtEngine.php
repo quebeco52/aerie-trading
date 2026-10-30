@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\DTO\MacroStateDTO;
+use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\CreditRisk;
@@ -713,12 +715,20 @@ class DebtEngine
         // Hamada levered beta: preserves signed beta magnitude while adjusting for capital structure leverage.
         $baseBeta = (float) $stock->getBeta();
 
-        // The beta is levered on the equity the fundamentals support, not on the price: the price carries market noise
-        // the fair value pulls back out, and levering on it let a fall raise the beta that deepened the fall. Net debt,
+        // The beta is levered on the equity the business supports: the business valued at its asset beta, plus the tax
+        // shield Hamada assumes (t x D), less the net debt (Modigliani-Miller). Not the price, whose fall raised the
+        // beta that loaded the next fall; not the fair value, which is discounted at this beta, so a dip in earnings
+        // fed on itself until the cap held; not book, since the asset beta was unlevered at market leverage. Net debt,
         // so cash hoarders aren't penalized with fake risk. The WACC below still weighs the claims at market value.
-        $fairEquityValue = (float) $stock->getFairEquityValue();
-        $leveredEquity = $fairEquityValue > 0.0 ? $fairEquityValue : $marketCap;
-        $debtToEquity = $leveredEquity > 0 ? ($netDebtCapital / $leveredEquity) : self::MAX_BETA_DEBT_TO_EQUITY;
+        $assetCostOfCapital = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $baseBeta, $macroState->equityRiskPremium);
+        $businessValue = Valuation::operatingCapitalValue(
+            $stock->getInvestedCapital(),
+            $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), MarketPricingContext::anchorReturn($stock, $strategy), $assetCostOfCapital),
+            $assetCostOfCapital,
+            Valuation::calculateExpectedNominalGrowth(SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime), $macroState->tipsBreakeven, $assetCostOfCapital),
+        );
+        $supportedEquity = $businessValue - (1.0 - $impliedTaxShieldRate) * $netDebtCapital;
+        $debtToEquity = $supportedEquity > 0.0 ? ($netDebtCapital / $supportedEquity) : self::MAX_BETA_DEBT_TO_EQUITY;
 
         // Standard CAPM breaks down during insolvency. Cap D/E to prevent runaway WACC.
         $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
@@ -734,8 +744,13 @@ class DebtEngine
         $equityRiskPremium = $macroState->equityRiskPremium;
         $costOfEquity = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $leveredBeta, $equityRiskPremium);
 
-        // Absolute priority hurdle: cost of equity floored at marginal market borrowing rate.
-        $costOfEquity = max($debtMetrics->currentMarketRate, $costOfEquity);
+        // Absolute priority: equity, the junior claim, never requires less than its debt is expected to return. That is
+        // the yield the firm borrows at less the loss its holders expect from default, not the promised yield: a junk
+        // bond's yield prices defaults it will not return.
+        $expectedDefaultLoss = $currentDebt > 0.0 || $wholesaleDebt > 0.0
+            ? CreditRisk::expectedDefaultLossRate($this->resolveDistanceToDefault($stock, $macroState), self::MERTON_HORIZON_YEARS, $strategy->getLossGivenDefault())
+            : 0.0;
+        $costOfEquity = max($debtMetrics->currentMarketRate - $expectedDefaultLoss, $costOfEquity);
 
         // Weighted Average Cost of Capital (WACC)
         $totalCapital = $netDebtCapital + $marketCap;

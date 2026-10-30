@@ -22,6 +22,19 @@ class CreditRiskTest extends TestCase
 {
     // --- Recovery ---
 
+    /**
+     * At distance zero half the firms default within the horizon: over five years that is a hazard of ln 2 / 5, and
+     * holders losing 60% expect to lose 0.6 x 13.9% = 8.3% a year. Far from default they expect almost nothing; a
+     * fully secured claim nothing at all.
+     */
+    public function testExpectedDefaultLossIsTheHazardTimesTheLoss(): void
+    {
+        $this->assertEqualsWithDelta(0.6 * log(2.0) / 5.0, CreditRisk::expectedDefaultLossRate(0.0, 5.0, 0.6), 1e-9);
+        $this->assertLessThan(1e-4, CreditRisk::expectedDefaultLossRate(4.0, 5.0, 0.6));
+        $this->assertSame(0.0, CreditRisk::expectedDefaultLossRate(0.0, 5.0, 0.0));
+        $this->assertGreaterThan(CreditRisk::expectedDefaultLossRate(1.0, 5.0, 0.6), CreditRisk::expectedDefaultLossRate(0.5, 5.0, 0.6));
+    }
+
     public function testTheDistrictsAverageDefaultYearRecoversTheBaseRate(): void
     {
         // The economy opens at its own long-run default rate (CreditCycleOpeningRealismTest), so that is the year

@@ -673,6 +673,22 @@ final class CreditRisk
     }
 
     /**
+     * The yearly loss a bond's holders expect from default: the constant hazard that gives the cumulative default
+     * probability N(-DD) over the horizon, -ln(1 - P) / T, times the loss given default (Duffie & Singleton 1999). A
+     * bond's expected return is its yield less this.
+     *
+     * @param float $distanceToDefault Merton's distance to default over the horizon.
+     * @param float $horizonYears      The horizon the distance is measured over.
+     * @param float $lossGivenDefault  The share of the claim lost in default.
+     */
+    public static function expectedDefaultLossRate(float $distanceToDefault, float $horizonYears, float $lossGivenDefault): float
+    {
+        $survival = 1.0 - Distributions::standardNormalCdf(-$distanceToDefault);
+
+        return $survival > 0.0 && $horizonYears > 0.0 ? -log($survival) / $horizonYears * max(0.0, $lossGivenDefault) : max(0.0, $lossGivenDefault);
+    }
+
+    /**
      * The spread a rating class trades at over the sovereign curve, today.
      *
      * Rating-based pricing (Jarrow, Lando & Turnbull 1997): an issuer's risk-neutral default intensity is that of its

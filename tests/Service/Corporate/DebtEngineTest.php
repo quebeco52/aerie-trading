@@ -6,6 +6,7 @@ namespace App\Tests\Service\Corporate;
 
 use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
+use App\Data\Company\Sectors;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
@@ -383,7 +384,7 @@ class DebtEngineTest extends TestCase
             $this->assertEqualsWithDelta(0.02, $engine->reviewRatingAndPriceDebt($stock, $macroState)->historicalFixedRate, 1e-12, 'The quarter is charged at the coupon the book carries.');
             $this->assertTrue($engine->rollMaturities($stock, $health, 50_000_000_000.0)->refinanced);
 
-            $rollover = \App\Data\Company\Sectors::getBusinessModelStrategy($model)->getDebtMaturityRolloverRate();
+            $rollover = Sectors::getBusinessModelStrategy($model)->getDebtMaturityRolloverRate();
             $this->assertEqualsWithDelta((0.02 * (1.0 - $rollover)) + (0.07 * $rollover), (float) $stock->getHistoricalFixedRate(), 1e-9);
             $coupons[$model] = (float) $stock->getHistoricalFixedRate();
         }
@@ -400,7 +401,7 @@ class DebtEngineTest extends TestCase
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), null, null);
         // The market prices both at 6% against a book coupon of 8%.
         $health = $this->buildHealthForMaturity(interestCoverage: 6.0, dynamicSpread: 0.01);
-        $rollover = \App\Data\Company\Sectors::strategyFor('Auto Manufacturers')->getDebtMaturityRolloverRate();
+        $rollover = Sectors::strategyFor('Auto Manufacturers')->getDebtMaturityRolloverRate();
 
         foreach ([['A', $rollover], ['BB', 0.15]] as [$rating, $turnover]) {
             $stock = $this->buildMaturityIssuer($rating, 0.0);
@@ -779,7 +780,7 @@ class DebtEngineTest extends TestCase
         $bank->setTicker('PLVR');
         $bank->setIndustry('Banks - Regional');
 
-        $this->assertNotNull(\App\Data\Company\Sectors::strategyFor('Banks - Regional')->getTargetCapitalRatio($bank), 'PLVR steers to its capital ratio');
+        $this->assertNotNull(Sectors::strategyFor('Banks - Regional')->getTargetCapitalRatio($bank), 'PLVR steers to its capital ratio');
         $this->assertTrue($engine->rollMaturities($bank, $health, 0.0)->refinanced);
         $this->assertFalse($engine->rollMaturities($this->buildMaturityIssuer('A', 0.006), $health, 0.0)->refinanced);
     }
@@ -797,7 +798,7 @@ class DebtEngineTest extends TestCase
         $cardLender->setTicker('STRK');
         $cardLender->setIndustry('Credit Services');
 
-        $this->assertNull(\App\Data\Company\Sectors::strategyFor('Credit Services')->getTargetCapitalRatio($cardLender), 'STRK runs no capital target');
+        $this->assertNull(Sectors::strategyFor('Credit Services')->getTargetCapitalRatio($cardLender), 'STRK runs no capital target');
         $this->assertTrue($engine->rollMaturities($cardLender, $health, 0.0)->refinanced);
     }
 
@@ -829,7 +830,7 @@ class DebtEngineTest extends TestCase
         $stock = $this->buildMaturityIssuer('CCC', 0.02);
         $stock->setWholesaleDebt('2000000000.00');
         $stock->setHistoricalFixedRate('0.06');
-        $rollover = \App\Data\Company\Sectors::strategyFor('Auto Manufacturers')->getDebtMaturityRolloverRate();
+        $rollover = Sectors::strategyFor('Auto Manufacturers')->getDebtMaturityRolloverRate();
         $shut = $this->buildHealthForMaturity(interestCoverage: 0.4, dynamicSpread: 0.02);
 
         $first = $engine->rollMaturities($stock, $shut, 10_000_000.0);
@@ -915,7 +916,7 @@ class DebtEngineTest extends TestCase
         $macro = MacroStateDTO::fromArray(['policy_rate_ema' => 0.04, 'yield_5y_ema' => 0.045, 'macro_credit_spread_ema' => 0.02]);
 
         $seen = [];
-        foreach (\App\Data\Company\Sectors::INDUSTRY_METRICS as $industry => $metrics) {
+        foreach (Sectors::INDUSTRY_METRICS as $industry => $metrics) {
             $model = $metrics['business_model'] ?? 'none';
             if (isset($seen[$model])) {
                 continue;
@@ -960,7 +961,7 @@ class DebtEngineTest extends TestCase
         $atCalm = $this->engine->calculateInterestExpense($firm, $calm);
         $atFreeze = $this->engine->calculateInterestExpense($firm, $freeze);
 
-        $this->assertFalse(\App\Data\Company\Sectors::strategyFor($firm->getIndustry())->isFinancial(), 'fixture guard: an operating firm');
+        $this->assertFalse(Sectors::strategyFor($firm->getIndustry())->isFinancial(), 'fixture guard: an operating firm');
         $this->assertEqualsWithDelta(((10e9 * 0.40) + 1e9) * $premium, $atFreeze->interestExpense - $atCalm->interestExpense, 1.0);
         $this->assertEqualsWithDelta($atCalm->currentMarketRate, $atFreeze->currentMarketRate, 1e-15, 'a fixed coupon is priced off the curve, not the interbank rate');
         $this->assertEqualsWithDelta(
@@ -1163,8 +1164,8 @@ class DebtEngineTest extends TestCase
         $plain = $engine->calculateAltmanZScore($build('General'), 120_000_000.0, 2_000_000_000.0);
 
         $this->assertGreaterThan(
-            \App\Data\Company\Sectors::getBusinessModelStrategy('none')->getLeaseIntensity($build('General')),
-            \App\Data\Company\Sectors::getBusinessModelStrategy('restaurant')->getLeaseIntensity($build('Restaurants')),
+            Sectors::getBusinessModelStrategy('none')->getLeaseIntensity($build('General')),
+            Sectors::getBusinessModelStrategy('restaurant')->getLeaseIntensity($build('Restaurants')),
         );
         $this->assertLessThan($plain['z_score'], $restaurant['z_score']);
     }
@@ -1229,12 +1230,13 @@ class DebtEngineTest extends TestCase
             corporateTaxRate: 0.21,
             equityRiskPremium: 0.045,
         );
-        $costOfEquity = fn(float $policyRate, float $equityRate, float $tenYear = 0.048, float $tenYearAverage = 0.048): float => $engine->analyzeDebtHealth($this->leveredFirm('MID', '0.80', '0.006'), $macro($policyRate, $equityRate, $tenYear, $tenYearAverage))->costOfEquity;
+        $costOfEquity = fn(float $policyRate, float $equityRate, float $tenYear = 0.048, float $tenYearAverage = 0.048, string $debt = '500000000'): float => $engine->analyzeDebtHealth($this->leveredFirm('MID', '0.80', '0.006')->setWholesaleDebt($debt), $macro($policyRate, $equityRate, $tenYear, $tenYearAverage))->costOfEquity;
 
         $base = $costOfEquity(0.04, 0.048);
 
         $this->assertEqualsWithDelta($base, $costOfEquity(0.06, 0.048), 1e-12, 'A hike in the policy rate alone must not move the hurdle.');
-        $this->assertEqualsWithDelta($base + 0.01, $costOfEquity(0.04, 0.058), 1e-9, "The hurdle moves one for one with equity's riskless rate.");
+        $this->assertEqualsWithDelta($costOfEquity(0.04, 0.048, debt: '0') + 0.01, $costOfEquity(0.04, 0.058, debt: '0'), 1e-9, "Unlevered, the hurdle moves one for one with equity's riskless rate.");
+        $this->assertGreaterThan($base + 0.01, $costOfEquity(0.04, 0.058), 'Levered, by more: the higher rate values the business that carries the debt lower.');
         $this->assertEqualsWithDelta($base, $costOfEquity(0.04, 0.048, 0.058), 1e-12, 'The spot ten-year alone must not move the hurdle.');
         $this->assertEqualsWithDelta($base, $costOfEquity(0.04, 0.048, 0.048, 0.030), 1e-12, 'The moving average of the long yield must not move the hurdle.');
     }
@@ -1253,32 +1255,35 @@ class DebtEngineTest extends TestCase
     }
 
     /**
-     * The beta is levered on the equity the fundamentals support. A price crash the fair value does not share leaves
-     * the beta where it stood: levered on the price, a fall raised the beta, which loaded the next market fall harder.
-     * Before the first fair value is struck, the price stands in.
+     * The beta is levered on the equity the business supports: the business at its asset beta less net debt. Levered on
+     * the price, a fall raised the beta, which loaded the next market fall harder; levered on the fair value, which is
+     * discounted at this beta, a dip in earnings fed on itself until the leverage cap held. Neither moves it now. More
+     * debt does, and so does the business: the same debt is less leverage on capital earning more.
      */
-    public function testTheBetaIsLeveredOnTheEquityTheFundamentalsSupport(): void
+    public function testTheBetaIsLeveredOnTheEquityTheBusinessSupports(): void
     {
         $engine = $this->costOfCapitalEngine();
         $macro = $this->neutralMacro();
-        $beta = fn(string $price, ?float $fairEquity): float => $engine->analyzeDebtHealth(
-            $this->leveredFirm('LEV', '1.00', '0.02')->setPrice($price)->setFairEquityValue($fairEquity),
+        $beta = fn(string $price, ?float $fairEquity, string $debt = '500000000', string $roic = '0.10'): float => $engine->analyzeDebtHealth(
+            $this->leveredFirm('LEV', '1.00', '0.02')->setPrice($price)->setFairEquityValue($fairEquity)->setWholesaleDebt($debt)->setCurrentRoic($roic),
             $macro,
         )->leveredBeta;
 
         $standing = $beta('10.00', 1.0e9);
-        $this->assertEqualsWithDelta($standing, $beta('1.00', 1.0e9), 1e-12, 'A crash in the price alone does not re-lever the beta.');
-        $this->assertLessThan($beta('10.00', 2.5e8), $standing, 'A fall in what the fundamentals support does.');
-        $this->assertEqualsWithDelta($standing, $beta('10.00', null), 1e-12, 'Unstruck, the price stands in.');
-        $this->assertGreaterThan($standing, $beta('1.00', null));
+        $this->assertEqualsWithDelta($standing, $beta('1.00', 1.0e9), 1e-12, 'A crash in the price does not re-lever the beta.');
+        $this->assertEqualsWithDelta($standing, $beta('10.00', 1.0e7), 1e-12, 'Nor does a collapse in the fair value.');
+        $this->assertEqualsWithDelta($standing, $beta('10.00', null), 1e-12);
+        $this->assertGreaterThan($standing, $beta('10.00', 1.0e9, '900000000'), 'More debt on the same business does.');
+        $this->assertLessThan($standing, $beta('10.00', 1.0e9, '500000000', '0.16'), 'A better business carries the debt more easily.');
     }
 
     /**
-     * Absolute priority: equity is the junior claim on the same cash flows, so it cannot require a lower
-     * return than the debt ranking above it. CAPM alone hands a negative-beta name a rate below the
-     * risk-free rate, which is sound portfolio theory and an unusable hurdle rate.
+     * Absolute priority: equity is the junior claim on the same cash flows, so it cannot require a lower return than
+     * the debt ranking above it is expected to earn: the yield it borrows at less the loss its holders expect from
+     * default. CAPM alone hands a negative-beta name a rate below the risk-free rate, which is sound portfolio theory
+     * and an unusable hurdle rate.
      */
-    public function testCostOfEquityIsNeverBelowTheFirmsOwnBorrowingRate(): void
+    public function testCostOfEquityIsNeverBelowItsDebtsExpectedReturn(): void
     {
         $engine = $this->costOfCapitalEngine();
         $macro = $this->neutralMacro();
@@ -1286,15 +1291,29 @@ class DebtEngineTest extends TestCase
         foreach ([['HEDG', '-0.60'], ['FLAT', '0.05'], ['MID', '0.80'], ['HIGH', '2.00']] as [$ticker, $beta]) {
             $stock = $this->leveredFirm($ticker, $beta, '0.02');
             $health = $engine->analyzeDebtHealth($stock, $macro);
-            $marketRate = $engine->calculateInterestExpense($stock, $macro)->currentMarketRate;
+            $expectedReturn = $engine->calculateInterestExpense($stock, $macro)->currentMarketRate
+                - CreditRisk::expectedDefaultLossRate($engine->resolveDistanceToDefault($stock, $macro), 5.0, Sectors::strategyFor('General')->getLossGivenDefault());
 
-            $this->assertGreaterThanOrEqual(
-                $marketRate,
-                $health->costOfEquity,
-                sprintf('%s prices its equity below its own debt.', $ticker),
-            );
+            $this->assertGreaterThanOrEqual($expectedReturn - 1e-12, $health->costOfEquity, sprintf('%s prices its equity below its own debt.', $ticker));
             $this->assertGreaterThan(0.0, $health->costOfEquity);
         }
+    }
+
+    /**
+     * A distressed issuer's equity is not floored at its promised yield: a junk bond's yield prices defaults it will
+     * not return, so a floor there doubled the hurdle in the quarter the rating fell.
+     */
+    public function testADistressedIssuersEquityIsNotFlooredAtItsJunkYield(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $stock = $this->leveredFirm('JUNK', '0.30', '0.04')->setWholesaleDebt('2500000000')->setPrice('2.00')->setCreditRating('CCC');
+
+        $health = $engine->analyzeDebtHealth($stock, $macro);
+        $promisedYield = $engine->calculateInterestExpense($stock, $macro)->currentMarketRate;
+
+        $this->assertLessThan($promisedYield, $health->costOfEquity);
+        $this->assertGreaterThan(0.0, CreditRisk::expectedDefaultLossRate($engine->resolveDistanceToDefault($stock, $macro), 5.0, 0.6));
     }
 
     /**
@@ -1329,10 +1348,11 @@ class DebtEngineTest extends TestCase
         $veryDefensive = $engine->analyzeDebtHealth($this->leveredFirm('UTIL', '0.10', '0.006'), $macro);
         $defensive = $engine->analyzeDebtHealth($this->leveredFirm('REIT', '0.45', '0.006'), $macro);
 
-        $this->assertGreaterThan(
+        $this->assertGreaterThan($veryDefensive->leveredBeta, $defensive->leveredBeta, 'A 0.45 beta must stay riskier than a 0.10 beta.');
+        $this->assertGreaterThanOrEqual(
             $veryDefensive->costOfEquity,
             $defensive->costOfEquity,
-            'A 0.45 beta must cost more equity capital than a 0.10 beta.',
+            'A 0.45 beta must never cost less equity capital than a 0.10 beta; where both sit below their own debt, the priority floor prices them alike.',
         );
     }
 
@@ -1714,7 +1734,7 @@ class DebtEngineTest extends TestCase
 
         $targeted = $this->leverageFixture('Investment Banking', '240000000', '36000000');
         $targeted->setTicker('PERE');
-        $this->assertNotNull(\App\Data\Company\Sectors::strategyFor('Investment Banking')->getTargetCapitalRatio($targeted));
+        $this->assertNotNull(Sectors::strategyFor('Investment Banking')->getTargetCapitalRatio($targeted));
         $this->assertFalse($engine->analyzeDebtHealth($targeted, $macro)->isUnderLeveraged);
     }
 
@@ -1726,7 +1746,7 @@ class DebtEngineTest extends TestCase
     {
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
         $sponsor = $this->leverageFixture('Private Equity', '8000000', '4000000');
-        $strategy = \App\Data\Company\Sectors::strategyFor('Private Equity');
+        $strategy = Sectors::strategyFor('Private Equity');
 
         $this->assertNotNull($strategy->getCapacityShare($sponsor));
         $this->assertTrue($strategy->isUnderLeveraged(0.10, 1.0, 99.0, 1.5), 'the book must sit under its model\'s leverage target');
@@ -1747,7 +1767,7 @@ class DebtEngineTest extends TestCase
 
         $this->assertTrue($engine->analyzeDebtHealth($this->leverageFixture('Conglomerates', '40000000', '10000000'), $macro)->isUnderLeveraged);
         $this->assertFalse($engine->analyzeDebtHealth($this->leverageFixture($industry, '40000000', '10000000'), $macro)->isUnderLeveraged);
-        $this->assertSame(0.50, \App\Data\Company\Sectors::INDUSTRY_METRICS[$industry]['equity_limit']);
+        $this->assertSame(0.50, Sectors::INDUSTRY_METRICS[$industry]['equity_limit']);
     }
 
     /** @return array<string, array{string}> */
@@ -1768,7 +1788,7 @@ class DebtEngineTest extends TestCase
     {
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
         $macro = $this->leverageMacro();
-        $strategy = \App\Data\Company\Sectors::strategyFor('Conglomerates');
+        $strategy = Sectors::strategyFor('Conglomerates');
         $lease = (new CorporateMetrics())->calculateLeaseLiability(100000000.0, $strategy->getLeaseIntensity(new Stock()));
 
         $lean = $this->leverageFixture('Conglomerates', '100000000', '0');
@@ -1788,7 +1808,7 @@ class DebtEngineTest extends TestCase
     public function testAFinancialsRecapitalizationLeverageStaysGross(): void
     {
         $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
-        $strategy = \App\Data\Company\Sectors::strategyFor('Investment Banking');
+        $strategy = Sectors::strategyFor('Investment Banking');
         $lease = (new CorporateMetrics())->calculateLeaseLiability(100000000.0, $strategy->getLeaseIntensity(new Stock()));
 
         $health = $engine->analyzeDebtHealth($this->leverageFixture('Investment Banking', '240000000', '90000000'), $this->leverageMacro());
@@ -2094,8 +2114,8 @@ class DebtEngineTest extends TestCase
 
         $secured = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_SECURED;
         $unsecured = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
-        $this->assertEqualsWithDelta($secured, \App\Data\Company\Sectors::strategyFor('Hedge Fund')->getLossGivenDefault(), 1e-12);
-        $this->assertEqualsWithDelta($unsecured, \App\Data\Company\Sectors::strategyFor('Private Equity')->getLossGivenDefault(), 1e-12);
+        $this->assertEqualsWithDelta($secured, Sectors::strategyFor('Hedge Fund')->getLossGivenDefault(), 1e-12);
+        $this->assertEqualsWithDelta($unsecured, Sectors::strategyFor('Private Equity')->getLossGivenDefault(), 1e-12);
 
         $unsecuredSpread = $spreadFor('Private Equity');
         $hy = $macro->highYieldCreditSpreadEma;
@@ -2163,7 +2183,7 @@ class DebtEngineTest extends TestCase
             $stock->setCreditRating('BBB');
 
             return (new \ReflectionMethod(DebtEngine::class, 'resolveRatingZScore'))
-                ->invoke($this->engine, $stock, \App\Data\Company\Sectors::strategyFor($industry), 40_000_000.0, 250_000_000.0)['zone'];
+                ->invoke($this->engine, $stock, Sectors::strategyFor($industry), 40_000_000.0, 250_000_000.0)['zone'];
         };
 
         $this->assertContains($zoneOf('General'), ['Grey', 'Distress'], 'Control: on Z\'\' this balance sheet is capped.');

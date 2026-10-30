@@ -747,7 +747,7 @@ class EarningsEngineTest extends TestCase
      */
     public function testAFirmBelowTheHurdleKeepsUpOnlyThePlantItsMarketNeeds(): void
     {
-        $report = function (float $marketScale, ManagementStyle $style, float $policyRate = 0.06): EarningsSimulationContext {
+        $report = function (float $marketScale, ManagementStyle $style, float $policyRate = 0.065): EarningsSimulationContext {
             $captured = null;
             $dispatcher = new EventDispatcher();
             $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {

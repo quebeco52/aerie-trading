@@ -29,3 +29,13 @@ that real economies span, so a change is judged on the board, not on one firm.
 - `nofloor` (cost of equity not floored at the borrowing rate): small board effect; reverted, the floor is the
   absolute-priority rule pinned by DebtEngineTest (negative-beta firms). A junk issuer's floor could read the debt's
   expected return (yield less expected loss) instead of its promised yield; not built.
+- Arm `book` (beta levered on book equity, floor kept), vs base: P/B extremes 3.4% -> 2.1% (t -7.6), >80% drawdowns
+  6.1 -> 4.4, opening cap/GDP 3.88 -> 3.64 (REITs -15%, staples -13%, utilities -11%). Rejected: Damodaran's asset
+  betas are unlevered at market D/E, so re-levering at book overstated every levered firm above book.
+- Arm `biz` (levered on the business at its asset beta less (1 - t) net debt, Valuation::operatingCapitalValue):
+  opening values within +-6% by sector, but TERN still hit 20% at CCC through the floor at its promised yield.
+- Shipped 10-30, arm `bizel` = biz + floor at the debt's expected return (yield less CreditRisk::expectedDefaultLossRate
+  on the Merton 5y distance to default), vs base: >80% drawdowns 6.1 -> 4.8 (t -1.9), defaulters 1.1 -> 0.6 (t -1.5),
+  firms whose share moved x3 1.0 -> 0.4 (t -2.4), opening cap/GDP 3.88 -> 3.88, P/B extremes 3.4% -> 3.7% (t +1.2),
+  median margin sd 0.049 -> 0.053 (t +4.0). TERN worst falls -58..-97% -> -61..-93%; cost of equity 9-11.5% through
+  a trough where it was 20-22%.

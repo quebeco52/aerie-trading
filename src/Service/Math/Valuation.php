@@ -379,6 +379,25 @@ final class Valuation
     }
 
     /**
+     * What operating capital is worth on its own, before any financing (the value-driver formula, Koller et al.,
+     * "Valuation"): capital C earning return R and growing at g reinvests g / R of its profit, so it is worth
+     * C (R - g) / (k - g) at the unlevered cost of capital k. Never below zero; the perpetuity is bounded as every
+     * other one is (perpetualGrowthRate()), with k floored at MIN_COST_OF_EQUITY.
+     *
+     * @param float $investedCapital  The operating capital employed.
+     * @param float $returnOnCapital  The after-tax return it is expected to earn.
+     * @param float $costOfCapital    The unlevered cost of capital (CAPM on the asset beta).
+     * @param float $growth           Expected nominal growth.
+     */
+    public static function operatingCapitalValue(float $investedCapital, float $returnOnCapital, float $costOfCapital, float $growth): float
+    {
+        $discountRate = max(self::MIN_COST_OF_EQUITY, $costOfCapital);
+        $perpetualGrowth = self::perpetualGrowthRate($discountRate, $growth);
+
+        return max(0.0, $investedCapital * ($returnOnCapital - $perpetualGrowth) / ($discountRate - $perpetualGrowth));
+    }
+
+    /**
      * Share of a growing perpetuity's value that a lasting change starting some years from now captures, phasing in at
      * a given speed from then. A stream growing at g and discounted at k accrues its value at the density (k - g)
      * e^{-(k - g) t} (Gordon 1959), so the part after t0 is e^{-(k - g) t0}; a change that closes the gap to its full

@@ -265,6 +265,21 @@ class ValuationTest extends TestCase
         $this->assertEqualsWithDelta(0.015, $coeNeg, 0.0001);
     }
 
+    /**
+     * Capital earning exactly its cost of capital is worth what it cost, whatever it grows at; above its cost, growth
+     * adds value: 100 earning 12% at k 9% growing 3% is 100 x 9% / 6% = 150, and earning 6% it is 50. Earning less than
+     * it grows, it is worth nothing rather than less than nothing.
+     */
+    public function testOperatingCapitalValueIsTheValueDriverFormula(): void
+    {
+        $this->assertEqualsWithDelta(100.0, Valuation::operatingCapitalValue(100.0, 0.09, 0.09, 0.03), 1e-9);
+        $this->assertEqualsWithDelta(100.0, Valuation::operatingCapitalValue(100.0, 0.09, 0.09, 0.0), 1e-9);
+        $this->assertEqualsWithDelta(150.0, Valuation::operatingCapitalValue(100.0, 0.12, 0.09, 0.03), 1e-9);
+        $this->assertEqualsWithDelta(50.0, Valuation::operatingCapitalValue(100.0, 0.06, 0.09, 0.03), 1e-9);
+        $this->assertSame(0.0, Valuation::operatingCapitalValue(100.0, 0.01, 0.09, 0.03));
+        $this->assertGreaterThan(0.0, Valuation::operatingCapitalValue(100.0, 0.08, -0.02, 0.03), 'A hedge is discounted at the floor.');
+    }
+
     public function testCalculateLeveredBeta(): void
     {
         $unleveredBeta = 1.0;
