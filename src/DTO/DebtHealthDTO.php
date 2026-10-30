@@ -9,6 +9,15 @@ namespace App\DTO;
  */
 class DebtHealthDTO
 {
+    /**
+     * The cost of equity at the through-the-cycle premium: what fair value and the operating return state are struck
+     * at, since the market factor carries the premium's cycle into prices itself. costOfEquity is the hurdle at the
+     * premium the market's price implies.
+     */
+    public readonly float $valuationCostOfEquity;
+    /** The WACC on valuationCostOfEquity; wacc is the hurdle at the market's premium. */
+    public readonly float $valuationWacc;
+
     public function __construct(
         public readonly float $grossCost,
         public readonly float $effectiveCost,
@@ -43,5 +52,10 @@ class DebtHealthDTO
          * coverage of one): the gate for funding a shortfall, as canIssueDebt is the gate for borrowing by choice.
          */
         public readonly bool $hasMarketAccess = true,
-    ) {}
+        ?float $valuationCostOfEquity = null,
+        ?float $valuationWacc = null,
+    ) {
+        $this->valuationCostOfEquity = $valuationCostOfEquity ?? $costOfEquity;
+        $this->valuationWacc = $valuationWacc ?? $wacc;
+    }
 }

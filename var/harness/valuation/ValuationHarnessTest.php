@@ -31,6 +31,13 @@ final class ValuationHarnessTest extends BoardRun
     private array $rv = [];
     /** @var array{0: float, 1: int} board float-weighted price return: sum of squares, n */
     private array $rvIndex = [0.0, 0];
+    /**
+     * @var array{q: float, day: float, dayT: float, sq: float, sqT: float} the board's discount-rate repricing (log):
+     *                                                                      quarter sum, the trading day's sum, and the
+     *                                                                      quarter's sum of squared daily sums over its
+     *                                                                      length
+     */
+    private array $dr = ['q' => 0.0, 'day' => 0.0, 'dayT' => 0.0, 'sq' => 0.0, 'sqT' => 0.0];
     /** @var array<string, array{0: ?float, 1: ?float}> StockTracker yield-exposure EMA (cov, var) at years 5/10/20 */
     private array $bhat = [];
     /** @var array<string, int> deal events by type */
@@ -95,6 +102,18 @@ final class ValuationHarnessTest extends BoardRun
                 if (($r >= 1.5 && abs($r - round($r)) < 1e-6) || ($r > 0.0 && $r <= 0.67 && abs(1.0 / $r - round(1.0 / $r)) < 1e-6)) {
                     $this->adj[$tk] = ($this->adj[$tk] ?? 1.0) * $r;
                 }
+            }
+        }
+        if ($this->probe !== null) {
+            $b = $this->probe->drTick[1] > 0.0 ? $this->probe->drTick[0] / $this->probe->drTick[1] : 0.0;
+            $this->probe->drTick = [0.0, 0.0];
+            $this->dr['q'] += $b;
+            $this->dr['day'] += $b;
+            $this->dr['dayT'] += $this->dt;
+            if ($this->dr['dayT'] >= (1.0 / 252.0) * (1.0 - 1e-9)) {
+                $this->dr['sq'] += $this->dr['day'] ** 2;
+                $this->dr['sqT'] += $this->dr['dayT'];
+                $this->dr['day'] = $this->dr['dayT'] = 0.0;
             }
         }
         if ($this->tick > $this->tpy) {
@@ -184,7 +203,22 @@ final class ValuationHarnessTest extends BoardRun
             'mood' => $m->sentimentResidual(), 'mz_latent' => $m->marketZLatent, 'vol_ema' => $m->marketVolatilityEma,
             'ebp' => $m->excessBondPremium, 'gap_ema' => $m->outputGapEma,
             'v' => $m->equityValuationShift, 'fidx' => $m->foreignEquityIndex, 'fshift' => $m->foreignEquityValuationShift ?? null,
-        ];
+            'erf' => $m->equityRiskFreeRate,
+        ] + $this->takeDiscountRateQuarter();
+    }
+
+    /**
+     * The board's discount-rate repricing over the quarter just ended: its log sum (`drq`) and its variance read on
+     * trading-day sums, annualised (`drv`).
+     *
+     * @return array{drq: float, drv: float}
+     */
+    private function takeDiscountRateQuarter(): array
+    {
+        $row = ['drq' => $this->dr['q'], 'drv' => $this->dr['sqT'] > 0.0 ? $this->dr['sq'] / $this->dr['sqT'] : 0.0];
+        $this->dr['q'] = $this->dr['sq'] = $this->dr['sqT'] = 0.0;
+
+        return $row;
     }
 
     protected function onEnd(): void
@@ -193,7 +227,22 @@ final class ValuationHarnessTest extends BoardRun
         if ($out) {
             file_put_contents($out, json_encode(['tpy' => $this->tpy, 'names' => PriceVolProbe::NAMES, 'unmatched' => $this->probe?->unmatched,
                 'sector' => array_map(static fn($s) => $s->getSector(), $this->stocks), 'deals' => $this->deals, 'rv' => $this->rv, 'rvIndex' => $this->rvIndex, 'bhat' => $this->bhat, 'audit' => ($this->probe?->result() ?? [])['audit'] ?? [], 'rows' => $this->rows,
-                'agent_rows' => $this->agentRows, 'franchise_rows' => $this->franchiseRows]));
+                'agent_rows' => $this->agentRows, 'franchise_rows' => $this->franchiseRows], JSON_PARTIAL_OUTPUT_ON_ERROR));
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                $find = static function (mixed $v, string $path) use (&$find): ?string {
+                    if (is_float($v) && !is_finite($v)) {
+                        return $path . ' = ' . var_export($v, true);
+                    }
+                    foreach (is_array($v) ? $v : [] as $k => $x) {
+                        if (($hit = $find($x, $path . '/' . $k)) !== null) {
+                            return $hit;
+                        }
+                    }
+
+                    return null;
+                };
+                fwrite(STDERR, 'VAL_OUT: ' . json_last_error_msg() . ', first at ' . ($find(['rows' => $this->rows, 'bhat' => $this->bhat, 'rv' => $this->rv, 'rvIndex' => $this->rvIndex, 'agent_rows' => $this->agentRows, 'franchise_rows' => $this->franchiseRows], '') ?? '?') . " (written as 0)\n");
+            }
         }
     }
 }

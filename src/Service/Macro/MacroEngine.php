@@ -31,6 +31,12 @@ class MacroEngine
      * or slump persists for about a year rather than resetting each tick.
      */
     public const SECTOR_DEMAND_PERSISTENCE_YEARS = 1.0;
+    /**
+     * Loading of a sector's price shock on the news in its demand factor: its shares move when its demand does, so the
+     * earnings that follow confirm the move rather than the pull to fair value taking it back; 0.8 puts 64% of the
+     * sector factor's variance on that news, as the market factor's loading does.
+     */
+    public const SECTOR_FACTOR_NEWS_LOADING = 0.8;
 
     // --- KALDOR-KALECKI 2D LIMIT CYCLE ---
     /** Sensitivity scaling diffusion volatility of output gap and inflation during severe cyclical stress. */
@@ -293,6 +299,9 @@ class MacroEngine
      * cumulative level, and the level of a random walk wanders and stays displaced for months at a time
      * without any memory in its increments. Autocorrelation would only add predictable momentum, which is
      * the market factor's job and is kept small there for the same horizon-stability reason.
+     *
+     * The price shock loads on the innovation in the sector's demand factor (SECTOR_FACTOR_NEWS_LOADING), so a
+     * sector's shares price the demand news its earnings will later carry.
      */
     private function updateSectorFactors(MacroState $state, float $dt): void
     {
@@ -300,10 +309,13 @@ class MacroEngine
         $decay = exp(-$dt / self::SECTOR_DEMAND_PERSISTENCE_YEARS);
         $innovationScale = sqrt(max(0.0, 1.0 - ($decay * $decay)));
 
+        $noiseLoading = sqrt(1.0 - (self::SECTOR_FACTOR_NEWS_LOADING ** 2));
         foreach (array_keys(\App\Data\Company\Sectors::MACRO_SECTORS) as $sector) {
-            $state->sectorZ[$sector] = $this->mathUtility->generateStandardNormal();
+            $priceNoise = $this->mathUtility->generateStandardNormal();
+            $demandNews = $this->mathUtility->generateStandardNormal();
+            $state->sectorZ[$sector] = (self::SECTOR_FACTOR_NEWS_LOADING * $demandNews) + ($noiseLoading * $priceNoise);
             $previous = (float) ($state->sectorDemandZ[$sector] ?? 0.0);
-            $state->sectorDemandZ[$sector] = ($decay * $previous) + ($innovationScale * $this->mathUtility->generateStandardNormal());
+            $state->sectorDemandZ[$sector] = ($decay * $previous) + ($innovationScale * $demandNews);
         }
     }
 

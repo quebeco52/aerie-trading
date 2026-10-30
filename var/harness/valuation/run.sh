@@ -28,7 +28,15 @@ case "$1" in
   fx0|fx1) [ "$1" = fx0 ] && BASEV=${BASE:?set BASE=<tree>} || BASEV=""  # mainland fade (10-30): fx0 = BASE tree of 17923936, fx1 = working tree (the foreign index gives its market-factor move back at the home half-life); quarterly macro rows
     rm -f "$H/runs/$1-$2.macro.jsonl"; export MACRO_OUT="$H/runs/$1-$2.macro.jsonl" BOARD_NI=1 ;;
   mv1) BASEV="" ;;  # working tree on ac0ae3ae: the board's multiple carries the market factor's repricing (base fhl3)
-  *) echo "usage: run.sh head|base|d1|d2|d2b|c1|f1|crash|b1|a1|mbase|mbase2|mom1|mom2|mom3|chk|fbase|ffix|ffix50|fnow|fhl3|mv1|fx0|fx1 <seed>" >&2; exit 2 ;;
+  rn0|dr1|dr2) [ "$1" = rn0 ] && BASEV=${BASE:?set BASE=<tree>} || BASEV=""  # recession pass-through (10-30): rn0 = frozen working tree with the revenue-noise fix, dr1 = + the market-wide discount-rate move priced at once; quarterly macro rows
+    rm -f "$H/runs/$1-$2.macro.jsonl"; export MACRO_OUT="$H/runs/$1-$2.macro.jsonl" BOARD_NI=1 ;;
+  fc0|fc1) [ "$1" = fc0 ] && BASEV=${BASE:?set BASE=<tree>} || BASEV=""  # factor on economic news (10-30): fc0 = BASE tree of 66379eba + the mainland surprise accruing tick by tick (same macro draws as fc1), fc1 = working tree (one premium, the factor loads on demand and mainland news); quarterly macro rows
+    rm -f "$H/runs/$1-$2.macro.jsonl"; export MACRO_OUT="$H/runs/$1-$2.macro.jsonl" BOARD_NI=1 ;;
+  fc1r8) BASEV=""; : "${OVR:?set OVR=<dir>}"  # fc1 with MARKET_FACTOR_NEWS_LOADING 0.8 (OVR copy of AssetMarketSubsystem)
+    rm -f "$H/runs/$1-$2.macro.jsonl"; export MACRO_OUT="$H/runs/$1-$2.macro.jsonl" BOARD_NI=1 ;;
+  fc8|ev1) [ "$1" = fc8 ] && BASEV=${BASE:?set BASE=<tree>} || BASEV=""  # economy's events (10-30 late): fc8 = frozen tree of the fc1 build at loading 0.8, ev1 = working tree (news weight on demand's own pull, disasters/crashes/crises priced as events over ~a week, sector price shock on sector demand news); quarterly macro rows
+    rm -f "$H/runs/$1-$2.macro.jsonl"; export MACRO_OUT="$H/runs/$1-$2.macro.jsonl" BOARD_NI=1 ;;
+  *) echo "usage: run.sh head|base|d1|d2|d2b|c1|f1|crash|b1|a1|mbase|mbase2|mom1|mom2|mom3|chk|fbase|ffix|ffix50|fnow|fhl3|mv1|fx0|fx1|rn0|dr1|dr2|fc0|fc1|fc1r8|fc8|ev1 <seed>" >&2; exit 2 ;;
 esac
 cd "$PROJ" && env BASE="$BASEV" SEED="$2" YEARS="${YEARS:-20}" TPY="${TPY:-360}" \
   OUT="$H/runs/$1-$2.jsonl" VAL_OUT="$H/runs/$1-$2.val.json" \

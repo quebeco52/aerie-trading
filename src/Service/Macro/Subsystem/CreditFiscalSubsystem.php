@@ -12,6 +12,7 @@ use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
 use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
+use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Service\Macro\Subsystem\Aggregate\ProductivityGrowth;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Distributions;
@@ -1205,15 +1206,20 @@ class CreditFiscalSubsystem
             betaGap: self::CREDIT_CRISIS_LOGIT_GAP,
         );
 
-        if (!$this->mathUtility->checkProbability($state->creditCrisisHazard * $dt)) {
+        $thinCapital = self::thinCapitalDragScale($state->bankCapitalBuilt);
+        $crisisDrag = $thinCapital * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
+        $strikes = $this->mathUtility->checkProbability($state->creditCrisisHazard * $dt);
+        // The market prices a crisis on the day at its expected effect on the gap, and the hazard's compensator between
+        // crises keeps that news mean zero (Merton 1976).
+        $crisisGapPath = self::crisisGapPath($crisisDrag);
+        $state->economicEventNews += ($strikes ? $crisisGapPath : 0.0) - ($state->creditCrisisHazard * $dt * $crisisGapPath);
+        if (!$strikes) {
             return;
         }
 
         $state->lastCreditCrisisAt = $state->totalTime;
         // The buffer is released on the day (see calculateHouseholdCredit()), not a tick later.
         $state->countercyclicalBufferRate = 0.0;
-        $thinCapital = self::thinCapitalDragScale($state->bankCapitalBuilt);
-        $crisisDrag = $thinCapital * (self::CREDIT_CRISIS_DRAG_BASE + (self::CREDIT_CRISIS_DRAG_PER_GAP * max(0.0, $state->creditToGdpGapEma)));
         $state->creditCrisisDrag += $crisisDrag;
         $this->diagnostics?->recordEvent('creditCrisis', $crisisDrag);
         // Cerra & Saxena (2008): the output a crisis destroys does not come back; potential takes the scar as the slump
@@ -1221,6 +1227,36 @@ class CreditFiscalSubsystem
         $state->crisisScarPending -= self::CRISIS_POTENTIAL_SCAR * $thinCapital;
         // Gilchrist & Zakrajsek (2012): lenders' capital is hit on the day, so the premium they charge jumps with it.
         $state->excessBondPremium += self::EBP_CRISIS_JUMP;
+    }
+
+    /**
+     * A crisis's mean effect on the output gap over the market's news horizon (negative): the firms' and banks'
+     * deleveraging drag fading at its own speed and the lenders' premium jump fading with the premium, each closed
+     * behind by demand's own pull (StochasticProcesses::cascadeMeanPath()). The households' share costs no output on
+     * average and the potential scar is not slack, so neither is in it.
+     */
+    public static function crisisGapPath(float $crisisDrag): float
+    {
+        $horizon = MacroConstants::MARKET_NEWS_HORIZON_YEARS;
+        $deleveraging = self::crisisDirectDrag($crisisDrag) * StochasticProcesses::cascadeMeanPath(self::CREDIT_CRISIS_DRAG_DECAY, DomesticDemand::DEMAND_OWN_PULL, $horizon);
+        $premium = DomesticDemand::KALDOR_CREDIT_PREMIUM_DRAG * self::EBP_CRISIS_JUMP * StochasticProcesses::cascadeMeanPath(self::EBP_MEAN_REVERSION, DomesticDemand::DEMAND_OWN_PULL, $horizon);
+
+        return -OutputGap::DOMESTIC_GAP_WEIGHT * ($deleveraging + $premium);
+    }
+
+    /**
+     * Variance a year of crisis news adds to the market's news of the gap, at the hazard and drag a crisis carries with
+     * no credit boom and the banks at their opening capital: the base rate of the market's budget for it.
+     */
+    public static function baselineCrisisNewsVariance(): float
+    {
+        $hazard = CreditRisk::calculateSchularickTaylorCrisisHazard(
+            creditGap: 0.0,
+            beta0: self::CREDIT_CRISIS_LOGIT_INTERCEPT + self::DISTRICT_FUNDING_CRISIS_LOGIT_SHIFT,
+            betaGap: self::CREDIT_CRISIS_LOGIT_GAP,
+        );
+
+        return $hazard * (self::crisisGapPath(self::thinCapitalDragScale(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT) * self::CREDIT_CRISIS_DRAG_BASE) ** 2);
     }
 
     /**

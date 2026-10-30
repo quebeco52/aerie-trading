@@ -1912,6 +1912,28 @@ class MacroAggregateSubsystemTest extends TestCase
         $this->assertLessThan(0.0, $this->openWindow($probe)['contributions']['demandDisaster']);
     }
 
+    /** The market hears a disaster the tick it lands, at the compensated jump's mean effect on the gap's path. */
+    public function testTheMarketHearsADisasterAtItsPathOnTheGap(): void
+    {
+        $math = new ScriptedDraws(checkProbability: [true], generateUniform: 0.99, generateExponential: 0.04);
+        $subsystem = MacroAggregateSubsystem::headless($math);
+        $state = $this->probedState();
+        $dt = 1.0 / 360.0;
+
+        $subsystem->calculateOutputGap($state, 0.03, MacroConstants::BASE_NATURAL_RATE, MacroConstants::TARGET_INFLATION, $dt, 1.0);
+
+        $compensator = StochasticProcesses::calculateKouCompensator(
+            lambda: OutputGap::DEMAND_DISASTER_INTENSITY,
+            pUp: OutputGap::DEMAND_DISASTER_UP_PROBABILITY,
+            etaUp: OutputGap::DEMAND_DISASTER_UP_RATE,
+            etaDown: OutputGap::DEMAND_DISASTER_DOWN_RATE,
+            cap: OutputGap::DEMAND_DISASTER_CAP,
+            dt: $dt,
+        );
+        $this->assertEqualsWithDelta(OutputGap::demandGapPath() * (-0.04 - $compensator), $state->economicEventNews, 1e-12);
+        $this->assertLessThan(-0.005, $state->economicEventNews, 'A 4pp disaster is half a point and more off the gap\'s two years.');
+    }
+
     // --- Productivity Shocks ---
 
     /**

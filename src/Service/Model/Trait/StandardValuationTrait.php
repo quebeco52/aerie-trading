@@ -125,7 +125,7 @@ trait StandardValuationTrait
         $afterTaxCostOfDebt = $health->rawMetrics->currentMarketRate * (1.0 - $this->getEffectiveTaxRate($corporateTaxRate));
 
         return [
-            'costOfEquity' => $health->costOfEquity,
+            'costOfEquity' => $health->valuationCostOfEquity,
             'equityReturn' => $this->getEquityReturn($returnOnCapital, $stock->getInvestedCapital(), (float) $stock->getTotalEquity(), $afterTaxCostOfDebt),
         ];
     }

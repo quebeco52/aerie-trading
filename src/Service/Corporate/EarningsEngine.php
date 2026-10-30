@@ -958,8 +958,8 @@ class EarningsEngine
             $ctx->investedCapital,
             $ctx->seasonallyAdjustedEbit,
             $ctx->corporateTaxRate,
-            $ctx->health->wacc,
-            $ctx->health->costOfEquity,
+            $ctx->health->valuationWacc,
+            $ctx->health->valuationCostOfEquity,
             $ctx->macroState,
             $ctx->quarterlyDepreciation,
             $ctx->specialCharges * (1.0 - $ctx->corporateTaxRate),
@@ -1295,7 +1295,7 @@ class EarningsEngine
         $health = $this->debtEngine->analyzeDebtHealth($stock, $macroState);
         $strike = $this->marketEngine->strikeFairValue(MarketPricingContext::forStock($stock, $macroState, $health, $this->anchorStakes));
 
-        return [$strike['perceived_fair_value'], $health->costOfEquity];
+        return [$strike['perceived_fair_value'], $health->valuationCostOfEquity];
     }
 
     /**

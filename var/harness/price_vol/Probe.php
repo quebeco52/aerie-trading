@@ -56,10 +56,18 @@ final class PriceVolProbe
     /** @var list<Stock> live names in the tracker's order, set before each stock update */
     public array $queue = [];
     public int $unmatched = 0;
-    /** Optional per-tick consumer: fn(string $tk, list<float> $c, float $fv, ?float $coe) (coe = the engine's live cost of equity). */
+    /**
+     * Optional per-tick consumer: fn(string $tk, list<float> $c, float $fv, ?float $coe) (coe = the engine's live cost
+     * of equity).
+     */
     public ?\Closure $sink = null;
     /** @var array<string, float> */
     private array $coeOf = [];
+    /**
+     * @var array{0: float, 1: float} this tick's float-weighted discount-rate repricing (sum of cap x log, sum of cap);
+     *                                the harness resets it
+     */
+    public array $drTick = [0.0, 0.0];
 
     /** @param list<int> $horizons */
     public function __construct(private StockTracker $tracker, private LiquidityEngine $liq, private int $skip, private array $horizons) {}
@@ -131,6 +139,11 @@ final class PriceVolProbe
         $ma = log(1.0 + $ctx->maShock);
         // The policy repricing; on the d2/d2b arms (the fair-value pass-through, not kept) the revision passed in.
         $pol = isset($r['fair_value_news']) ? (float) $r['fair_value_news'] : log((float) ($r['policy_repricing'] ?? 1.0));
+        // The discount-rate repricing (10-30, dr arms) lands in the news channel beside the policy repricing.
+        $dr = log((float) ($r['discount_rate_repricing'] ?? 1.0));
+        $pol += $dr;
+        $floatCap = IndexCommittee::floatAdjustedCap($stock);
+        $this->drTick = [$this->drTick[0] + $floatCap * $dr, $this->drTick[1] + $floatCap];
         $rem = log($p1 / $p0) - $jI - $jS - $ma - $pol;
 
         $maxLog = log(1.0 + MarketEngine::MAX_DAILY_PRICE_CIRCUIT_BREAKER) * sqrt($dt * FinancialConstants::TRADING_DAYS_PER_YEAR);

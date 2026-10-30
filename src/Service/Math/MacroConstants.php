@@ -415,6 +415,11 @@ final class MacroConstants
     public const M2_BASE_GROWTH = 0.045;
 
     // --- Systemic Market Factor ---
+    /**
+     * Horizon (years) over which the market weighs what a shock to the economy does to the output gap, about the
+     * cycle's half: the stream of news and the rare events alike are priced at their mean effect over it.
+     */
+    public const MARKET_NEWS_HORIZON_YEARS = 2.0;
     /** Market-wide jump arrivals per year, giving the index the discontinuous crash days a diffusion cannot. */
     public const SYSTEMIC_JUMP_INTENSITY = 4.0;
     /** Probability a market-wide jump is upward; below one half, encoding the downward skew of index returns. */

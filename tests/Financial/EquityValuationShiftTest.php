@@ -55,12 +55,16 @@ final class EquityValuationShiftTest extends TestCase
     /** Over a long run the shift wanders around zero, with the spread the factor's variance and the fade give it. */
     public function testTheShiftAveragesZeroOverTheLongRun(): void
     {
-        $subsystem = new AssetMarketSubsystem(MathUtility::ownStream(20261027));
+        $math = MathUtility::ownStream(20261027);
+        $subsystem = new AssetMarketSubsystem($math);
         $state = new MacroState();
         $fade = AssetMarketSubsystem::equityValuationShiftFade();
 
         $shifts = [];
         for ($tick = 1; $tick <= 400 * 360; $tick++) {
+            // The economy's draws, which the factor's shock loads on, as the engine hands them over.
+            $state->demandNewsZ = $math->generateStandardNormal();
+            $state->mainlandNewsZ = $math->generateStandardNormal();
             $subsystem->updateSystemicMarketFactor($state, self::DT);
             if ($tick % 90 === 0) {
                 $shifts[] = $state->equityValuationShift;

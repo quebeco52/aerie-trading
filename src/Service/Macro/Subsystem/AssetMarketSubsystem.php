@@ -10,6 +10,7 @@ use App\Service\Macro\Subsystem\Aggregate\ConsumerPrices;
 use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\Aggregate\NationalAccounts;
 use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
+use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
@@ -534,6 +535,18 @@ class AssetMarketSubsystem
     public const MARKET_FACTOR_TAIL_DF = 5;
     /** Share of market factor variance carried by the slow regime leg; kept small so beta stays horizon-stable. */
     public const MARKET_FACTOR_REGIME_VARIANCE_SHARE = 0.15;
+    /**
+     * Loading of the market factor on the economy's news (Campbell & Cochrane 1999: the market's discount rate answers
+     * news of output): 0.8 puts 64% of the factor's variance on it, shared between the stream of shocks and the rare
+     * events (pricePerGapPath()), and the board's year moves with the gap's inside the 0-0.3 real economies show.
+     */
+    public const MARKET_FACTOR_NEWS_LOADING = 0.8;
+    /**
+     * Time constant (years) over which the market takes in a shock it hears as an event (a demand disaster, a mainland
+     * crash, a credit crisis): about a week, so the repricing runs over the weeks the shock unfolds, as 2008's and
+     * 2020's first legs ran four to six, rather than in one day.
+     */
+    public const EVENT_REPRICING_TAU_YEARS = 0.02;
 
     // --- Equity Valuation Shift ---
     /**
@@ -684,19 +697,22 @@ class AssetMarketSubsystem
     /**
      * Campbell-Cochrane (1999) Habit Formation Asset Pricing Model.
      *
-     * Derives macroeconomic aggregate equity risk premium as an exponential function of surplus consumption:
-     * as the output gap contracts, risk aversion surges, demanding a wider required equity risk premium.
+     * The District's premium is the one its market's price implies. The habit premium's news reaches the market through
+     * the market factor, whose shock loads on the economy's news and whose repricing fades as the premium does, so the
+     * premium a long-lived claim must earn is the flat one that values the market at its price. Firms' hurdles read it;
+     * fair value does not, since it carries the repricing already, so the premium is counted once.
      *
-     * The foreign bloc's investors price their own cycle the same way, and its equity market re-rates on the premium by
-     * the Campbell-Shiller present value: a premium that decays at the cycle's persistence phi moves the log price by
-     * -(premium - base) / (1 - rho * phi). The valuation's change is handed on for the reserve fund's foreign equities.
+     * The foreign bloc's investors price their own cycle as an exponential function of surplus consumption on its gap,
+     * and its equity market re-rates on the premium by the Campbell-Shiller present value: a premium that decays at the
+     * cycle's persistence phi moves the log price by -(premium - base) / (1 - rho * phi). The valuation's change is
+     * handed on for the reserve fund's foreign equities.
      *
      * @param MacroState $state Current macroeconomic state.
      */
     public function calculateEquityRiskPremium(MacroState $state): void
     {
-        $state->equityRiskPremium = $this->habitEquityRiskPremium($state->outputGapEma);
-        $state->impliedEquityRiskPremium = self::impliedEquityRiskPremium($state->equityRiskPremium, $state->equityValuationShift);
+        $state->impliedEquityRiskPremium = self::impliedEquityRiskPremium(MacroConstants::BASE_EQUITY_RISK_PREMIUM, $state->equityValuationShift);
+        $state->equityRiskPremium = self::boundedEquityRiskPremium($state->impliedEquityRiskPremium);
 
         $state->foreignEquityRiskPremium = $this->habitEquityRiskPremium($state->foreignOutputGapEma);
         $valuation = -self::foreignValuationDuration() * ($state->foreignEquityRiskPremium - MacroConstants::BASE_EQUITY_RISK_PREMIUM);
@@ -706,8 +722,8 @@ class AssetMarketSubsystem
 
     /**
      * The premium that values the market at its price (Gordon), with the payout yield at the Campbell-Shiller constant:
-     * a repricing of V scales that yield by exp(-V), so a market that halves adds about four points. Shown to players;
-     * nothing prices on it, since fair value already carries the repricing.
+     * a repricing of V scales that yield by exp(-V), so a market that halves adds about four points. Shown to players
+     * and read by firms' hurdles (calculateEquityRiskPremium()); fair value carries the repricing itself.
      */
     public static function impliedEquityRiskPremium(float $requiredPremium, float $valuationShift): float
     {
@@ -727,14 +743,16 @@ class AssetMarketSubsystem
         return 1.0 / (1.0 - (self::CAMPBELL_SHILLER_RHO * $annualPersistence));
     }
 
-    /**
-     * The habit premium at an output gap, floored at a positive premium and capped at the ceiling it has always had.
-     */
+    /** The habit premium at an output gap, within the premium's bounds. */
     private function habitEquityRiskPremium(float $outputGapEma): float
     {
-        $habitErp = MacroConstants::BASE_EQUITY_RISK_PREMIUM * exp(-self::HABIT_RISK_AVERSION_COEFF * $outputGapEma);
+        return self::boundedEquityRiskPremium(MacroConstants::BASE_EQUITY_RISK_PREMIUM * exp(-self::HABIT_RISK_AVERSION_COEFF * $outputGapEma));
+    }
 
-        return max(self::MIN_EQUITY_RISK_PREMIUM, min(0.12, $habitErp));
+    /** A premium floored at a positive one and capped at the ceiling it has always had. */
+    private static function boundedEquityRiskPremium(float $premium): float
+    {
+        return max(self::MIN_EQUITY_RISK_PREMIUM, min(0.12, $premium));
     }
 
     /**
@@ -788,13 +806,13 @@ class AssetMarketSubsystem
     }
 
     /**
-     * Loading of the variance shock on the i.i.d. leg of the market innovation that puts its correlation with the whole
-     * return at MACRO_VOL_LEVERAGE_RHO: that leg carries 1 - MARKET_FACTOR_REGIME_VARIANCE_SHARE of the return
-     * variance.
+     * Loading of the variance shock on the fresh leg of the market innovation (the economy's news and the tail) that
+     * puts its correlation with the whole return at MACRO_VOL_LEVERAGE_RHO: that leg carries freshVarianceShare() of
+     * the return variance, so bad news raises volatility as a falling market does.
      */
     private static function leverageLoading(): float
     {
-        return max(-1.0, min(1.0, self::MACRO_VOL_LEVERAGE_RHO / sqrt(1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE)));
+        return max(-1.0, min(1.0, self::MACRO_VOL_LEVERAGE_RHO / sqrt(self::freshVarianceShare())));
     }
 
     /**
@@ -830,12 +848,14 @@ class AssetMarketSubsystem
     }
 
     /**
-     * The systemic market factor and the market-wide jump: the one driver every equity price shares.
+     * The systemic market factor and the market-wide jump: the one driver every equity price shares. Its shock loads
+     * on the economy's news (economicNewsZ()), read the tick after the draws that made it, as the economy closed.
      *
      * @param MacroState $state Current macroeconomic state.
      * @param float      $dt    Time increment in years.
-     * @return array{returnInnovation: float, varianceJump: float} The return's i.i.d. innovation and the jump's
-     *                                                             variance jump, for calculateMarketVolatility().
+     * @return array{returnInnovation: float, varianceJump: float} The return's fresh innovation (the news and the tail
+     *                                                             leg, unit variance) and the jump's variance jump, for
+     *                                                             calculateMarketVolatility().
      */
     public function updateSystemicMarketFactor(MacroState $state, float $dt): array
     {
@@ -846,8 +866,23 @@ class AssetMarketSubsystem
         $regimeShock = $state->marketZLatent * StochasticProcesses::calculatePersistenceVarianceScale($marketFactorPhi);
         $tailShock = $this->mathUtility->generateStudentsT(self::MARKET_FACTOR_TAIL_DF);
 
-        $state->marketZ = (sqrt(self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $regimeShock)
-            + (sqrt(1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $tailShock);
+        // The economy's stream of news takes its share of the shock and the regime and tail legs the rest: the market
+        // moves when a shock lands, before the output gap has followed it. The events' share is priced below.
+        $newsShock = self::economicNewsZ($state);
+        $noiseLoading = sqrt(1.0 - (self::MARKET_FACTOR_NEWS_LOADING ** 2));
+        $state->marketZ = (self::drawNewsLoading() * $newsShock)
+            + ($noiseLoading * sqrt(self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $regimeShock)
+            + ($noiseLoading * sqrt(1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $tailShock);
+        $freshShock = ((self::drawNewsLoading() * $newsShock) + ($noiseLoading * sqrt(1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE) * $tailShock))
+            / sqrt(self::freshVarianceShare());
+
+        // The economy's events (a demand disaster, a mainland crash, a credit crisis) are priced at the same price per
+        // point of the gap's expected path as its stream of news, each compensated so the news is mean zero, and taken
+        // in over EVENT_REPRICING_TAU_YEARS.
+        $state->eventRepricingPending += self::pricePerGapPath() * $state->economicEventNews;
+        $state->economicEventNews = 0.0;
+        $eventRepricing = $state->eventRepricingPending * (1.0 - exp(-$dt / self::EVENT_REPRICING_TAU_YEARS));
+        $state->eventRepricingPending -= $eventRepricing;
 
         // Kou (2002) double-exponential jump diffusion for systemic equity market crashes.
         $systemicJump = $this->mathUtility->calculateSVJJJumps(
@@ -858,11 +893,13 @@ class AssetMarketSubsystem
             muV: self::SYSTEMIC_JUMP_VARIANCE_MEAN,
             dt: $dt,
         );
-        $state->marketJumpMultiplier = $systemicJump['price_multiplier'];
+        // The event's repricing reaches every price as the market-wide jump does, through each name's beta.
+        $state->marketJumpMultiplier = $systemicJump['price_multiplier'] * exp($eventRepricing);
 
-        // The market factor carries no news of cash flows, so by the present-value identity its moves are news of the
-        // discount rate: equity value is repriced by the factor's unexpected log return, at the market vol known before
-        // the shock as prices load it, and the repricing fades as that discount rate returns to normal.
+        // The market factor's moves are news of the discount rate, the habit premium answering the economy's news
+        // beside the market's own: by the present-value identity equity value is repriced by the factor's unexpected
+        // log return, at the market vol known before the shock as prices load it, and the repricing fades as that
+        // discount rate returns to normal.
         $expectedJumpLogReturn = MacroConstants::SYSTEMIC_JUMP_INTENSITY * $dt * StochasticProcesses::kouTruncatedMean(
             MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
             MacroConstants::SYSTEMIC_JUMP_ETA_UP,
@@ -875,7 +912,102 @@ class AssetMarketSubsystem
         $state->equityValuationShift = ($state->equityValuationShift * exp(-self::equityValuationShiftFade() * $dt))
             + $marketLogReturnInnovation;
 
-        return ['returnInnovation' => $tailShock, 'varianceJump' => $systemicJump['var_jump']];
+        return ['returnInnovation' => $freshShock, 'varianceJump' => $systemicJump['var_jump']];
+    }
+
+    /**
+     * The economy's news this tick as a standard normal: the demand disturbance's draw and the step in the mainland's
+     * quarterly surprise (both drawn last tick), each weighed by what it does to the output gap over the next
+     * MARKET_NEWS_HORIZON_YEARS, so the mix keeps unit variance.
+     */
+    public static function economicNewsZ(MacroState $state): float
+    {
+        $domestic = self::domesticNewsWeight();
+        $mainland = self::mainlandNewsWeight();
+
+        return (($domestic * $state->demandNewsZ) + ($mainland * $state->mainlandNewsZ)) / sqrt(($domestic ** 2) + ($mainland ** 2));
+    }
+
+    /**
+     * The output gap's mean move over the horizon per year^0.5 of demand-disturbance news: the disturbance's sigma on
+     * its path through demand (OutputGap::demandGapPath()).
+     */
+    private static function domesticNewsWeight(): float
+    {
+        return OutputGap::DEMAND_SHOCK_SIGMA * OutputGap::demandGapPath();
+    }
+
+    /**
+     * The output gap's mean move over the horizon per year^0.5 of the mainland's surprise as it accrues: the release is
+     * the accrual over a quarter's root, on the mainland gap's path (mainlandGapPath()).
+     */
+    private static function mainlandNewsWeight(): float
+    {
+        return self::MAINLAND_GAP_SIGMA * sqrt(self::MAINLAND_QUARTERS_PER_YEAR) * self::mainlandGapPath();
+    }
+
+    /**
+     * The District's output gap's mean move over the horizon per unit of the mainland's quarterly gap shock: the
+     * mainland gap carries it on its AR(2) path from the quarter it lands, into the District's at the regional loading.
+     */
+    public static function mainlandGapPath(): float
+    {
+        $quarters = (int) round(MacroConstants::MARKET_NEWS_HORIZON_YEARS * self::MAINLAND_QUARTERS_PER_YEAR);
+        $response = [1.0, self::MAINLAND_GAP_AR1];
+        for ($k = 2; $k < $quarters; $k++) {
+            $response[] = (self::MAINLAND_GAP_AR1 * $response[$k - 1]) + (self::MAINLAND_GAP_AR2 * $response[$k - 2]);
+        }
+
+        return OutputGap::MAINLAND_CYCLE_LOADING * array_sum(array_slice($response, 0, $quarters)) / $quarters;
+    }
+
+    /**
+     * Variance a year of the economy's events adds to the news of the gap's expected path: the demand disasters, the
+     * mainland's crashes and credit crises at their base rate, each on its own path.
+     */
+    public static function eventNewsVariance(): float
+    {
+        $disasters = OutputGap::DEMAND_DISASTER_INTENSITY * StochasticProcesses::kouTruncatedSecondMoment(
+            OutputGap::DEMAND_DISASTER_UP_PROBABILITY,
+            OutputGap::DEMAND_DISASTER_UP_RATE,
+            OutputGap::DEMAND_DISASTER_DOWN_RATE,
+            OutputGap::DEMAND_DISASTER_CAP,
+            OutputGap::DEMAND_DISASTER_CAP,
+        ) * (OutputGap::demandGapPath() ** 2);
+        $crashes = self::MAINLAND_QUARTERS_PER_YEAR * self::mainlandCrashVariance() * (self::mainlandGapPath() ** 2);
+
+        return $disasters + $crashes + CreditFiscalSubsystem::baselineCrisisNewsVariance();
+    }
+
+    /**
+     * The market factor's log move per unit of news of the gap's expected path: the news, the stream and the events
+     * alike, carries MARKET_FACTOR_NEWS_LOADING squared of the factor's variance at its anchor, so one point of the
+     * expected gap moves equities the same whether it arrives as a draw or as a jump.
+     */
+    public static function pricePerGapPath(): float
+    {
+        $streamVariance = (self::domesticNewsWeight() ** 2) + (self::mainlandNewsWeight() ** 2);
+
+        return MacroConstants::MACRO_VOL_BASE_ANCHOR * self::MARKET_FACTOR_NEWS_LOADING / sqrt($streamVariance + self::eventNewsVariance());
+    }
+
+    /**
+     * Loading of the factor's draw on the stream of news (economicNewsZ()): the stream's share of the news budget,
+     * the events taking the rest.
+     */
+    public static function drawNewsLoading(): float
+    {
+        $streamVariance = (self::domesticNewsWeight() ** 2) + (self::mainlandNewsWeight() ** 2);
+
+        return self::MARKET_FACTOR_NEWS_LOADING * sqrt($streamVariance / ($streamVariance + self::eventNewsVariance()));
+    }
+
+    /** Share of the market shock's variance drawn fresh each tick (the news and the tail leg), the leverage leg. */
+    private static function freshVarianceShare(): float
+    {
+        $noiseShare = 1.0 - (self::MARKET_FACTOR_NEWS_LOADING ** 2);
+
+        return (self::drawNewsLoading() ** 2) + ($noiseShare * (1.0 - self::MARKET_FACTOR_REGIME_VARIANCE_SHARE));
     }
 
     /**
@@ -1136,9 +1268,14 @@ class AssetMarketSubsystem
      */
     public function calculateForeignEconomy(MacroState $state, float $dt): void
     {
+        // The quarter's surprise builds as the quarter runs, as the mainland's data arrive, and the release reads it.
+        $state->mainlandNewsZ = $this->mathUtility->generateStandardNormal();
+        $state->mainlandGapSurpriseAccrual += sqrt($dt) * $state->mainlandNewsZ;
+        $state->mainlandGapSurpriseElapsed += $dt;
+
         $quartersTurned = TimeSeries::boundariesCrossed($state->totalTime, $dt, 1.0 / self::MAINLAND_QUARTERS_PER_YEAR);
         for ($quarter = 0; $quarter < $quartersTurned; $quarter++) {
-            $this->stepMainlandQuarter($state);
+            $this->stepMainlandQuarter($state, $dt);
         }
 
         // World demand weighs each economy at its share of world GDP: the District, the mainland, and the rest. The
@@ -1195,12 +1332,15 @@ class AssetMarketSubsystem
      * on its four lags and last quarter's gap, then the Fed's partial adjustment toward its rule on four-quarter core
      * inflation and the new gap, floored at the effective lower bound. The rest of the world's quarter follows.
      */
-    private function stepMainlandQuarter(MacroState $state): void
+    private function stepMainlandQuarter(MacroState $state, float $dt): void
     {
-        $gapDraw = $this->mathUtility->generateStandardNormal();
+        $gapDraw = $this->releaseMainlandGapSurprise($state, $dt);
         $inflationShock = self::MAINLAND_INFLATION_SIGMA * $this->mathUtility->generateStandardNormal();
         $rateShock = self::FED_RULE_SIGMA * $this->mathUtility->generateStandardNormal();
-        $gapShock = (self::MAINLAND_GAP_SIGMA * $gapDraw) + $this->mainlandCrash();
+        $crash = $this->mainlandCrash();
+        $gapShock = (self::MAINLAND_GAP_SIGMA * $gapDraw) + $crash;
+        // The market hears the crash as it lands, at its expected effect on the District's gap.
+        $state->economicEventNews += self::mainlandGapPath() * $crash;
         $next = self::mainlandNextQuarter($state, $gapShock, $inflationShock, $rateShock);
 
         $state->foreignOutputGapLag = $state->foreignOutputGap;
@@ -1217,6 +1357,27 @@ class AssetMarketSubsystem
         $state->worldActivityIdiosyncratic = (self::WORLD_GAP_AR1 * $state->worldActivityIdiosyncratic)
             + (self::WORLD_GAP_SIGMA * $this->mathUtility->generateStandardNormal());
         $state->worldActivityGap = max(-self::MAX_WORLD_GAP, min(self::MAX_WORLD_GAP, (self::WORLD_MAINLAND_LOADING * $state->foreignOutputGap) + $state->worldActivityIdiosyncratic));
+    }
+
+    /**
+     * The quarter's standard normal gap surprise: the Brownian path it accrued tick by tick, over the time it ran, and
+     * a fresh draw for any of the quarter it did not run over (a start mid-quarter, or a tick spanning quarters). The
+     * accrual starts again for the next quarter.
+     */
+    private function releaseMainlandGapSurprise(MacroState $state, float $dt): float
+    {
+        $quarter = 1.0 / self::MAINLAND_QUARTERS_PER_YEAR;
+        $accrued = $state->mainlandGapSurpriseAccrual;
+        $span = $state->mainlandGapSurpriseElapsed;
+        $missing = $quarter - $span;
+        if ($missing > 0.5 * min($dt, $quarter)) {
+            $accrued += sqrt($missing) * $this->mathUtility->generateStandardNormal();
+            $span = $quarter;
+        }
+        $state->mainlandGapSurpriseAccrual = 0.0;
+        $state->mainlandGapSurpriseElapsed = 0.0;
+
+        return $accrued / sqrt($span);
     }
 
     /**
@@ -1248,11 +1409,16 @@ class AssetMarketSubsystem
      */
     public static function mainlandGapInnovationSd(): float
     {
-        $probability = self::mainlandCrashProbability();
-        $crashVariance = ($probability * (self::MAINLAND_CRASH_MEAN ** 2) * exp(self::MAINLAND_CRASH_LOG_SD ** 2))
-            - (($probability * self::MAINLAND_CRASH_MEAN) ** 2);
+        return sqrt((self::MAINLAND_GAP_SIGMA ** 2) + self::mainlandCrashVariance());
+    }
 
-        return sqrt((self::MAINLAND_GAP_SIGMA ** 2) + $crashVariance);
+    /** Variance of a quarter's compensated crash: an arrival times a lognormal size, p E[X^2] - p^2 E[X]^2. */
+    private static function mainlandCrashVariance(): float
+    {
+        $probability = self::mainlandCrashProbability();
+
+        return ($probability * (self::MAINLAND_CRASH_MEAN ** 2) * exp(self::MAINLAND_CRASH_LOG_SD ** 2))
+            - (($probability * self::MAINLAND_CRASH_MEAN) ** 2);
     }
 
     /**

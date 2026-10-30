@@ -165,7 +165,7 @@ class MarketPricingContext
             baselineIndustryPE: Sectors::baselineIndustryPe($stock->getIndustry()),
             revenuePerShare: (float) $stock->getTotalRevenue() / $shares,
             businessModel: Sectors::businessModelFor($stock->getIndustry()),
-            liveCostOfEquity: $health->costOfEquity,
+            liveCostOfEquity: $health->valuationCostOfEquity,
             // The model's own net debt, as DebtEngine reads it: a lender's deposits and a clearinghouse's margin fund
             // its book rather than finance it, so they are no claim ahead of the equity. Net of the cash the business
             // runs on only; the excess is valued on its own.

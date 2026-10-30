@@ -600,6 +600,22 @@ final class StochasticProcesses
     }
 
     /**
+     * Mean over [0, horizon] of a first-order lag's response to a unit impulse in its driver: the driver decays at
+     * inputReversion and the lag pulls back at outputReversion, so the response is (e^{-kt} - e^{-pt}) / (p - k), a
+     * hump. A demand shock reaches the output gap this way through demand's own pull back to trend.
+     */
+    public static function cascadeMeanPath(float $inputReversion, float $outputReversion, float $horizon): float
+    {
+        $k = $inputReversion;
+        $p = $outputReversion;
+        if (abs($p - $k) < 1e-9) {
+            return (1.0 - (exp(-$p * $horizon) * (1.0 + ($p * $horizon)))) / ($p * $p * $horizon);
+        }
+
+        return (((1.0 - exp(-$k * $horizon)) / $k) - ((1.0 - exp(-$p * $horizon)) / $p)) / (($p - $k) * $horizon);
+    }
+
+    /**
      * Calculates the next price using Geometric Brownian Motion (GBM) with correlated market drift.
      *
      * @param float $currentPrice             The current price of the stock.

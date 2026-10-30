@@ -1929,6 +1929,33 @@ class CreditFiscalSubsystemTest extends TestCase
     }
 
     /**
+     * The market hears a crisis on the day at its expected effect on the gap, and the hazard's compensator between
+     * crises keeps that news mean zero.
+     */
+    public function testTheMarketHearsACrisisAtItsPathOnTheGapCompensatedBetweenCrises(): void
+    {
+        $dt = 1.0 / 360.0;
+        $news = [];
+        foreach ([true, false] as $strikes) {
+            $state = new MacroState();
+            $state->totalTime = 12.5;
+            $state->creditToGdpGapEma = 0.10;
+            (new CreditFiscalSubsystem(new ScriptedDraws(checkProbability: $strikes)))->calculateCreditCrisisHazard($state, $dt);
+            $news[$strikes ? 'struck' : 'quiet'] = $state->economicEventNews;
+            $hazard = $state->creditCrisisHazard;
+        }
+
+        $drag = CreditFiscalSubsystem::thinCapitalDragScale(FinancialConstants::OPENING_BANK_CAPITAL_REQUIREMENT)
+            * (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_BASE + (CreditFiscalSubsystem::CREDIT_CRISIS_DRAG_PER_GAP * 0.10));
+        $path = CreditFiscalSubsystem::crisisGapPath($drag);
+        $this->assertLessThan(-0.01, $path, 'A crisis after a 10pp boom takes over a point off the gap\'s two years,');
+        $this->assertEqualsWithDelta($path * (1.0 - ($hazard * $dt)), $news['struck'], 1e-15, 'the market hears it the day it lands,');
+        $this->assertGreaterThan(0.0, $news['quiet'], 'and a quiet day earns the cover,');
+        $this->assertEqualsWithDelta(0.0, ($hazard * $dt * $news['struck']) + ((1.0 - ($hazard * $dt)) * $news['quiet']), 1e-15, 'so the news is mean zero.');
+        $this->assertLessThan($path, CreditFiscalSubsystem::crisisGapPath(2.0 * $drag), 'A deeper deleveraging is worse news.');
+    }
+
+    /**
      * The households' share of a crisis's deleveraging is debt repaid: the stock falls by that share of the drag a
      * year, and the two parts of the drag add back to the whole.
      */

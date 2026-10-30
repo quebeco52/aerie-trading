@@ -475,6 +475,37 @@ class DebtEngineTest extends TestCase
         $this->assertGreaterThan(0.0, $health->leveredBeta);
     }
 
+    /**
+     * The hurdle new capital must clear reads the premium the market's price implies; valuation reads the
+     * through-the-cycle premium, since the market factor carries the premium's cycle into prices itself.
+     */
+    public function testTheHurdleReadsTheMarketsPremiumAndValuationTheThroughTheCycleOne(): void
+    {
+        $engine = new DebtEngine(new MathUtility(), new CorporateMetrics(), $this->creditRatingAgency, $this->marketEventPublisherMock);
+        $stock = new Stock();
+        $stock->setTicker('HURDLE');
+        $stock->setIndustry('Technology');
+        $stock->setPrice('100.00');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setTotalEquity('80000000');
+        $stock->setWholesaleDebt('20000000');
+        $stock->setCorporateTreasury('30000000');
+        $stock->setTotalRevenue('50000000');
+        $stock->setOperatingMargin('0.25');
+        $stock->setBeta('1.0');
+        $stock->setHistoricalFixedRate('0.04');
+        $stock->setCreditSpread('0.01');
+
+        $calm = $engine->analyzeDebtHealth($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, equityRiskPremium: MacroConstants::BASE_EQUITY_RISK_PREMIUM));
+        $slump = $engine->analyzeDebtHealth($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, equityRiskPremium: MacroConstants::BASE_EQUITY_RISK_PREMIUM + 0.02));
+
+        $this->assertEqualsWithDelta($calm->costOfEquity, $calm->valuationCostOfEquity, 1e-12, 'At the base premium the two readings agree.');
+        $this->assertEqualsWithDelta($slump->leveredBeta * 0.02, $slump->costOfEquity - $calm->costOfEquity, 1e-9, 'A slump\'s premium raises the hurdle by beta times its rise,');
+        $this->assertGreaterThan($calm->wacc, $slump->wacc, 'and the WACC new capital must clear,');
+        $this->assertEqualsWithDelta($calm->valuationCostOfEquity, $slump->valuationCostOfEquity, 1e-12, 'while valuation is struck at the through-the-cycle premium.');
+        $this->assertEqualsWithDelta($calm->valuationWacc, $slump->valuationWacc, 1e-12);
+    }
+
     public function testAnalyzeDebtHealthSevereNegativeCarryTriggersPaydown(): void
     {
         $realMath = new MathUtility();

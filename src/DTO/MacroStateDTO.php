@@ -400,6 +400,14 @@ readonly class MacroStateDTO
         public float $demandShock = 0.0,
         public float $demandDisasterShock = 0.0,
         public float $demandDisasterCompensation = 0.0,
+        /** The demand disturbance's standard normal draw this tick (OutputGap), the market factor's domestic news. */
+        public float $demandNewsZ = 0.0,
+        /** The economy's events since the market factor last read them, in points of the gap's expected path. */
+        public float $economicEventNews = 0.0,
+        /**
+         * The log repricing those events owe equities still to come (AssetMarketSubsystem::updateSystemicMarketFactor).
+         */
+        public float $eventRepricingPending = 0.0,
         public float $energyInventoryIndex = MacroConstants::COMMODITY_INVENTORY_BASELINE,
         public float $energyInventoryIndexEma = MacroConstants::COMMODITY_INVENTORY_BASELINE,
         public float $capacityUtilizationRate = MacroConstants::CU_BASELINE,
@@ -465,6 +473,12 @@ readonly class MacroStateDTO
         public float $foreignOutputGap = 0.0,
         public float $foreignOutputGapEma = 0.0,
         public float $foreignOutputGapLag = 0.0,
+        /** The mainland quarter's Gaussian gap surprise accrued so far, a standard Brownian path the release reads. */
+        public float $mainlandGapSurpriseAccrual = 0.0,
+        /** Years the quarter's surprise has accrued over. */
+        public float $mainlandGapSurpriseElapsed = 0.0,
+        /** This tick's standard normal step in the mainland's surprise, the market factor's mainland news. */
+        public float $mainlandNewsZ = 0.0,
         /**
          * Output gap of the world beyond the mainland and the District, the demand that clears most commodities and
          * freight.

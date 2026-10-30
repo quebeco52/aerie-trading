@@ -231,7 +231,8 @@ class MacroVolatilityAnchorTest extends TestCase
         }
 
         mt_srand(self::SEED);
-        $subsystem = new AssetMarketSubsystem(new MathUtility());
+        $math = new MathUtility();
+        $subsystem = new AssetMarketSubsystem($math);
 
         $state = new MacroState();
         $state->outputGap = 0.0;
@@ -252,6 +253,9 @@ class MacroVolatilityAnchorTest extends TestCase
 
         for ($tick = 0; $tick < $ticks; $tick++) {
             $previousVariance = $state->marketVolatility ** 2;
+            // The economy's draws, which the factor's shock loads on, as the engine hands them over.
+            $state->demandNewsZ = $math->generateStandardNormal();
+            $state->mainlandNewsZ = $math->generateStandardNormal();
             $shock = $subsystem->updateSystemicMarketFactor($state, $dt);
             $state->marketVolatility = $subsystem->calculateMarketVolatility($state, $dt, $shock['varianceJump'], $shock['returnInnovation']);
 

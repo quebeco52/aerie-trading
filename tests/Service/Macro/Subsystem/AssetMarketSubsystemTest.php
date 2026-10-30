@@ -28,32 +28,31 @@ class AssetMarketSubsystemTest extends TestCase
         $this->subsystem = new AssetMarketSubsystem($this->mathUtility);
     }
 
-    public function testCampbellCochraneEquityRiskPremiumRisesInRecession(): void
+    /**
+     * The District's premium is the one its market's price implies: the base premium when the market factor has left no
+     * repricing, the payout yield's worth more on top when the market has halved (Gordon: the yield doubles), less in a
+     * boom. A slump in output reaches it only through the market, so a gap with no repricing leaves it at base.
+     */
+    public function testThePremiumIsTheOneTheMarketsPriceImplies(): void
     {
         $state = new MacroState();
         $state->outputGapEma = -0.05;
-
         $this->subsystem->calculateEquityRiskPremium($state);
-        $this->assertGreaterThan(MacroConstants::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium);
-    }
-
-    /**
-     * The premium the price implies is the required one when the market factor has left no repricing, and a market that
-     * has halved implies the payout yield's worth more on top (Gordon: the yield doubles); a boom implies less.
-     */
-    public function testTheImpliedPremiumRisesAfterACrashAndFallsInABoom(): void
-    {
-        $state = new MacroState();
-        $this->subsystem->calculateEquityRiskPremium($state);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium, 1e-15, 'No repricing, the base premium, whatever the gap.');
         $this->assertEqualsWithDelta($state->equityRiskPremium, $state->impliedEquityRiskPremium, 1e-15);
 
         $state->equityValuationShift = log(0.5);
         $this->subsystem->calculateEquityRiskPremium($state);
-        $this->assertEqualsWithDelta($state->equityRiskPremium + 1.0 - AssetMarketSubsystem::CAMPBELL_SHILLER_RHO, $state->impliedEquityRiskPremium, 1e-12);
+        $this->assertEqualsWithDelta(MacroConstants::BASE_EQUITY_RISK_PREMIUM + 1.0 - AssetMarketSubsystem::CAMPBELL_SHILLER_RHO, $state->equityRiskPremium, 1e-12, 'A market that has halved requires the payout yield again.');
+        $this->assertEqualsWithDelta($state->equityRiskPremium, $state->impliedEquityRiskPremium, 1e-15, 'The premium firms are held to is the one shown.');
 
         $state->equityValuationShift = 0.5;
         $this->subsystem->calculateEquityRiskPremium($state);
-        $this->assertLessThan($state->equityRiskPremium, $state->impliedEquityRiskPremium);
+        $this->assertLessThan(MacroConstants::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium, 'A boom requires less.');
+
+        $state->equityValuationShift = 5.0;
+        $this->subsystem->calculateEquityRiskPremium($state);
+        $this->assertSame(AssetMarketSubsystem::MIN_EQUITY_RISK_PREMIUM, $state->equityRiskPremium, 'A bubble still requires more than bills.');
     }
 
     public function testTheForeignBlocPricesItsOwnCycleAndReRatesItsEquities(): void
@@ -858,24 +857,27 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta(TimeSeries::calculateAr2Autocorrelation($a1, $a2, 4), $covariance / $variance, 0.04, 'and a year on it still carries ~0.72 of itself (the CBO gap 0.66).');
     }
 
-    /** The quarter's gap innovation lands at the turn, and between turns there is none. */
-    public function testTheMainlandsInnovationLandsAtTheTurn(): void
+    /** The quarter's gap surprise accrues as the quarter runs and lands at the turn; between turns none lands. */
+    public function testTheMainlandsSurpriseAccruesAndLandsAtTheTurn(): void
     {
-        // The gap's draw leads the quarter; core inflation, the rate, a crash's size and the rest of the world follow.
-        // No crash strikes.
-        $draws = new ScriptedDraws(generateStandardNormal: [1.5]);
+        // Two ticks of half a quarter each step the surprise; core inflation, the rate, a crash's size and the rest of
+        // the world follow at the turn. No crash strikes.
+        $draws = new ScriptedDraws(generateStandardNormal: [1.5, 0.5]);
         $subsystem = new AssetMarketSubsystem($draws);
         $state = new MacroState();
 
-        $state->totalTime = 0.10;
-        $subsystem->calculateForeignEconomy($state, 0.01);
-        $this->assertSame(0.0, $state->foreignOutputGap, 'Inside a quarter nothing lands.');
+        $state->totalTime = 0.125;
+        $subsystem->calculateForeignEconomy($state, 0.125);
+        $this->assertSame(0.0, $state->foreignOutputGap, 'Inside a quarter nothing lands,');
+        $this->assertSame(1.5, $state->mainlandNewsZ, 'though the quarter\'s first step is news already.');
 
         $state->totalTime = 0.25;
-        $subsystem->calculateForeignEconomy($state, 0.01);
+        $subsystem->calculateForeignEconomy($state, 0.125);
         $crashCover = AssetMarketSubsystem::MAINLAND_CRASH_INTENSITY / AssetMarketSubsystem::MAINLAND_QUARTERS_PER_YEAR * AssetMarketSubsystem::MAINLAND_CRASH_MEAN;
-        $shock = (AssetMarketSubsystem::MAINLAND_GAP_SIGMA * 1.5) + $crashCover;
-        $this->assertEqualsWithDelta($shock, $state->foreignOutputGap, 1e-12, 'The turn lands its draw and the crash cover a quiet quarter earns.');
+        $shock = (AssetMarketSubsystem::MAINLAND_GAP_SIGMA * (1.5 + 0.5) / M_SQRT2) + $crashCover;
+        $this->assertEqualsWithDelta($shock, $state->foreignOutputGap, 1e-12, 'The turn lands the surprise its two steps made, at unit variance, and the crash cover a quiet quarter earns,');
+        $this->assertSame(0.0, $state->mainlandGapSurpriseAccrual, 'and the next quarter accrues afresh.');
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::mainlandGapPath() * $crashCover, $state->economicEventNews, 1e-12, 'A quiet quarter is the crash cover\'s news, mean zero with the crashes.');
     }
 
     /**
@@ -895,6 +897,7 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($crashCover - $median, $state->foreignOutputGap, 1e-12, 'The median crash takes 2.2pp off the gap in one quarter,');
         $this->assertLessThan(-4.0, $state->foreignOutputGap / AssetMarketSubsystem::mainlandGapInnovationSd(), 'a quarter no Gaussian of the fitted sd produces in a thousand years.');
         $this->assertLessThan(MacroConstants::MAINLAND_NEUTRAL_RATE, $state->foreignPolicyRate, 'The Fed cuts in the same quarter.');
+        $this->assertEqualsWithDelta(AssetMarketSubsystem::mainlandGapPath() * ($crashCover - $median), $state->economicEventNews, 1e-12, 'The market hears the crash at its path on the District\'s gap.');
     }
 
     /** Crashes and the Gaussian part together are the regression's whole residual, 0.490pp. */
@@ -904,7 +907,7 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(5.0, AssetMarketSubsystem::MAINLAND_CRASH_MEAN / AssetMarketSubsystem::MAINLAND_GAP_SIGMA, 'A crash is a quarter the Gaussian part does not produce.');
     }
 
-    /** The mainland's statistics and its rate decision arrive at the quarter's turn, not between. */
+    /** The mainland's statistics and its rate decision arrive at the quarter's turn; between, its surprise accrues. */
     public function testTheMainlandMovesOnlyAtTheTurnOfAQuarter(): void
     {
         $draws = new ScriptedDraws();
@@ -914,17 +917,17 @@ class AssetMarketSubsystemTest extends TestCase
 
         $state->totalTime = 0.10;
         $subsystem->calculateForeignEconomy($state, 0.01);
-        $this->assertSame(0, $draws->callCount('generateStandardNormal'), 'Inside a quarter nothing is released.');
+        $this->assertSame(1, $draws->callCount('generateStandardNormal'), 'Inside a quarter the surprise takes its step and nothing is released.');
         $this->assertSame(0.0, $state->foreignOutputGap);
 
         $state->totalTime = 0.25;
         $subsystem->calculateForeignEconomy($state, 0.01);
-        $this->assertSame(5, $draws->callCount('generateStandardNormal'), 'The turn releases the gap, core inflation, the rate decision, a crash\'s size and the rest of the world once.');
+        $this->assertSame(7, $draws->callCount('generateStandardNormal'), 'The turn tops up the quarter the steps missed and releases core inflation, the rate decision, a crash\'s size and the rest of the world once,');
         $this->assertGreaterThan(0.0, $state->foreignOutputGap, 'and the district\'s boom shows in the mainland gap.');
 
         $state->totalTime = 1.25;
         $subsystem->calculateForeignEconomy($state, 1.0);
-        $this->assertSame(25, $draws->callCount('generateStandardNormal'), 'A year-long step releases four quarters.');
+        $this->assertSame(27, $draws->callCount('generateStandardNormal'), 'A year-long step releases four quarters: the first on the year\'s step, the rest on draws of their own.');
     }
 
     public function testTheDistrictsBoomSpillsIntoTheMainlandOnlyInPart(): void

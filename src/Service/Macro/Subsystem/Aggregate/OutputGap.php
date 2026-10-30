@@ -7,6 +7,7 @@ namespace App\Service\Macro\Subsystem\Aggregate;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Recorder\OutputGapProbe;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 
@@ -170,6 +171,7 @@ final class OutputGap
         // Smets & Wouters (2007) estimate the demand disturbance and the measurement-frequency
         // component as separate innovations; one draw serving both correlates them at unity.
         $demandZ = $this->mathUtility->generateStandardNormal();
+        $state->demandNewsZ = $demandZ;
         $outZ = $this->mathUtility->generateStandardNormal();
         $inventoryZ = $this->mathUtility->generateStandardNormal();
         $timingZ = $this->mathUtility->generateStandardNormal();
@@ -195,6 +197,9 @@ final class OutputGap
             dt: $dt,
         );
         $state->demandShock += $disasterIncrement;
+        // The market hears the disaster as it lands, at its expected effect on the gap; the compensated increment keeps
+        // that news mean zero between disasters.
+        $state->economicEventNews += self::demandGapPath() * $disasterIncrement;
 
         // The disasters' share of that level and their compensator's, each reverting as the whole does: the level is
         // linear, so noise, disasters and compensation are three processes summing to it exactly, and each can be
@@ -299,6 +304,16 @@ final class OutputGap
     public static function domesticDemandGapAt(float $outputGap, float $supplyGap, float $netExportGap, float $financeOutputGap, float $inventoryInvestmentGap, float $spendingTimingGap, float $mainlandCycleGap): float
     {
         return ($outputGap - $supplyGap - $netExportGap - $financeOutputGap - $inventoryInvestmentGap - $spendingTimingGap - $mainlandCycleGap) / self::DOMESTIC_GAP_WEIGHT;
+    }
+
+    /**
+     * The output gap's mean move over the market's news horizon per unit of the demand disturbance (annual drift): the
+     * disturbance reverts at its own speed while demand's own pull closes the gap behind it, a hump, on domestic
+     * demand's weight in output.
+     */
+    public static function demandGapPath(): float
+    {
+        return self::DOMESTIC_GAP_WEIGHT * StochasticProcesses::cascadeMeanPath(self::DEMAND_SHOCK_REVERSION, DomesticDemand::DEMAND_OWN_PULL, MacroConstants::MARKET_NEWS_HORIZON_YEARS);
     }
 
     /**

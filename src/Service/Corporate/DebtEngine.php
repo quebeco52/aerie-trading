@@ -720,8 +720,10 @@ class DebtEngine
         // shield Hamada assumes (t x D), less the net debt (Modigliani-Miller). Not the price, whose fall raised the
         // beta that loaded the next fall; not the fair value, which is discounted at this beta, so a dip in earnings
         // fed on itself until the cap held; not book, since the asset beta was unlevered at market leverage. Net debt,
-        // so cash hoarders aren't penalized with fake risk. The WACC below still weighs the claims at market value.
-        $assetCostOfCapital = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $baseBeta, $macroState->equityRiskPremium);
+        // so cash hoarders aren't penalized with fake risk. The WACC below still weighs the claims at market value. The
+        // business is valued at the through-the-cycle premium, as fair value is, so the market's repricing does not
+        // reach the beta either.
+        $assetCostOfCapital = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $baseBeta, MacroConstants::BASE_EQUITY_RISK_PREMIUM);
         $businessValue = Valuation::operatingCapitalValue(
             $stock->getInvestedCapital(),
             $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), MarketPricingContext::anchorReturn($stock, $strategy), $assetCostOfCapital),
@@ -742,8 +744,10 @@ class DebtEngine
         // reverse then moves a perpetuity's value by its own reach, not by a lasting change across its life. It is
         // today's curve, not an average of past yields: a smoothed rate moves for months after the yield has, so every
         // valuation built on it could be forecast.
-        $equityRiskPremium = $macroState->equityRiskPremium;
-        $costOfEquity = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $leveredBeta, $equityRiskPremium);
+        // The hurdle new capital must clear reads the premium the market's price implies; valuation reads the
+        // through-the-cycle premium, since the market factor carries the premium's cycle into prices itself.
+        $costOfEquity = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $leveredBeta, $macroState->equityRiskPremium);
+        $valuationCostOfEquity = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $leveredBeta, MacroConstants::BASE_EQUITY_RISK_PREMIUM);
 
         // Absolute priority: equity, the junior claim, never requires less than its debt is expected to return. That is
         // the yield the firm borrows at less the loss its holders expect from default, not the promised yield: a junk
@@ -752,6 +756,7 @@ class DebtEngine
             ? CreditRisk::expectedDefaultLossRate($this->resolveDistanceToDefault($stock, $macroState), self::MERTON_HORIZON_YEARS, $strategy->getLossGivenDefault())
             : 0.0;
         $costOfEquity = max($debtMetrics->currentMarketRate - $expectedDefaultLoss, $costOfEquity);
+        $valuationCostOfEquity = max($debtMetrics->currentMarketRate - $expectedDefaultLoss, $valuationCostOfEquity);
 
         // Weighted Average Cost of Capital (WACC)
         $totalCapital = $netDebtCapital + $marketCap;
@@ -765,6 +770,7 @@ class DebtEngine
         // weighted average it can never exceed the dearer of its two legs.
         $marginalCostOfDebt = $strategy->getMarginalCostOfDebt($debtMetrics) * (1.0 - $impliedTaxShieldRate);
         $wacc = Valuation::calculateWACC($weightEquity, $costOfEquity, $weightDebt, $marginalCostOfDebt);
+        $valuationWacc = Valuation::calculateWACC($weightEquity, $valuationCostOfEquity, $weightDebt, $marginalCostOfDebt);
 
         $minIcr = $strategy->getMinIcr();
 
@@ -869,6 +875,8 @@ class DebtEngine
             $currentDebtRatio,
             $leverageTarget,
             $this->hasPrimaryMarketAccess($stock, $debtMetrics, $interestCoverage),
+            $valuationCostOfEquity,
+            $valuationWacc,
         );
     }
 

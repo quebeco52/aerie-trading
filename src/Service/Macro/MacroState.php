@@ -346,6 +346,13 @@ class MacroState
     // the total.
     public float $demandDisasterShock;
     public float $demandDisasterCompensation;
+    // The demand disturbance's standard normal draw this tick, the economy's own news for the market factor.
+    public float $demandNewsZ;
+    // The economy's events since the market factor last read them (a demand disaster, a mainland crash, a credit
+    // crisis, each compensated), in points of the gap's expected path; and the repricing they owe equities still to
+    // come (AssetMarketSubsystem::EVENT_REPRICING_TAU_YEARS).
+    public float $economicEventNews;
+    public float $eventRepricingPending;
 
     public float $energyInventoryIndex;
     public float $energyInventoryIndexEma;
@@ -430,6 +437,11 @@ class MacroState
     public float $foreignOutputGap;
     public float $foreignOutputGapEma;
     public float $foreignOutputGapLag;
+    // The quarter's Gaussian gap surprise as it has accrued so far (a standard Brownian path), the time it has run, and
+    // this tick's standard normal step in it, the mainland's news for the market factor.
+    public float $mainlandGapSurpriseAccrual;
+    public float $mainlandGapSurpriseElapsed;
+    public float $mainlandNewsZ;
     public float $worldActivityGap;
     public float $worldActivityIdiosyncratic;
     public float $foreignCoreInflation;

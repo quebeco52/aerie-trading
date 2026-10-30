@@ -444,4 +444,29 @@ class StochasticProcessesTest extends TestCase
         $flat = log(StochasticProcesses::calculateSchwartz1Factor(10.0, 1e-6, 10.0, 0.2, 0.25, 0.0));
         $this->assertEqualsWithDelta(0.2 * sqrt(0.25), $up - $flat, 1e-6);
     }
+
+    /**
+     * The cascade's mean path is the average of (e^{-kt} - e^{-pt}) / (p - k) over the horizon, the response of a lag
+     * to a decaying driver, and it is continuous where the two speeds meet.
+     */
+    public function testTheCascadeMeanPathAveragesTheLagsResponse(): void
+    {
+        $horizon = 2.0;
+        $responses = [
+            'k 0.6, p 1.44' => [0.6, 1.44, static fn(float $t): float => (exp(-0.6 * $t) - exp(-1.44 * $t)) / 0.84],
+            'k 0.25, p 1.44' => [0.25, 1.44, static fn(float $t): float => (exp(-0.25 * $t) - exp(-1.44 * $t)) / 1.19],
+            'k 1.44, p 0.6' => [1.44, 0.6, static fn(float $t): float => (exp(-1.44 * $t) - exp(-0.6 * $t)) / -0.84],
+            'k = p = 1' => [1.0, 1.0, static fn(float $t): float => $t * exp(-$t)],
+        ];
+        foreach ($responses as $case => [$k, $p, $response]) {
+            $steps = 200_000;
+            $sum = 0.0;
+            for ($i = 0; $i < $steps; $i++) {
+                $sum += $response(($i + 0.5) * $horizon / $steps);
+            }
+            $this->assertEqualsWithDelta($sum / $steps, StochasticProcesses::cascadeMeanPath($k, $p, $horizon), 1e-9, $case);
+        }
+
+        $this->assertEqualsWithDelta(StochasticProcesses::cascadeMeanPath(1.0, 1.0, 2.0), StochasticProcesses::cascadeMeanPath(1.0, 1.0 + 1e-7, 2.0), 1e-6, 'Continuous where the speeds meet.');
+    }
 }
