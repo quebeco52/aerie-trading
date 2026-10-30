@@ -1309,6 +1309,30 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * A trust's listed stakes book only their dividend, so its income return sits below any cost of capital and its
+     * business, valued on that income, came out a fraction of its assets: the beta levered on the remainder went from
+     * 1.0 to 1.9. The stakes earn their price too, so they are worth their mark, and the beta stays near its asset
+     * beta.
+     */
+    public function testATrustsStakesAreWorthTheirMarkInTheEquityTheBetaIsLeveredOn(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $beta = function (?string $stakes) use ($engine, $macro): float {
+            $trust = $this->leveredFirm('BRKW', '0.90', '0.02')->setCurrentRoic('0.05')->setWholesaleDebt('150000000');
+            $trust->setIndustry('Investment Companies');
+            $trust->setListedStakesCarrying($stakes);
+
+            return $engine->analyzeDebtHealth($trust, $macro)->leveredBeta;
+        };
+
+        $incomeOnly = $beta(null);
+        $marked = $beta('900000000');
+        $this->assertLessThan($incomeOnly - 0.02, $marked, 'Valued on its dividends alone, the trust looks more geared than it is.');
+        $this->assertEqualsWithDelta(0.90, $marked, 0.08, 'On its marked assets a lightly borrowed trust carries about its asset beta.');
+    }
+
+    /**
      * Absolute priority: equity is the junior claim on the same cash flows, so it cannot require a lower return than
      * the debt ranking above it is expected to earn: the yield it borrows at less the loss its holders expect from
      * default. CAPM alone hands a negative-beta name a rate below the risk-free rate, which is sound portfolio theory

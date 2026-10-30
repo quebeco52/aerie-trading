@@ -86,8 +86,10 @@ final class FairValue
         );
 
         // Value at the market's discount rate: the repricing the market factor has put on equities reaches the name by
-        // its beta, as the factor reaches its price, so a market move leaves no gap for the pull to close.
-        $repricing = $ctx->macroState?->equityRepricing($ctx->beta) ?? 1.0;
+        // its beta, as the factor reaches its price, so a market move leaves no gap for the pull to close. Value
+        // already carried at the board's prices has had it through them, so only the rest is repriced.
+        $repricing = $ctx->marketMarkedValueShare
+            + ((1.0 - $ctx->marketMarkedValueShare) * ($ctx->macroState?->equityRepricing($ctx->beta) ?? 1.0));
         $state['perceived_fair_value'] *= $repricing;
         $state['analyst_targets'] = array_map(static fn(float $target): float => $target * $repricing, $state['analyst_targets']);
         $state['market_repricing'] = $repricing;

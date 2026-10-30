@@ -1366,7 +1366,9 @@ class EarningsEngine
 
         $ctx->wacc = $ctx->strategy->getHurdleRate($ctx->health);
         $capital = $ctx->strategy->getPhysicalCapital($stock);
-        $ctx->quarterlyEconomicProfit = ($capital * ($ctx->truePostTaxReturn - $ctx->wacc)) / 4.0;
+        // A trust's stakes earn their price as well as the dividend the return above books.
+        $holdingGain = $ctx->strategy->getExpectedHoldingGainReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
+        $ctx->quarterlyEconomicProfit = ($capital * ($ctx->truePostTaxReturn + $holdingGain - $ctx->wacc)) / 4.0;
 
         $evaString = WireFormat::money($ctx->quarterlyEconomicProfit, true) . ' EVA';
 

@@ -101,6 +101,10 @@ final class ValuationHarnessTest extends BoardRun
                 $r = $shares / $lsh;
                 if (($r >= 1.5 && abs($r - round($r)) < 1e-6) || ($r > 0.0 && $r <= 0.67 && abs(1.0 / $r - round(1.0 / $r)) < 1e-6)) {
                     $this->adj[$tk] = ($this->adj[$tk] ?? 1.0) * $r;
+                    // The probe struck this tick's fair value before the split executed.
+                    if (isset($this->fv[$tk])) {
+                        $this->fv[$tk] /= $r;
+                    }
                 }
             }
         }

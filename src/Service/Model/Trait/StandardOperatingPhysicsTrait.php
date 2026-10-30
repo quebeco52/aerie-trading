@@ -980,6 +980,11 @@ trait StandardOperatingPhysicsTrait
         return (float) $stock->getRoicTtm();
     }
 
+    public function getExpectedHoldingGainReturn(Stock $stock, float $assetCostOfCapital): float
+    {
+        return 0.0;
+    }
+
     /** The return is NOPAT on invested capital and only a profit is taxed, so only a profit is grossed back up. */
     public function getNormalEbitda(Stock $stock, float $macroTaxRate, float $depreciation): ?float
     {

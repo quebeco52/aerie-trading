@@ -366,19 +366,48 @@ class InvestmentCompanyBusinessModelTest extends TestCase
     }
 
     /**
-     * The discount control mechanism: retiring a share below net asset value raises the value of every
-     * share left, by the discount times the fraction retired, whatever the portfolio does next.
+     * Discount control: the board buys when the discount is wider than the one the trust trades at through the cycle,
+     * by how far below that price the market has its shares. At the normal discount it does not, or it would retire
+     * its whole float.
      */
-    public function testRepurchasingBelowNetAssetValueIsAccretive(): void
+    public function testTheBoardBuysBackOnlyWhenTheDiscountIsWiderThanItsNormalOne(): void
     {
         $stock = $this->brkw();
         $stock->setSharesOutstanding('1000000000');
 
         // NAV per share is 1880: equity 1.88tn over a billion shares.
-        $this->assertEqualsWithDelta(0.30, $this->model->resolveRepurchaseAccretion($stock, 1316.0), 1e-9);
+        $normalPrice = 1880.0 * (1.0 - InvestmentCompanyBusinessModel::NAV_DISCOUNT_BASE);
+        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, $normalPrice), 'The normal discount is the price of the structure.');
+        $this->assertEqualsWithDelta(1.0 - (0.6 * 1880.0 / $normalPrice), $this->model->resolveRepurchaseAccretion($stock, 0.6 * 1880.0), 1e-9);
+        $this->assertGreaterThan(0.0, $this->model->resolveRepurchaseAccretion($stock, 0.6 * 1880.0));
         $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, 1880.0));
         $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, 2500.0), 'A premium is not accretion.');
         $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, 0.0));
+    }
+
+    /** A trust never borrows to retire its shares, however little debt it carries; an operating company would. */
+    public function testATrustNeverRecapitalisesItsSharesIntoDebt(): void
+    {
+        $this->assertFalse($this->model->isUnderLeveraged(0.0, 0.5, 50.0, 2.0));
+        $this->assertTrue((new \App\Service\Model\Sector\StandardCorporateBusinessModel())->isUnderLeveraged(0.0, 0.5, 50.0, 2.0));
+    }
+
+    /**
+     * A listed stake books only its dividend; its price earns the rest of the asset cost of capital it is held for.
+     * Counted beside the income, a stake earns exactly that cost, so the trust is neither credited nor charged for
+     * holding it; an operating company and an unmarked sphere hold nothing that earns it.
+     */
+    public function testAStakeEarnsItsCostOfCapitalThroughItsDividendAndItsPrice(): void
+    {
+        $sphere = $this->brkw();
+        $assetCostOfCapital = 0.085;
+
+        $gainOnStakes = $this->model->getExpectedHoldingGainReturn($sphere, $assetCostOfCapital) * $sphere->getInvestedCapital() / $this->fixturePortfolio();
+        $this->assertEqualsWithDelta($assetCostOfCapital, $gainOnStakes + InvestmentCompanyBusinessModel::LISTED_DIVIDEND_YIELD, 1e-12);
+        $this->assertGreaterThan(0.0, $gainOnStakes);
+
+        $this->assertSame(0.0, $this->model->getExpectedHoldingGainReturn($this->bareBrkw(), $assetCostOfCapital), 'An unmarked sphere has no stakes to earn on.');
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\StandardCorporateBusinessModel())->getExpectedHoldingGainReturn($sphere, $assetCostOfCapital));
     }
 
     /** An operating company's repurchase case is the return it earns, which the earnings test already asks. */

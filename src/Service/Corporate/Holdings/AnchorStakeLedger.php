@@ -175,6 +175,21 @@ final class AnchorStakeLedger
         return (float) $unrealised;
     }
 
+    /**
+     * Share of the holder's marked book its listed stakes are, at the board's prices: the part of its value the
+     * market's repricing has already reached through those prices. Zero for a firm holding none.
+     */
+    public function resolveMarkedStakeShare(Stock $holder): float
+    {
+        $markedBookPerShare = $this->resolveMarkedBookValuePerShare($holder);
+        $marketValue = $this->resolveStakeValue($holder);
+        if ($markedBookPerShare === null || $marketValue === null || $markedBookPerShare <= 0.0) {
+            return 0.0;
+        }
+
+        return min(1.0, max(0.0, $marketValue / ($markedBookPerShare * max(1.0, (float) $holder->getSharesOutstanding()))));
+    }
+
     /** Book value per share including the portfolio's move since the last report; null for a firm holding none. */
     public function resolveMarkedBookValuePerShare(Stock $holder): ?float
     {

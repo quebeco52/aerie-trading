@@ -1458,7 +1458,9 @@ class InitialMarket
             // implies.
             'baseline_roic' => 0.048,
             'capex_ratio' => 0.12,
-            'target_payout_ratio' => 0.40,
+            // The Foundation's grants run on the dividend, and a trust whose stakes are fixed has nowhere to put what
+            // it keeps: at 40% the rest piled up as cash, a quarter of NAV.
+            'target_payout_ratio' => 0.60,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'fixed_cost_ratio' => 0.03,
             // Blended across a revenue line that is ~77% consolidated subsidiaries at ~35% and ~23%

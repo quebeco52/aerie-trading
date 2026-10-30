@@ -282,6 +282,21 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     }
 
     /**
+     * A listed stake books only its dividend: the rest of the return it is held for, the asset cost of capital, is its
+     * price. Before tax, as the deferred tax on the mark is part of the capital and is not paid while the stake is
+     * held.
+     */
+    public function getExpectedHoldingGainReturn(Stock $stock, float $assetCostOfCapital): float
+    {
+        $investedCapital = $stock->getInvestedCapital();
+        if ($investedCapital <= 0.0) {
+            return 0.0;
+        }
+
+        return $this->resolveListedStakeValue($stock) * ($assetCostOfCapital - self::LISTED_DIVIDEND_YIELD) / $investedCapital;
+    }
+
+    /**
      * What the listed sleeve is worth: the marked carrying value, and nothing when there is no mark.
      *
      * No fallback share of book, deliberately. Three composition dials have rotted here, each within one
@@ -377,11 +392,11 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     }
 
     /**
-     * The discount control mechanism every closed-end board has and most of them use.
-     *
-     * Buying a share at 0.70x NAV and cancelling it hands the remaining holders 30 cents of assets for
-     * every 70 they spend — the one deployment whose return does not depend on the portfolio doing
-     * anything, and why a wide discount is self-correcting rather than permanent.
+     * The discount control every closed-end board runs: it buys its shares back when the discount is wider than the
+     * one the structure trades at through the cycle (NAV_DISCOUNT_BASE), by how far below that price the market has
+     * them, which is why a wide discount is self-correcting rather than permanent. At the normal discount a retired
+     * share still lifts NAV per share, but that discount is the price of the structure, not a mispricing, and a board
+     * buying there every quarter would retire its whole float, as the foundation's control block does not tender.
      */
     public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice): float
     {
@@ -391,7 +406,17 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             return 0.0;
         }
 
-        return max(0.0, 1.0 - ($currentPrice / $navPerShare));
+        return max(0.0, 1.0 - ($currentPrice / ($navPerShare * (1.0 - self::NAV_DISCOUNT_BASE))));
+    }
+
+    /**
+     * A trust's assets are equity already, so its board holds the loan-to-value low and borrows for what it buys,
+     * never to swap its shares for debt: a recapitalisation toward an operating company's leverage would gear a
+     * portfolio that carries the market's risk in full.
+     */
+    public function isUnderLeveraged(float $currentDebtRatio, float $targetDebtTolerance, float $interestCoverage, float $minIcr): bool
+    {
+        return false;
     }
 
     /**

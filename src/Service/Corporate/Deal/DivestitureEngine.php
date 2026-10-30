@@ -213,7 +213,9 @@ class DivestitureEngine
         // business: a slump shorter than that horizon is not decline, and a distress premium on the firm's financing
         // is not value destroyed by its operations.
         $longRunReturn = $stock->getLongRunReturn();
-        $ctx->throughCycleReturn = $longRunReturn !== null ? (float) $longRunReturn : $ctx->currentReturn;
+        // A trust's stakes earn their price as well as their dividend.
+        $ctx->throughCycleReturn = ($longRunReturn !== null ? (float) $longRunReturn : $ctx->currentReturn)
+            + $ctx->strategy->getExpectedHoldingGainReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
         $ctx->hurdleRate = self::businessCostOfCapital($stock, $ctx->macroState);
 
         $ctx->evaSpread = $ctx->throughCycleReturn - $ctx->hurdleRate;

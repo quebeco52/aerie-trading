@@ -722,11 +722,13 @@ class DebtEngine
         // fed on itself until the cap held; not book, since the asset beta was unlevered at market leverage. Net debt,
         // so cash hoarders aren't penalized with fake risk. The WACC below still weighs the claims at market value. The
         // business is valued at the through-the-cycle premium, as fair value is, so the market's repricing does not
-        // reach the beta either.
-        $assetCostOfCapital = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $baseBeta, MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+        // reach the beta either. A trust's stakes earn their price as well as their dividend, so they are worth their
+        // mark rather than their dividend capitalised.
+        $assetCostOfCapital = self::assetCostOfCapital($stock, $macroState);
         $businessValue = Valuation::operatingCapitalValue(
             $stock->getInvestedCapital(),
-            $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), MarketPricingContext::anchorReturn($stock, $strategy), $assetCostOfCapital),
+            $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), MarketPricingContext::anchorReturn($stock, $strategy), $assetCostOfCapital)
+                + $strategy->getExpectedHoldingGainReturn($stock, $assetCostOfCapital),
             $assetCostOfCapital,
             Valuation::calculateExpectedNominalGrowth(SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime), $macroState->tipsBreakeven, $assetCostOfCapital),
         );
@@ -885,6 +887,15 @@ class DebtEngine
      * sector covenant. Null for a sector with no covenant. The recapitalisation target and acquisition debt both stop
      * at it.
      */
+    /**
+     * What the firm's business is required to earn: CAPM on its asset beta at the through-the-cycle premium, as the
+     * business is valued, so the market's repricing does not move it.
+     */
+    public static function assetCostOfCapital(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return Valuation::calculateCAPM($macroState->equityRiskFreeRate, (float) $stock->getBeta(), MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+    }
+
     public function resolveCovenantLeverageMultiple(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): ?float
     {
         $covenant = \App\Data\Company\Sectors::ebitdaCovenant($stock->getIndustry());

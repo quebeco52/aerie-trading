@@ -155,7 +155,7 @@ class CompanyProfilesTest extends TestCase
         foreach (['ALBT', 'KSTL', 'BIRD', 'ERNE'] as $held) {
             yield "BRKW $held" => ['BRKW', 'just over a third of four more', AnchorHoldings::forHolder('BRKW')[$held], 0.35];
         }
-        yield 'BRKW payout' => ['BRKW', 'pays out about 40% of what it earns', self::seed('BRKW')['target_payout_ratio'], 0.40];
+        yield 'BRKW payout' => ['BRKW', 'pays out about 60% of what it earns', self::seed('BRKW')['target_payout_ratio'], 0.60];
         yield 'BRKW beta' => ['BRKW', 'beta of about 0.9', self::beta('BRKW'), 0.90, self::BETA_ROUNDING];
         yield 'IBHI owners' => ['IBHI', 'hold about 55% of the shares between them', 1.0 - self::seed('IBHI')['public_float'], 0.55];
         yield 'IBHI civil' => ['IBHI', 'About 60% of revenue comes from civil infrastructure', $tuning('IBHI', ModelParam::CivilInfrastructureWeight), 0.60];

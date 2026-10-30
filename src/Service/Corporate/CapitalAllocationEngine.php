@@ -153,7 +153,7 @@ class CapitalAllocationEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
 
-        $trueReturn = $ctx->strategy->getTrueReturn($stock);
+        $trueReturn = $ctx->strategy->getTrueReturn($stock) + $ctx->strategy->getExpectedHoldingGainReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
 
         // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986) As a firm approaches market
         // saturation, internal reinvestment slows and target payout scales toward cash cow levels.
@@ -399,7 +399,8 @@ class CapitalAllocationEngine
             }
         }
 
-        $trueReturn = $ctx->strategy->getTrueReturn($stock);
+        // The whole firm's return against its cost of capital: a trust's stakes earn their price too.
+        $trueReturn = $ctx->strategy->getTrueReturn($stock) + $ctx->strategy->getExpectedHoldingGainReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 

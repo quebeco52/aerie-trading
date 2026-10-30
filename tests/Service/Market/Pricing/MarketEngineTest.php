@@ -428,7 +428,7 @@ class MarketEngineTest extends TestCase
         $this->assertSame($value(-0.03), $value(0.03));
     }
 
-    private function repricedContext(float $shift, float $beta, float $price = 40.0): MarketPricingContext
+    private function repricedContext(float $shift, float $beta, float $price = 40.0, float $markedShare = 0.0): MarketPricingContext
     {
         return new MarketPricingContext(
             currentPrice: $price,
@@ -444,7 +444,24 @@ class MarketEngineTest extends TestCase
             revenuePerShare: 40.0,
             businessModel: 'tech',
             liveCostOfEquity: 0.09,
+            marketMarkedValueShare: $markedShare,
         );
+    }
+
+    /**
+     * Value already carried at the board's prices, a sphere's listed stakes, has had the market's repricing through
+     * those prices: only the rest of the name's value takes it again.
+     */
+    public function testValueCarriedAtTheBoardsPricesIsNotRepricedTwice(): void
+    {
+        foreach ([0.0, 0.72, 1.0] as $marked) {
+            $calm = $this->engine->strikeFairValue($this->repricedContext(0.0, 1.2, markedShare: $marked));
+            $fallen = $this->engine->strikeFairValue($this->repricedContext(-0.3, 1.2, markedShare: $marked));
+
+            $repricing = $marked + ((1.0 - $marked) * exp(-0.3 * 1.2));
+            $this->assertEqualsWithDelta($repricing, $fallen['perceived_fair_value'] / $calm['perceived_fair_value'], 1e-12, "marked {$marked}");
+            $this->assertEqualsWithDelta($repricing, $fallen['market_repricing'], 1e-12, 'and the repricing the tracker divides out is the same.');
+        }
     }
 
     /**
