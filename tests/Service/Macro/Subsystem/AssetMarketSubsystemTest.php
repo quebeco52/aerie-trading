@@ -37,6 +37,25 @@ class AssetMarketSubsystemTest extends TestCase
         $this->assertGreaterThan(MacroConstants::BASE_EQUITY_RISK_PREMIUM, $state->equityRiskPremium);
     }
 
+    /**
+     * The premium the price implies is the required one when the market factor has left no repricing, and a market that
+     * has halved implies the payout yield's worth more on top (Gordon: the yield doubles); a boom implies less.
+     */
+    public function testTheImpliedPremiumRisesAfterACrashAndFallsInABoom(): void
+    {
+        $state = new MacroState();
+        $this->subsystem->calculateEquityRiskPremium($state);
+        $this->assertEqualsWithDelta($state->equityRiskPremium, $state->impliedEquityRiskPremium, 1e-15);
+
+        $state->equityValuationShift = log(0.5);
+        $this->subsystem->calculateEquityRiskPremium($state);
+        $this->assertEqualsWithDelta($state->equityRiskPremium + 1.0 - AssetMarketSubsystem::CAMPBELL_SHILLER_RHO, $state->impliedEquityRiskPremium, 1e-12);
+
+        $state->equityValuationShift = 0.5;
+        $this->subsystem->calculateEquityRiskPremium($state);
+        $this->assertLessThan($state->equityRiskPremium, $state->impliedEquityRiskPremium);
+    }
+
     public function testTheForeignBlocPricesItsOwnCycleAndReRatesItsEquities(): void
     {
         $state = new MacroState();

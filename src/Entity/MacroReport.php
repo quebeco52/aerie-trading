@@ -129,6 +129,10 @@ class MacroReport
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4)]
     private ?string $equityRiskPremium = null;
 
+    // The premium the market's price implies, which the economy page charts; null before it was recorded.
+    #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 4, nullable: true)]
+    private ?string $impliedEquityRiskPremium = null;
+
     #[ORM\Column(type: Types::DECIMAL, precision: 15, scale: 4)]
     private ?string $nominalGdpIndex = null;
 

@@ -222,6 +222,7 @@ class MacroState
     /** @var array<string, float> */
     public array $systemicAlarmLatches;
     public float $equityRiskPremium;
+    public float $impliedEquityRiskPremium;
 
     public float $potentialGdpIndex;
     public float $nominalGdpIndex;

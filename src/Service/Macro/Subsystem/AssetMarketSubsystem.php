@@ -696,11 +696,22 @@ class AssetMarketSubsystem
     public function calculateEquityRiskPremium(MacroState $state): void
     {
         $state->equityRiskPremium = $this->habitEquityRiskPremium($state->outputGapEma);
+        $state->impliedEquityRiskPremium = self::impliedEquityRiskPremium($state->equityRiskPremium, $state->equityValuationShift);
 
         $state->foreignEquityRiskPremium = $this->habitEquityRiskPremium($state->foreignOutputGapEma);
         $valuation = -self::foreignValuationDuration() * ($state->foreignEquityRiskPremium - MacroConstants::BASE_EQUITY_RISK_PREMIUM);
         $state->foreignEquityValuationChange = $valuation - $state->foreignEquityValuation;
         $state->foreignEquityValuation = $valuation;
+    }
+
+    /**
+     * The premium that values the market at its price (Gordon), with the payout yield at the Campbell-Shiller constant:
+     * a repricing of V scales that yield by exp(-V), so a market that halves adds about four points. Shown to players;
+     * nothing prices on it, since fair value already carries the repricing.
+     */
+    public static function impliedEquityRiskPremium(float $requiredPremium, float $valuationShift): float
+    {
+        return $requiredPremium + ((1.0 - self::CAMPBELL_SHILLER_RHO) * (exp(-$valuationShift) - 1.0));
     }
 
     /**

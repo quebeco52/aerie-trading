@@ -268,7 +268,8 @@ export function updateMacroCharts(reports, timeframe = currentMacroTimeframe) {
         spread2s10sData.push((y10 !== null && y2 !== null) ? y10 - y2 : null);
         spread30yData.push((mortgageRate !== null && pr !== null && !isNaN(pr)) ? mortgageRate - pr : null);
 
-        erpData.push(parseFloat(report.equity_risk_premium) * 100);
+        // The premium the market's price implies; quarters recorded before it was kept show the required premium.
+        erpData.push(parseFloat(report.implied_equity_risk_premium ?? report.equity_risk_premium) * 100);
         volData.push(parseFloat(report.market_volatility) * 100);
         taxData.push(parseFloat(report.corporate_tax_rate) * 100);
 

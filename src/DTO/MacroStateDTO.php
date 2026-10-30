@@ -288,6 +288,11 @@ readonly class MacroStateDTO
         public float $sovereignDebtAverageMaturity = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
         public float $sovereignDebtMaturityTarget = CreditFiscalSubsystem::FOUNDING_DEBT_AVERAGE_MATURITY,
         public float $equityRiskPremium = MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+        /**
+         * The premium the market's price implies (AssetMarketSubsystem::impliedEquityRiskPremium()): it rises after a
+         * crash and falls in a boom. Shown on the pages; nothing prices on it.
+         */
+        public float $impliedEquityRiskPremium = MacroConstants::BASE_EQUITY_RISK_PREMIUM,
         public float $macroCreditSpread = MacroConstants::BASE_CREDIT_SPREAD,
         public float $macroCreditSpreadEma = MacroConstants::BASE_CREDIT_SPREAD,
         /**
