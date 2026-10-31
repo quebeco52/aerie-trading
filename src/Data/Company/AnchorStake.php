@@ -8,8 +8,9 @@ namespace App\Data\Company;
  * How firmly a permanent-capital sphere holds one of its listed companies.
  *
  * The conviction is the interesting fact, not the percentage: effectively a subsidiary, a company governed
- * from the board, or one it merely has a seat at. Naming it keeps that visible and bounds ownership by
- * construction — nothing can be declared above CONTROL, so no stake grows until a holding has no float.
+ * from the board, or one it merely has a seat at. Naming it keeps that visible and bounds what can be declared:
+ * nothing opens above CONTROL. A stake then grows only as the company retires its float, and stops where
+ * AnchorHoldings::MIN_TRADABLE_FLOAT is left trading.
  */
 enum AnchorStake: string
 {
@@ -18,8 +19,9 @@ enum AnchorStake: string
     case Minority = 'minority';
 
     /**
-     * Fraction of the held company owned at this conviction. Control stops at a half: past that a holding is
-     * consolidated line by line and stops being a stake at all.
+     * Fraction of the held company the stake opens at, at this conviction. Control opens at a half, and stays a stake
+     * carried at its price past it, as an investment company carries what it holds: a listed company is never
+     * consolidated into another's books.
      */
     public function fraction(): float
     {

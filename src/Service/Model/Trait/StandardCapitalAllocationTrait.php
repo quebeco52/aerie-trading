@@ -64,9 +64,18 @@ trait StandardCapitalAllocationTrait
     }
 
     /** An operating company's repurchase case is the return it earns, which the earnings test already asks. */
-    public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice): float
+    public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice, float $netAssetValuePerShare): float
     {
         return 0.0;
+    }
+
+    /**
+     * An operating company buys more of its own business as readily as a new one, and sells a business when a buyer
+     * pays more for it than it earns its owner.
+     */
+    public function investsByCharter(): bool
+    {
+        return false;
     }
 
     /** An operating company closes to nothing: its scale is plant, which a repurchase does not shrink. */

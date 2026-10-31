@@ -980,7 +980,7 @@ trait StandardOperatingPhysicsTrait
         return (float) $stock->getRoicTtm();
     }
 
-    public function getExpectedHoldingGainReturn(Stock $stock, float $assetCostOfCapital): float
+    public function getExpectedHoldingReturn(Stock $stock, float $assetCostOfCapital): float
     {
         return 0.0;
     }

@@ -299,6 +299,22 @@ class ValuationTest extends TestCase
         $this->assertEqualsWithDelta(0.48, $power, 0.005);
     }
 
+    /**
+     * Cash is a zero-beta asset held beside the business, so the equity's beta is the business's weighted by value:
+     * Damodaran's cash correction run forward (Power's 0.31 at 1.45% cash is the 0.3055 above), and back again.
+     */
+    public function testCashDilutesTheBetaByItsShareOfValue(): void
+    {
+        $this->assertEqualsWithDelta(0.31 * (1.0 - 0.0145), Valuation::cashBlendedBeta(0.31, 98.55, 1.45), 1e-12);
+        $this->assertEqualsWithDelta(0.9 * 78.0 / 100.0, Valuation::cashBlendedBeta(0.9, 78.0, 22.0), 1e-12);
+        $this->assertSame(-0.4, Valuation::cashBlendedBeta(-0.4, 50.0, 0.0), 'No cash, no change, and a hedge stays a hedge.');
+        $this->assertSame(0.0, Valuation::cashBlendedBeta(0.9, -10.0, 22.0), 'A business worth nothing leaves the equity all cash.');
+
+        $blended = Valuation::cashBlendedBeta(1.3, 60.0, 40.0);
+        $this->assertEqualsWithDelta(1.3, Valuation::cashFreeBeta($blended, 60.0, 40.0), 1e-12, 'The inverse recovers the business beta.');
+        $this->assertSame(0.7, Valuation::cashFreeBeta(0.7, 0.0, 40.0), 'With no business left there is nothing to lever up.');
+    }
+
     public function testCalculateBayesianAnalystUpdate(): void
     {
         // Equal uncertainty -> straight average

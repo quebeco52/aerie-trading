@@ -63,6 +63,15 @@ interface ValuationStrategyInterface
     public function getStructuralValuationDiscount(MacroStateDTO $macroState): float;
 
     /**
+     * What the businesses a holding company consolidates are worth above the capital they run on, the step from its
+     * book to its net asset value: zero for every other firm, whose operations its own valuation already prices.
+     *
+     * @param float $assetCostOfCapital The businesses' through-the-cycle cost of capital, on their asset beta.
+     * @param float $growth             Their expected nominal growth.
+     */
+    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate): float;
+
+    /**
      * Whether the firm's own news is news about the margin it earns (Stock::$franchisePower). A trust's own news is
      * its holdings', which reach its value through their own prices, so it carries none.
      */

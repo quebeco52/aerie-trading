@@ -1453,19 +1453,20 @@ class InitialMarket
             'beta_tilt' => 0.06, // follows the District economy through its holdings
             'jump_intensity' => 0.30,
             'jump_vol' => 0.08,
-            // The INCOME return alone: appreciation arrives as OCI through AnchorStakeLedger, so pricing it into the
-            // P&L too would count the portfolio's return twice. = margin x (1 - tax) x the turnover the portfolio
-            // implies.
-            'baseline_roic' => 0.048,
+            // The consolidated subsidiaries' own return on the capital they run, which is all the revenue line sells
+            // on: berths, rights of way, concessions and toolmakers held to about their cost of capital (~8.7% at
+            // the opening rates), which the board sets them. The stakes earn their dividends below the line and their
+            // appreciation as OCI (AnchorStakeLedger).
+            'baseline_roic' => 0.090,
             'capex_ratio' => 0.12,
             // The Foundation's grants run on the dividend, and a trust whose stakes are fixed has nowhere to put what
             // it keeps: at 40% the rest piled up as cash, a quarter of NAV.
             'target_payout_ratio' => 0.60,
             'dividendSpeed' => self::LINTNER_QUARTERLY_ADJUSTMENT_SPEED,
             'fixed_cost_ratio' => 0.03,
-            // Blended across a revenue line that is ~77% consolidated subsidiaries at ~35% and ~23%
-            // dividends and interest at no cost of goods.
-            'operating_margin' => 0.50,
+            // The subsidiaries' margin: their sales are the whole revenue line, and dividends and interest arrive
+            // below it with no cost of goods.
+            'operating_margin' => 0.35,
             'public_float' => 0.75,
             'sam_ratio' => 1.62,
             'floating_debt_ratio' => 0.10,
@@ -1473,11 +1474,8 @@ class InitialMarket
             'credit_spread' => 0.0035,
             'depreciation_rate' => 0.03,
             'corporate_treasury' => 135_000_000_000.00,
-            // A trust whose holdings are worth more is worth more itself. The engineering and machinery
-            // pillars it stewards were recapitalized, which lifted the declared portfolio to 1,423B against
-            // 1,770B of capital employed and left its own operating subsidiaries below the 20% of the
-            // balance sheet AnchorHoldings::MIN_CONSOLIDATED_SHARE requires them to be — a trust whose
-            // stakes swallow it has no operations left to draw a stream from. 2,010B puts them back at 25%.
+            // The stakes open at about 400B, near two fifths of capital employed; the subsidiaries are the rest,
+            // well above the 20% AnchorHoldings::MIN_CONSOLIDATED_SHARE requires.
             'total_equity' => 1_128_600_000_000.00,
             'customer_deposits' => 0.00,
             'wholesale_debt' => 75_600_000_000.00,

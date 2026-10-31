@@ -916,7 +916,8 @@ class EarningsEngine
             $sleeve = $ctx->strategy->resolveEquitySleeve($stock, $ctx->macroState);
             $annualInterestIncome += $sleeve['value'] * ($ctx->equitySleeveDividendReturn - $sleeve['expected_return']);
         }
-        $ctx->quarterlyInterestIncome = $annualInterestIncome / 4.0;
+        // A holding company's stakes pay it the dividends the companies it holds declared since its last report.
+        $ctx->quarterlyInterestIncome = ($annualInterestIncome / 4.0) + $this->anchorStakes->collectDividends($stock);
         if ($ctx->equitySleeveMark !== 0.0) {
             $stock->setCorporateTreasury((string) max(0.0, (float) $stock->getCorporateTreasury() + $ctx->equitySleeveMark));
         }
@@ -1285,6 +1286,17 @@ class EarningsEngine
     }
 
     /**
+     * Cash per share the quarter's allocation paid every holder of record: the dividend and any redemption, both of
+     * which leave the price on the ex-date.
+     *
+     * @param array<string, mixed> $allocation
+     */
+    private static function distributedPerShare(array $allocation): float
+    {
+        return (float) ($allocation['dividend_paid'] ?? 0.0) + (float) ($allocation['redemption_per_share'] ?? 0.0);
+    }
+
+    /**
      * Fair value per share on the books as they stand, at this tick's macro: the market's own strike, with the cost
      * of equity it was discounted at.
      *
@@ -1311,7 +1323,7 @@ class EarningsEngine
         $ctx->priceGapPct = self::reportPriceGap(
             $ctx->fairValueBeforeReport,
             $this->strikeFairValue($stock, $ctx->macroState)[0],
-            (float) ($ctx->allocation['dividend_paid'] ?? 0.0),
+            self::distributedPerShare($ctx->allocation),
             $ctx->costOfEquityBeforeReport,
         );
         $ctx->totalShockPct = $ctx->priceGapPct;
@@ -1341,7 +1353,10 @@ class EarningsEngine
                 } else {
                     $desc = $subEvent['description'] ?? '';
                 }
-                $ctx->corporateActionDescriptions .= "\n• " . $desc;
+                // An action too small to make the news is still filed, for whoever settles a part of it.
+                if ($desc !== '') {
+                    $ctx->corporateActionDescriptions .= "\n• " . $desc;
+                }
                 $ctx->corporateActions[] = $subEvent['fact'] ?? ['kind' => 'note', 'text' => $desc];
                 // Only an announcement with a measured return carries one; distress is already in fair value.
                 $ctx->totalShockPct += (($subEvent['shock'] ?? 0.0) / 100.0);
@@ -1351,7 +1366,7 @@ class EarningsEngine
         $ctx->totalShockPct = max(-self::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, min(self::MAX_QUARTERLY_PRICE_CIRCUIT_BREAKER, $ctx->totalShockPct));
 
         // A firm with no shares outstanding never reaches the capital allocator, so the allocation array can be empty.
-        $exDivPrice = ($currentPrice * (1.0 + $ctx->totalShockPct)) - (float) ($ctx->allocation['dividend_paid'] ?? 0.0);
+        $exDivPrice = ($currentPrice * (1.0 + $ctx->totalShockPct)) - self::distributedPerShare($ctx->allocation);
         $newPrice = max(0.01, $exDivPrice);
         $stock->setPrice(number_format($newPrice, 8, '.', ''));
 
@@ -1366,8 +1381,9 @@ class EarningsEngine
 
         $ctx->wacc = $ctx->strategy->getHurdleRate($ctx->health);
         $capital = $ctx->strategy->getPhysicalCapital($stock);
-        // A trust's stakes earn their price as well as the dividend the return above books.
-        $holdingGain = $ctx->strategy->getExpectedHoldingGainReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
+        // A trust's stakes earn their dividends and their price beside the operating return, at the premium the hurdle
+        // charges.
+        $holdingGain = $ctx->strategy->getExpectedHoldingReturn($stock, DebtEngine::hurdleAssetCostOfCapital($stock, $ctx->macroState));
         $ctx->quarterlyEconomicProfit = ($capital * ($ctx->truePostTaxReturn + $holdingGain - $ctx->wacc)) / 4.0;
 
         $evaString = WireFormat::money($ctx->quarterlyEconomicProfit, true) . ' EVA';
@@ -1405,8 +1421,9 @@ class EarningsEngine
         $earningsEvent = $this->marketEvent->publish($stock, 'EARNINGS', $description, $ctx->totalShockPct * 100, $facts);
 
         // The cash that left the price. The tracker measures the tick's return across the ex-dividend
-        // drop, and a holder who was paid the dividend did not lose it.
+        // drop, and a holder who was paid the dividend did not lose it; a redemption is cash per share alike.
         $earningsEvent['dividend_per_share'] = (float) ($ctx->allocation['dividend_paid'] ?? 0.0);
+        $earningsEvent['redemption_per_share'] = (float) ($ctx->allocation['redemption_per_share'] ?? 0.0);
 
         $events = [$earningsEvent];
         // A move into a new industry is its own story: the plant the company commits, where, and how far from home.

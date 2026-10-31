@@ -7,6 +7,7 @@ namespace App\Service\Corporate;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Bond\RatingMethodology;
@@ -711,7 +712,11 @@ class DebtEngine
         // CALCULATE NET DEBT FIRST
         $treasury = (float) $stock->getCorporateTreasury();
 
-        $netDebtCapital = $strategy->getNetDebtCapital($currentDebt, $wholesaleDebt, $treasury);
+        // Signed by the model: below zero the firm holds more cash than it owes. The leverage and WACC below read the
+        // debt side; the cash side is priced into the equity's beta.
+        $signedNetDebt = $strategy->getNetDebtCapital($currentDebt, $wholesaleDebt, $treasury);
+        $netDebtCapital = max(0.0, $signedNetDebt);
+        $netCash = max(0.0, -$signedNetDebt);
 
         // Hamada levered beta: preserves signed beta magnitude while adjusting for capital structure leverage.
         $baseBeta = (float) $stock->getBeta();
@@ -722,13 +727,13 @@ class DebtEngine
         // fed on itself until the cap held; not book, since the asset beta was unlevered at market leverage. Net debt,
         // so cash hoarders aren't penalized with fake risk. The WACC below still weighs the claims at market value. The
         // business is valued at the through-the-cycle premium, as fair value is, so the market's repricing does not
-        // reach the beta either. A trust's stakes earn their price as well as their dividend, so they are worth their
-        // mark rather than their dividend capitalised.
+        // reach the beta either. A trust's stakes earn their dividends and their price beside the operating return, so
+        // they are worth their mark rather than their dividend capitalised.
         $assetCostOfCapital = self::assetCostOfCapital($stock, $macroState);
         $businessValue = Valuation::operatingCapitalValue(
             $stock->getInvestedCapital(),
             $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), MarketPricingContext::anchorReturn($stock, $strategy), $assetCostOfCapital)
-                + $strategy->getExpectedHoldingGainReturn($stock, $assetCostOfCapital),
+                + $strategy->getExpectedHoldingReturn($stock, $assetCostOfCapital),
             $assetCostOfCapital,
             Valuation::calculateExpectedNominalGrowth(SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime), $macroState->tipsBreakeven, $assetCostOfCapital),
         );
@@ -738,7 +743,13 @@ class DebtEngine
         // Standard CAPM breaks down during insolvency. Cap D/E to prevent runaway WACC.
         $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
 
-        $leveredBeta = $strategy->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity);
+        $operatingBeta = $strategy->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity);
+
+        // Net cash beside the business is a second asset in the equity, at a beta of zero, so the share's beta is the
+        // business's weighted by value (Damodaran's cash-corrected beta): the beta the price loads the market on. The
+        // costs of equity stay on the business's beta: they discount the business, cash is valued at face beside it,
+        // and a hoard must not lower the hurdle the next plant has to clear.
+        $leveredBeta = Valuation::cashBlendedBeta($operatingBeta, $businessValue, $netCash);
 
         // Cost of Equity (CAPM) on the riskless rate matched to the duration of the cash flows being valued (Damodaran
         // 2008, "What is the riskfree rate?"): the ten-year's term premium, the duration risk the premium is measured
@@ -748,8 +759,8 @@ class DebtEngine
         // valuation built on it could be forecast.
         // The hurdle new capital must clear reads the premium the market's price implies; valuation reads the
         // through-the-cycle premium, since the market factor carries the premium's cycle into prices itself.
-        $costOfEquity = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $leveredBeta, $macroState->equityRiskPremium);
-        $valuationCostOfEquity = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $leveredBeta, MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+        $costOfEquity = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $operatingBeta, $macroState->equityRiskPremium);
+        $valuationCostOfEquity = Valuation::calculateCAPM($macroState->equityRiskFreeRate, $operatingBeta, MacroConstants::BASE_EQUITY_RISK_PREMIUM);
 
         // Absolute priority: equity, the junior claim, never requires less than its debt is expected to return. That is
         // the yield the firm borrows at less the loss its holders expect from default, not the promised yield: a junk
@@ -781,7 +792,9 @@ class DebtEngine
         // suffering false liquidity crises. Pass the realized wholesale rate (already carrying dynamic Merton/BGG
         // spread widening) so strategies whose earning assets reprice off their own funding cost cannot price income
         // off a stale calm-market benchmark while this same tick charges the distressed rate on the liability side.
-        $interestIncome = $strategy->calculateInterestIncome($stock, $macroState, $debtMetrics->wholesaleRate);
+        // A holding company's dividends received service its debt the same way, at the rate its stakes pay it.
+        $interestIncome = $strategy->calculateInterestIncome($stock, $macroState, $debtMetrics->wholesaleRate)
+            + AnchorStakeLedger::trailingDividends($stock);
         $ebit += $interestIncome;
 
         $depreciation = $debtMetrics->depreciation;
@@ -894,6 +907,33 @@ class DebtEngine
     public static function assetCostOfCapital(Stock $stock, MacroStateDTO $macroState): float
     {
         return Valuation::calculateCAPM($macroState->equityRiskFreeRate, (float) $stock->getBeta(), MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+    }
+
+    /**
+     * The same asset return at the premium the market's prices imply, the one the hurdle charges: what a stake is
+     * expected to earn beside the cost it is weighed against, so a stake bought cheap earns the higher return a
+     * cheap market prices in.
+     */
+    public static function hurdleAssetCostOfCapital(Stock $stock, MacroStateDTO $macroState): float
+    {
+        return Valuation::calculateCAPM($macroState->equityRiskFreeRate, (float) $stock->getBeta(), $macroState->equityRiskPremium);
+    }
+
+    /**
+     * What a holding company's consolidated businesses are worth above the capital they run on, at their
+     * through-the-cycle cost of capital and the growth their markets give them: the step from its marked book to its
+     * net asset value. Zero for a firm holding no stakes.
+     */
+    public static function subsidiaryRevaluation(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, MacroStateDTO $macroState): float
+    {
+        if ($stock->getListedStakesCarrying() === null) {
+            return 0.0;
+        }
+
+        $costOfCapital = self::assetCostOfCapital($stock, $macroState);
+        $growth = Valuation::calculateExpectedNominalGrowth(SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime), $macroState->tipsBreakeven, $costOfCapital);
+
+        return $strategy->resolveSubsidiaryRevaluation($stock, $costOfCapital, $growth, $strategy->getEffectiveTaxRate($macroState->corporateTaxRate));
     }
 
     public function resolveCovenantLeverageMultiple(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): ?float

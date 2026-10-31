@@ -403,6 +403,12 @@ class AcquisitionEngine
         } elseif ($segmentDraw !== null) {
             $ctx->segment = SegmentBooks::acquiringSegment($stock, $segmentDraw);
         }
+        // A chartered trust files the businesses it owns under its own industry, where the target would be another
+        // trust booked as plant: it adds to a business it entered or buys into its charter, never its own kind.
+        if ($ctx->entry === null && $ctx->strategy->investsByCharter() && $this->targetIndustry($ctx) === $stock->getIndustry()) {
+            $ctx->dealExecuted = false;
+            return;
+        }
         $ctx->target = ['name' => PrivateCompany::name($nameDraws, $this->targetIndustry($ctx))];
         $this->drawTargetEconomics($ctx);
 
@@ -713,7 +719,7 @@ class AcquisitionEngine
         // paid for it, so invested capital read now would count the purchase price twice.
         $oldCapitalBase = $ctx->strategy->getEvaluationCapital($ctx->equity, $ctx->preDealInvestedCapital);
         $oldRevenueCapital = CorporateMetrics::revenueGeneratingCapital(
-            $ctx->preDealInvestedCapital,
+            $ctx->strategy->getPlantCapital($stock, $ctx->preDealInvestedCapital),
             $stock->getTotalCipAmount(),
             (float) $stock->getGoodwill(),
         );

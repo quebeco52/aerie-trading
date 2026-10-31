@@ -379,6 +379,32 @@ final class Valuation
     }
 
     /**
+     * The beta of an equity that holds cash beside a business: the value-weighted average of the business's beta and
+     * cash's, which is zero (Damodaran's cash-corrected beta, run forward), beta x V / (V + C). A business worth
+     * nothing leaves the equity all cash.
+     *
+     * @param float $operatingBeta  The beta of the claim on the business alone.
+     * @param float $operatingValue What that claim is worth.
+     * @param float $cash           The cash held beside it, at face.
+     */
+    public static function cashBlendedBeta(float $operatingBeta, float $operatingValue, float $cash): float
+    {
+        $operatingValue = max(0.0, $operatingValue);
+        $total = $operatingValue + max(0.0, $cash);
+
+        return $total > 0.0 ? $operatingBeta * $operatingValue / $total : $operatingBeta;
+    }
+
+    /**
+     * The beta of the business inside an equity that holds cash at face, from the equity's own beta: the inverse of
+     * cashBlendedBeta(), beta x (V + C) / V. With no business left there is nothing for the beta to reach.
+     */
+    public static function cashFreeBeta(float $equityBeta, float $operatingValue, float $cash): float
+    {
+        return $operatingValue > 0.0 ? $equityBeta * ($operatingValue + max(0.0, $cash)) / $operatingValue : $equityBeta;
+    }
+
+    /**
      * What operating capital is worth on its own, before any financing (the value-driver formula, Koller et al.,
      * "Valuation"): capital C earning return R and growing at g reinvests g / R of its profit, so it is worth
      * C (R - g) / (k - g) at the unlevered cost of capital k. Never below zero; the perpetuity is bounded as every

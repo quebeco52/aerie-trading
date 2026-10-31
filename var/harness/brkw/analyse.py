@@ -22,7 +22,7 @@ def brkw(arm, s):
     q, rep, ev = [], [], []
     for line in open(H / f'{arm}-{s}.brkw.jsonl'):
         r = json.loads(line)
-        {'q': q, 'rep': rep, 'ev': ev}[r['kind']].append(r)
+        {'q': q, 'rep': rep, 'ev': ev}.get(r['kind'], []).append(r)
     splits = []
     for e in ev:
         if e['ticker'] == 'BRKW' and e['type'] == 'SPLIT':

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Company\AnchorHoldings;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\ManagementStyle;
 use App\DTO\DebtHealthDTO;
@@ -423,6 +424,100 @@ class CapitalAllocationEngineTest extends TestCase
 
         $this->assertLessThan(1000000.0, $result['new_shares'], 'Saturated firm should repurchase significant shares');
         $this->assertGreaterThan(100000, 1000000.0 - $result['new_shares'], 'Should buy back over 100k shares using unlocked saturation buyback ratio');
+    }
+
+    /**
+     * A company a sphere holds returns the cash a buyback would have spent by mandatory redemption: no share is
+     * retired, every share of record is paid alike, and the player holders are credited once for the quarter.
+     */
+    public function testAHeldCompanyReturnsItsSurplusByRedemptionRatherThanBuyback(): void
+    {
+        $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
+        $this->corporateMetricsMock->method('getIndustryDepreciationRate')->willReturn(0.05);
+        $this->corporateMetricsMock->method('calculateMarketSaturationPenalty')->willReturn(0.15);
+        $this->corporateMetricsMock->method('calculateSaturationSeverity')->willReturn(1.0);
+        $this->corporateMetricsMock->method('calculateLifeCyclePayoutRatio')->willReturn(0.85);
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(5000000.0);
+        $paid = [];
+        $this->corporateLedgerServiceMock = $this->createMock(CorporateLedgerService::class);
+        $this->corporateLedgerServiceMock->method('processDividendPayment')
+            ->willReturnCallback(static function (Stock $stock, float $perShare) use (&$paid): void {
+                $paid[] = $perShare;
+            });
+        $engine = $this->buildEngineWith($this->debtEngineMock);
+        $allocate = static function (string $ticker) use ($engine): array {
+            $stock = new Stock();
+            $stock->setTicker($ticker);
+            $stock->setIndustry('Specialty Industrial Machinery');
+            $stock->setSharesOutstanding('1000000');
+            $stock->setPrice('100.00');
+            $stock->setTotalEquity('100000000');
+            $stock->setCorporateTreasury('50000000');
+            $stock->setTargetPayoutRatio('0.00');
+            $stock->setDividendSpeed('1.00');
+            $stock->setLastDividend('0.00');
+            $stock->setRetainedEarnings('50000000.00');
+            $stock->setTotalRevenue('10000000.00');
+            $stock->setOperatingMargin('0.20');
+            $stock->setWholesaleDebt('0.00');
+            $stock->setCustomerDeposits('0.00');
+            $stock->setRoicTtm('0.05');
+
+            return $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+        };
+
+        $held = $allocate('ALCA');
+        $this->assertTrue(AnchorHoldings::redeemsProRata('ALCA'));
+        $this->assertSame(1000000.0, $held['new_shares'], 'no share is retired');
+        $this->assertGreaterThan(0.0, $held['total_cash_spent']);
+        $this->assertEqualsWithDelta($held['total_cash_spent'], $held['redemption_per_share'] * 1000000.0, 1e-6, 'every share of record paid alike');
+        $this->assertSame([$held['redemption_per_share']], $paid, 'the player holders are credited once, with the redemption');
+
+        $paid = [];
+        $unheld = $allocate('TEST_UNHELD');
+        $this->assertLessThan(1000000.0, $unheld['new_shares'], 'a company no sphere holds buys back');
+        $this->assertSame(0.0, $unheld['redemption_per_share']);
+        $this->assertSame([], $paid, 'a buyback pays no holder');
+    }
+
+    /**
+     * A trust with idle cash buys its shares back only below its net asset value: at a premium each share retired
+     * takes value from those that stay, however saturated its businesses. An operating company is not held to it.
+     */
+    public function testATrustNeverBuysBackAboveItsNetAssetValue(): void
+    {
+        $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
+        $this->corporateMetricsMock->method('getIndustryDepreciationRate')->willReturn(0.05);
+        $this->corporateMetricsMock->method('calculateMarketSaturationPenalty')->willReturn(0.15);
+        $this->corporateMetricsMock->method('calculateSaturationSeverity')->willReturn(1.0);
+        $this->corporateMetricsMock->method('calculateLifeCyclePayoutRatio')->willReturn(0.85);
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(5000000.0);
+        $engine = $this->buildEngineWith($this->debtEngineMock);
+        $retired = function (string $industry, float $price) use ($engine): float {
+            $stock = new Stock();
+            $stock->setTicker('TEST_TRUST');
+            $stock->setIndustry($industry);
+            $stock->setSharesOutstanding('1000000');
+            $stock->setPrice((string) $price);
+            // Book of 100 a share; with no stakes marked, its net asset value.
+            $stock->setTotalEquity('100000000');
+            $stock->setCorporateTreasury('50000000');
+            $stock->setTargetPayoutRatio('0.00');
+            $stock->setDividendSpeed('1.00');
+            $stock->setLastDividend('0.00');
+            $stock->setRetainedEarnings('50000000.00');
+            $stock->setTotalRevenue('10000000.00');
+            $stock->setOperatingMargin('0.20');
+            $stock->setWholesaleDebt('0.00');
+            $stock->setCustomerDeposits('0.00');
+            $stock->setRoicTtm('0.05');
+
+            return 1000000.0 - $engine->allocateCapital($stock, 8.00, 2.00, $price, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21))['new_shares'];
+        };
+
+        $this->assertSame(0.0, $retired('Investment Companies', 105.0), 'a premium to its net assets');
+        $this->assertGreaterThan(0.0, $retired('Investment Companies', 90.0), 'below them it buys');
+        $this->assertGreaterThan(0.0, $retired('Software - Infrastructure', 105.0), 'an operating company is not held to it');
     }
 
     /**

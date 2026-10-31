@@ -8,6 +8,7 @@ use App\DTO\GoingConcernDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\ReorganizationPlanDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 
 /**
  * Chapter 11: a viable business that cannot pay its debts is reorganized rather than broken up.
@@ -116,11 +117,12 @@ class ReorganizationEngine
 
         if ($plan->oldEquityShare > 0.0) {
             // The old holders keep their shares and the creditors are issued the rest; they hold paper they
-            // did not choose and sell it down through the flow channel, as the buyers of an offering do.
+            // did not choose and sell it down through the flow channel, as the buyers of an offering do, less what
+            // an anchor holder buys from them to keep its percentage (FailureSweep::reorganize()).
             $issued = $shares * ((1.0 - $plan->oldEquityShare) / $plan->oldEquityShare);
             $shares += $issued;
             $stock->setSharesOutstanding((string) $shares);
-            $stock->addCorporateFlowBacklog(-$issued);
+            $stock->addCorporateFlowBacklog(-$issued * (1.0 - AnchorStakeLedger::anchoredShare($stock)));
         } else {
             // The old shares are cancelled and the creditors receive the same number of new ones. What the old
             // company had queued in the market, and every short against its shares, went with them.

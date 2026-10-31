@@ -133,9 +133,10 @@ trait StandardDebtPhysicsTrait
         return new DebtCostDTO(grossCostOfDebt: $grossCostOfDebt, totalInterestCost: $interestExpense);
     }
 
+    /** Debt less cash, signed: below zero the firm holds net cash, which DebtEngine prices into the equity's beta. */
     public function getNetDebtCapital(float $currentDebt, float $wholesaleDebt, float $treasury): float
     {
-        return max(0.0, $currentDebt - $treasury);
+        return $currentDebt - $treasury;
     }
 
     public function calculateLeveredBeta(float $baseBeta, float $impliedTaxShieldRate, float $effectiveDebtToEquity): float

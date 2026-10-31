@@ -210,7 +210,7 @@ class FailureSweep
         // An anchor holder keeps its percentage through a plan as it does through an issue: it buys its fraction
         // of the shares the creditors received, and of every share when its own were cancelled.
         $retainedShares = $plan->oldEquityShare > 0.0 ? $sharesBefore : 0.0;
-        $this->anchorStakes->settleProRata($stock, (float) $stock->getSharesOutstanding() - $retainedShares, $openingPrice);
+        $this->anchorStakes->settleShareChange($stock, (float) $stock->getSharesOutstanding() - $retainedShares, $openingPrice, 0.0, 0.0);
 
         // Impaired notes are exchanged, so the listed issues settle at what the plan gives them; a plan that
         // reinstates every claim leaves them outstanding on their own terms.

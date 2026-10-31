@@ -23,6 +23,7 @@ use App\Service\Corporate\Earnings\InvestmentMarkLedger;
 use App\Service\Corporate\Earnings\OperatingCapacityEngine;
 use App\Service\Corporate\Earnings\WorkingCapitalLedger;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\Industry\IndustryOutlook;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
@@ -3169,6 +3170,40 @@ class EarningsEngineTest extends TestCase
         $this->assertGreaterThan($equityBefore, $captured->fairValueBeforeReport * $captured->sharesOutstanding, 'control: the market values the firm above its book');
         $this->assertSame(0.0, $captured->goodwillImpairment);
         $this->assertEqualsWithDelta(5_000_000_000.0, (float) $stock->getGoodwill(), 1.0);
+    }
+
+    /**
+     * Listed stakes sell nothing: a holding company's capacity is the plant its subsidiaries run, so a stake worth more
+     * leaves the capital it sells on where it was. The dividends its stakes were paid since the last report are the
+     * quarter's investment income, once.
+     */
+    public function testListedStakesAddNoCapacityAndTheirDividendsAreBookedOnce(): void
+    {
+        $run = function (float $stakes, float $dividendsReceived): EarningsSimulationContext {
+            $captured = null;
+            $dispatcher = new EventDispatcher();
+            $dispatcher->addListener(EarningsReportedEvent::class, function (EarningsReportedEvent $event) use (&$captured): void {
+                $captured = $event->getContext();
+            });
+            mt_srand(7531);
+            $stock = $this->buildProfitableIndustrial('STAK');
+            // The stake is financed by equity, so invested capital carries it.
+            $stock->setTotalEquity((string) ((float) $stock->getTotalEquity() + $stakes));
+            $stock->setListedStakesCarrying((string) $stakes);
+            $stock->setEarningsMomentumZ([AnchorStakeLedger::STATE_DIVIDENDS_RECEIVABLE => $dividendsReceived]);
+            $this->buildEngine($dispatcher)->calculate($stock, new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.04, inflationEma: 0.0), EarningsEngine::resolveReportingTick('STAK', 252), 252);
+            $this->assertNotNull($captured);
+
+            return $captured;
+        };
+
+        $small = $run(1_000_000_000.0, 0.0);
+        $large = $run(50_000_000_000.0, 0.0);
+        $paid = $run(1_000_000_000.0, 300_000_000.0);
+
+        $this->assertEqualsWithDelta($small->revenueGeneratingCapital, $large->revenueGeneratingCapital, 1.0);
+        $this->assertEqualsWithDelta($small->quarterlyInterestIncome + 300_000_000.0, $paid->quarterlyInterestIncome, 1.0);
+        $this->assertSame(0.0, AnchorStakeLedger::dividendsReceivable($paid->stock), 'booked once');
     }
 
     /**

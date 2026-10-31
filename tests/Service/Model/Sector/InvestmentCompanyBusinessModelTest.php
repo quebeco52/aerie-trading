@@ -15,7 +15,6 @@ use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\ConglomerateBusinessModel;
 use App\Service\Model\Sector\InvestmentCompanyBusinessModel;
 use App\Service\Model\Strategy\ValuationStrategyInterface;
-use App\Tests\Support\FloatBookCreditDrivers;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -191,11 +190,10 @@ class InvestmentCompanyBusinessModelTest extends TestCase
     }
 
     /**
-     * A trust owns no factories, so the parent's industrial stream must not appear on it — and the segments
-     * it DOES report are the inverse of its asset mix: the wholly-owned minority of the portfolio is the
-     * majority of the income statement, because only a controlled company is consolidated.
+     * The revenue line is the subsidiaries' sales and nothing else: a stake books the dividend its company pays, and
+     * the treasury its interest, both below the operating line, so neither runs through the subsidiaries' margin.
      */
-    public function testReportsAHoldingPortfolioAndNoFactory(): void
+    public function testRevenueIsTheSubsidiariesSalesAlone(): void
     {
         $result = $this->model->computeActualFinancials(
             $this->brkw(),
@@ -207,93 +205,10 @@ class InvestmentCompanyBusinessModelTest extends TestCase
             $this->deterministicMath(),
         );
 
-        $this->assertSame(
-            ['wholly_owned', 'listed_portfolio', 'financial_investments'],
-            array_keys($result->streamRevenue),
-        );
-        $this->assertArrayNotHasKey('industrial_manufacturing', $result->streamRevenue);
-
-        // The portfolio is the smaller half of the income statement, because consolidation takes a whole
-        // top line while a listed stake contributes only its dividend. Struck from the fixture's own
-        // balance sheet, so retuning the stake list moves the test with the model rather than against it.
-        $total = array_sum($result->streamRevenue);
-        $this->assertGreaterThan(
-            $result->streamRevenue['listed_portfolio'],
-            $result->streamRevenue['wholly_owned'],
-            'The revenue mix must invert the asset mix; that inversion is the whole point of the model.',
-        );
-
-        $expected = $this->expectedStreamShares($this->brkw());
-        $this->assertEqualsWithDelta($expected['wholly_owned'], $result->streamRevenue['wholly_owned'] / $total, 0.001);
-        $this->assertEqualsWithDelta($expected['listed_portfolio'], $result->streamRevenue['listed_portfolio'] / $total, 0.001);
-        // The three sleeves are the whole balance sheet and add back to capital employed exactly. A sleeve
-        // left over, or counted twice, puts part of the book in no stream — what every NAV dial ended up
-        // doing.
-        $sphere = $this->brkw();
-        $consolidated = $sphere->getInvestedCapital() - $this->fixturePortfolio();
-        $this->assertGreaterThan(0.0, $consolidated, 'The portfolio must leave a real consolidated sleeve.');
-        $this->assertEqualsWithDelta(
-            $sphere->getInvestedCapital() + 250_000_000_000.0,
-            $consolidated + $this->fixturePortfolio() + 250_000_000_000.0,
-            1.0,
-        );
-
+        $this->assertSame(['wholly_owned'], array_keys($result->streamRevenue));
+        $this->assertEqualsWithDelta(100_000_000.0, $result->actualRevenue, 1.0, 'A calm quarter sells what it was expected to.');
         // A calm quarter charges nothing beyond the cost base it was handed.
         $this->assertEqualsWithDelta(0.08, $result->clampedMargin, 1e-9);
-    }
-
-    /**
-     * The normalised stream shares a given balance sheet should produce, computed from the three balances.
-     * Nothing typed, so retuning the stake list or a conversion rate moves the expectation with the model.
-     *
-     * @return array<string, float>
-     */
-    private function expectedStreamShares(Stock $stock): array
-    {
-        $treasury = max(0.0, (float) $stock->getCorporateTreasury());
-        $listed = max(0.0, (float) ($stock->getListedStakesCarrying() ?? 0.0));
-        $consolidated = max(0.0, $stock->getInvestedCapital() - $listed);
-
-        $weights = [
-            'wholly_owned' => $consolidated * InvestmentCompanyBusinessModel::WHOLLY_OWNED_ASSET_TURNOVER,
-            'listed_portfolio' => $listed * InvestmentCompanyBusinessModel::LISTED_DIVIDEND_YIELD,
-            'financial_investments' => $treasury * InvestmentCompanyBusinessModel::TREASURY_INCOME_YIELD,
-        ];
-        $total = array_sum($weights);
-
-        return array_map(static fn(float $w): float => $total > 0.0 ? $w / $total : 0.0, $weights);
-    }
-
-    /** Once marked, the listed sleeve is READ from the balance sheet and nothing else has a say in it. */
-    public function testTheListedSleeveFollowsTheMarkedStakesAndTheRestOfTheBookFollowsIt(): void
-    {
-        $macro = $this->neutralMacro();
-        $math = $this->deterministicMath();
-
-        $atMarket = $this->brkw();
-        $halved = $this->brkw();
-        $halved->setListedStakesCarrying((string) ($this->fixturePortfolio() / 2.0));
-
-        $full = $this->model->computeActualFinancials($atMarket, 100_000_000.0, 0.08, 3_000_000.0, 0.0, $macro, $math);
-        $small = $this->model->computeActualFinancials($halved, 100_000_000.0, 0.08, 3_000_000.0, 0.0, $macro, $math);
-
-        $fullShare = $full->streamRevenue['listed_portfolio'] / array_sum($full->streamRevenue);
-        $smallShare = $small->streamRevenue['listed_portfolio'] / array_sum($small->streamRevenue);
-
-        $this->assertLessThan(
-            $fullShare,
-            $smallShare,
-            'A portfolio worth half as much must upstream a smaller share of the group income.',
-        );
-
-        // A smaller portfolio hands the subsidiaries a LARGER share of the book: they did not lose value,
-        // so they are more of what is left. Both expectations come from the balances themselves.
-        $this->assertEqualsWithDelta($this->expectedStreamShares($halved)['listed_portfolio'], $smallShare, 0.001);
-        $this->assertGreaterThan(
-            $this->expectedStreamShares($atMarket)['wholly_owned'],
-            $this->expectedStreamShares($halved)['wholly_owned'],
-            'A halved portfolio must leave the subsidiaries a bigger share of the book, not the same one.',
-        );
     }
 
     /**
@@ -375,14 +290,43 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $stock = $this->brkw();
         $stock->setSharesOutstanding('1000000000');
 
-        // NAV per share is 1880: equity 1.88tn over a billion shares.
-        $normalPrice = 1880.0 * (1.0 - InvestmentCompanyBusinessModel::NAV_DISCOUNT_BASE);
-        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, $normalPrice), 'The normal discount is the price of the structure.');
-        $this->assertEqualsWithDelta(1.0 - (0.6 * 1880.0 / $normalPrice), $this->model->resolveRepurchaseAccretion($stock, 0.6 * 1880.0), 1e-9);
-        $this->assertGreaterThan(0.0, $this->model->resolveRepurchaseAccretion($stock, 0.6 * 1880.0));
-        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, 1880.0));
-        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, 2500.0), 'A premium is not accretion.');
-        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, 0.0));
+        // Struck on the net asset value it is handed, the sum of the parts: here 1880 a share.
+        $nav = 1880.0;
+        $normalPrice = $nav * (1.0 - InvestmentCompanyBusinessModel::NAV_DISCOUNT_BASE);
+        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, $normalPrice, $nav), 'The normal discount is the price of the structure.');
+        $this->assertEqualsWithDelta(1.0 - (0.6 * $nav / $normalPrice), $this->model->resolveRepurchaseAccretion($stock, 0.6 * $nav, $nav), 1e-9);
+        $this->assertGreaterThan(0.0, $this->model->resolveRepurchaseAccretion($stock, 0.6 * $nav, $nav));
+        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, $nav, $nav));
+        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, 2500.0, $nav), 'A premium is not accretion.');
+        $this->assertSame(0.0, $this->model->resolveRepurchaseAccretion($stock, 0.0, $nav));
+    }
+
+    /**
+     * The net asset value takes the subsidiaries at what their earnings are worth: at their cost of capital they are
+     * worth their capital, below it less, above it more, and the step is what the value-driver formula gives.
+     */
+    public function testTheSubsidiariesAreValuedOnWhatTheyEarn(): void
+    {
+        $stock = $this->brkw();
+        $capital = $this->model->getPlantCapital($stock, $stock->getInvestedCapital());
+        $this->assertGreaterThan(0.0, $capital);
+        $taxRate = 0.20;
+        $growth = 0.03;
+        $earning = static function (float $return) use ($stock, $capital, $taxRate): void {
+            // A year of filings whose operating line earned this return after tax, which the anchor agrees with.
+            $stock->setBaselineRoic((string) $return);
+            $stock->setQuarterlyOperatingHistory(array_fill(0, 4, ['revenue' => 1.0, 'ebit' => $capital * $return / (1.0 - $taxRate) / 4.0]));
+        };
+
+        $earning(0.08);
+        $this->assertEqualsWithDelta(0.0, $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate), $capital * 1e-9, 'earning their cost, worth their capital');
+
+        $earning(0.06);
+        $this->assertEqualsWithDelta($capital * (0.06 - 0.08) / (0.08 - $growth), $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate), $capital * 1e-6);
+
+        $earning(0.10);
+        $this->assertGreaterThan(0.0, $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate));
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\StandardCorporateBusinessModel())->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate), 'an operating company is valued whole');
     }
 
     /** A trust never borrows to retire its shares, however little debt it carries; an operating company would. */
@@ -393,21 +337,31 @@ class InvestmentCompanyBusinessModelTest extends TestCase
     }
 
     /**
-     * A listed stake books only its dividend; its price earns the rest of the asset cost of capital it is held for.
-     * Counted beside the income, a stake earns exactly that cost, so the trust is neither credited nor charged for
-     * holding it; an operating company and an unmarked sphere hold nothing that earns it.
+     * The operating return leaves the stakes out, their dividends being booked below its line: beside it a stake earns
+     * the asset cost of capital it is held for, its dividends and its price, less the tax the trust pays on the
+     * dividends. Whether a company pays its cash out or buys back moves the split, not the return before that tax; an
+     * operating company and an unmarked sphere hold nothing that earns it.
      */
     public function testAStakeEarnsItsCostOfCapitalThroughItsDividendAndItsPrice(): void
     {
         $sphere = $this->brkw();
         $assetCostOfCapital = 0.085;
+        $taxRate = 0.20;
+        $perStake = function (float $dividendYield, float $taxRate) use ($sphere, $assetCostOfCapital): float {
+            $sphere->setEarningsMomentumZ([
+                AnchorStakeLedger::STATE_DIVIDENDS_TRAILING => $dividendYield * $this->fixturePortfolio(),
+                AnchorStakeLedger::STATE_TAX_RATE => $taxRate,
+            ]);
 
-        $gainOnStakes = $this->model->getExpectedHoldingGainReturn($sphere, $assetCostOfCapital) * $sphere->getInvestedCapital() / $this->fixturePortfolio();
-        $this->assertEqualsWithDelta($assetCostOfCapital, $gainOnStakes + InvestmentCompanyBusinessModel::LISTED_DIVIDEND_YIELD, 1e-12);
-        $this->assertGreaterThan(0.0, $gainOnStakes);
+            return $this->model->getExpectedHoldingReturn($sphere, $assetCostOfCapital) * $sphere->getInvestedCapital() / $this->fixturePortfolio();
+        };
 
-        $this->assertSame(0.0, $this->model->getExpectedHoldingGainReturn($this->bareBrkw(), $assetCostOfCapital), 'An unmarked sphere has no stakes to earn on.');
-        $this->assertSame(0.0, (new \App\Service\Model\Sector\StandardCorporateBusinessModel())->getExpectedHoldingGainReturn($sphere, $assetCostOfCapital));
+        $this->assertEqualsWithDelta($assetCostOfCapital, $perStake(0.02, 0.0), 1e-12, 'untaxed, the dividend and the price make the cost');
+        $this->assertEqualsWithDelta($perStake(0.02, 0.0), $perStake(0.0, 0.0), 1e-12, 'a buyback leaves the same return in the price');
+        $this->assertEqualsWithDelta($assetCostOfCapital - ($taxRate * 0.02), $perStake(0.02, $taxRate), 1e-12, 'the tax on the dividend is the trust\'s');
+
+        $this->assertSame(0.0, $this->model->getExpectedHoldingReturn($this->bareBrkw(), $assetCostOfCapital), 'An unmarked sphere has no stakes to earn on.');
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\StandardCorporateBusinessModel())->getExpectedHoldingReturn($sphere, $assetCostOfCapital));
     }
 
     /** An operating company's repurchase case is the return it earns, which the earnings test already asks. */
@@ -415,7 +369,7 @@ class InvestmentCompanyBusinessModelTest extends TestCase
     {
         $standard = new \App\Service\Model\Sector\StandardCorporateBusinessModel();
 
-        $this->assertSame(0.0, $standard->resolveRepurchaseAccretion($this->brkw(), 100.0));
+        $this->assertSame(0.0, $standard->resolveRepurchaseAccretion($this->brkw(), 100.0, 1880.0));
     }
 
     /**
@@ -515,163 +469,43 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         $this->assertSame(0.0, $this->model->getDepreciableBase($stock));
     }
 
-    /** A trust that controls nothing at all is still a trust: the stream is not drawn and leaves no hole. */
-    public function testASphereThatConsolidatesNothingReportsNoOperatingStream(): void
-    {
-        // Nothing is declared any more, so a sphere consolidates nothing by OWNING everything: stakes worth
-        // the whole book less its cash leave no residual for a consolidated sleeve to be.
-        $stock = $this->brkw();
-        $stock->setListedStakesCarrying((string) (1_880_000_000_000.0 - 250_000_000_000.0));
-
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            100_000_000.0,
-            0.08,
-            3_000_000.0,
-            0.0,
-            $this->neutralMacro(),
-            $this->deterministicMath(),
-        );
-
-        $this->assertSame(['listed_portfolio', 'financial_investments'], array_keys($result->streamRevenue));
-        $this->assertArrayNotHasKey('wholly_owned', $result->streamRevenue);
-
-        // Nothing is consolidated, so nothing buys inputs and the cost base is exactly what it was handed.
-        $this->assertEqualsWithDelta(0.08, $result->clampedMargin, 1e-9);
-    }
-
-    /**
-     * The hoard must be paid for once. StandardTreasuryTrait pays every corporate the front rate on its
-     * excess cash, and here the same balance is already a revenue stream running the contrarian float
-     * physics over it — so the trait's version has to be off, or the treasury earns twice.
-     */
-    public function testTheTreasuryIsNotPaidForTwice(): void
+    /** A trust whose stakes are the whole book has no subsidiaries left to sell anything on. */
+    public function testASphereThatConsolidatesNothingHasNoCapitalToSellOn(): void
     {
         $stock = $this->brkw();
-        $stock->setTotalRevenue('170000000000');
-        $stock->setWholesaleDebt('140000000000');
+        $stock->setListedStakesCarrying((string) $stock->getInvestedCapital());
 
-        $macro = $this->neutralMacro();
-
-        $this->assertSame(0.0, $this->model->calculateInterestIncome($stock, $macro));
-
-        // The parent still books it, which is what makes the override load-bearing rather than decorative.
-        $this->assertGreaterThan(
-            0.0,
-            (new ConglomerateBusinessModel())->calculateInterestIncome($stock, $macro),
-            'If the parent stopped paying interest income, this override would be silently pointless.',
-        );
-
-        // And the income the stream books in its place is real.
-        $result = $this->model->computeActualFinancials(
-            $stock,
-            100_000_000.0,
-            0.08,
-            3_000_000.0,
-            0.0,
-            $macro,
-            $this->deterministicMath(),
-        );
-        $this->assertGreaterThan(0.0, $result->streamRevenue['financial_investments']);
+        $this->assertSame(0.0, $this->model->getPlantCapital($stock, $stock->getInvestedCapital()));
     }
 
     /**
-     * The treasury stream is funded by the balance sheet, not by a dial beside it. A sphere that spends its
-     * hoard on a deal stops earning on the money it no longer has — which a declared weight could not say,
-     * because it would still be declaring the old number.
+     * The treasury earns what a conglomerate's does, the money market and the credit book, on the cash itself: once,
+     * below the operating line, and less when the hoard is spent.
      */
-    public function testSpendingTheHoardShrinksTheTreasuryStream(): void
+    public function testTheTreasuryEarnsTheParentsFloatOnTheCashItHolds(): void
     {
         $macro = $this->neutralMacro();
-        $math = $this->deterministicMath();
+        $full = $this->brkw(250_000_000_000.0);
+        $spent = $this->brkw(25_000_000_000.0);
 
-        $full  = $this->model->computeActualFinancials($this->brkw(250_000_000_000.0), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $macro, $math);
-        $spent = $this->model->computeActualFinancials($this->brkw(25_000_000_000.0), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $macro, $math);
-
-        $fullShare  = $full->streamRevenue['financial_investments'] / array_sum($full->streamRevenue);
-        $spentShare = $spent->streamRevenue['financial_investments'] / array_sum($spent->streamRevenue);
-
-        $this->assertGreaterThan($spentShare, $fullShare, 'The float must follow the cash that funds it.');
-        $this->assertEqualsWithDelta($this->expectedStreamShares($this->brkw(250_000_000_000.0))['financial_investments'], $fullShare, 0.001);
-        $this->assertEqualsWithDelta($this->expectedStreamShares($this->brkw(25_000_000_000.0))['financial_investments'], $spentShare, 0.001);
-
-        // And the operating half picks up the slack rather than the group simply shrinking.
-        $this->assertGreaterThan(
-            $full->streamRevenue['wholly_owned'] / array_sum($full->streamRevenue),
-            $spent->streamRevenue['wholly_owned'] / array_sum($spent->streamRevenue),
+        $this->assertEqualsWithDelta(
+            (new ConglomerateBusinessModel())->calculateInterestIncome($full, $macro),
+            $this->model->calculateInterestIncome($full, $macro),
+            1e-6,
         );
+        $this->assertGreaterThan(0.0, $this->model->calculateInterestIncome($full, $macro));
+        $this->assertGreaterThan($this->model->calculateInterestIncome($spent, $macro), $this->model->calculateInterestIncome($full, $macro), 'The float follows the cash that funds it.');
     }
 
-    /**
-     * Dividends received arrive late and damped. A slump that has only just begun has not yet reached the
-     * cheque, because the payout funding it was declared out of the earnings before it.
-     */
-    public function testDividendsReceivedLagTheCycleTheSubsidiariesFeelNow(): void
+    /** The subsidiaries are an operating business: their sales feel a slump now, and their inputs a cost push. */
+    public function testTheSubsidiariesFeelTheCycleAndTheirInputs(): void
     {
-        $slump = $this->neutralMacro(outputGapEma: -0.030);
+        $calm = $this->model->computeActualFinancials($this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $this->neutralMacro(), $this->deterministicMath());
+        $slump = $this->model->computeActualFinancials($this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $this->neutralMacro(outputGapEma: -0.030), $this->deterministicMath());
+        $costPush = $this->model->computeActualFinancials($this->brkw(), 100_000_000.0, 0.08, 3_000_000.0, 0.0, $this->neutralMacro(realWageGap: 0.03), $this->deterministicMath());
 
-        $result = $this->model->computeActualFinancials(
-            $this->brkw(),
-            100_000_000.0,
-            0.08,
-            3_000_000.0,
-            0.0,
-            $slump,
-            $this->deterministicMath(),
-        );
-
-        $calm = $this->model->computeActualFinancials(
-            $this->brkw(),
-            100_000_000.0,
-            0.08,
-            3_000_000.0,
-            0.0,
-            $this->neutralMacro(),
-            $this->deterministicMath(),
-        );
-
-        $ownedHit  = 1.0 - ($result->streamRevenue['wholly_owned'] / $calm->streamRevenue['wholly_owned']);
-        $listedHit = 1.0 - ($result->streamRevenue['listed_portfolio'] / $calm->streamRevenue['listed_portfolio']);
-
-        $this->assertGreaterThan(0.0, $ownedHit, 'Consolidated subsidiaries feel the slump immediately.');
-        $this->assertGreaterThan(0.0, $listedHit, 'Dividends eventually feel it too.');
-        $this->assertGreaterThan($listedHit, $ownedHit, 'The receipt line must be the quieter of the two.');
-    }
-
-    /**
-     * Only the consolidated subsidiaries buy anything. A dividend received carries no cost of goods, so the
-     * input basket must be charged against the operating stream's share and not against group revenue.
-     */
-    public function testOnlyTheConsolidatedSubsidiariesPayForInputs(): void
-    {
-        $costPush = $this->neutralMacro(realWageGap: 0.03);
-
-        $withPush = $this->model->computeActualFinancials(
-            $this->brkw(),
-            100_000_000.0,
-            0.08,
-            3_000_000.0,
-            0.0,
-            $costPush,
-            $this->deterministicMath(),
-        );
-        $calm = $this->model->computeActualFinancials(
-            $this->brkw(),
-            100_000_000.0,
-            0.08,
-            3_000_000.0,
-            0.0,
-            $this->neutralMacro(),
-            $this->deterministicMath(),
-        );
-
-        $charged = $withPush->clampedMargin - $calm->clampedMargin;
-        $this->assertGreaterThan(0.0, $charged, 'A cost push must reach the subsidiaries.');
-
-        // Charged at the operating stream's share of revenue, so it cannot exceed the undiscounted drag.
-        $ownedShare = $calm->streamRevenue['wholly_owned'] / $calm->actualRevenue;
-        $this->assertLessThan(1.0, $ownedShare);
-        $this->assertLessThan(0.05, $charged, 'A trust is not a factory; the basket reaches only part of it.');
+        $this->assertLessThan($calm->actualRevenue, $slump->actualRevenue);
+        $this->assertGreaterThan(0.0, $costPush->clampedMargin - $calm->clampedMargin, 'A cost push must reach the subsidiaries.');
     }
 
     /** A trust manufactures nothing, but what its holdings earn is what compounds the book it is priced on. */
@@ -747,23 +581,9 @@ class InvestmentCompanyBusinessModelTest extends TestCase
 
         $this->assertEqualsWithDelta(0.0, $this->model->getMacroPhysics($stock, $recession)['macro_demand_shift'], 1e-12);
 
-        // Income weights 300 x 0.30 = 90, 600 x 0.035 = 21, 100 x 0.04 = 4; subsidiaries move -0.03 x 0.70 x 0.90.
-        $expected = (90.0 / 115.0) * (-0.03 * 0.70 * 0.90);
+        // The subsidiaries are the whole revenue line, and move -0.03 x 0.70 x 0.90.
+        $expected = -0.03 * 0.70 * 0.90;
         $this->assertEqualsWithDelta($expected, $this->model->resolveSectorActivityShift($stock, $recession), 1e-9);
     }
 
-    /**
-     * The drivers panel reads the float book's own arithmetic on the IG spread: the line for its level over trend is
-     * the deployment premium alone and the line for its move the mark alone, so the two add up to what the spread did,
-     * up to the product of the two.
-     */
-    public function testTheCreditSpreadDriversReadTheFloatBooksOwnArithmetic(): void
-    {
-        $drivers = FloatBookCreditDrivers::measure($this->model, $this->brkw());
-
-        // Each line is measured against the quarter with the other effect still in it.
-        $this->assertEqualsWithDelta($drivers['deployment'] / (1.0 + $drivers['mark']), $drivers['level'], 1e-12);
-        $this->assertEqualsWithDelta($drivers['mark'] / (1.0 + $drivers['deployment']), $drivers['move'], 1e-12);
-        $this->assertEqualsWithDelta($drivers['deployment'] + $drivers['mark'], $drivers['level'] + $drivers['move'], 2.0 * abs($drivers['deployment'] * $drivers['mark']));
-    }
 }

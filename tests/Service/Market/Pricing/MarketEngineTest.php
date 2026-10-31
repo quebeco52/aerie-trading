@@ -428,7 +428,7 @@ class MarketEngineTest extends TestCase
         $this->assertSame($value(-0.03), $value(0.03));
     }
 
-    private function repricedContext(float $shift, float $beta, float $price = 40.0, float $markedShare = 0.0): MarketPricingContext
+    private function repricedContext(float $shift, float $beta, float $price = 40.0, float $markedShare = 0.0, float $excessCash = 0.0): MarketPricingContext
     {
         return new MarketPricingContext(
             currentPrice: $price,
@@ -445,7 +445,43 @@ class MarketEngineTest extends TestCase
             businessModel: 'tech',
             liveCostOfEquity: 0.09,
             marketMarkedValueShare: $markedShare,
+            excessCashPerShare: $excessCash,
         );
+    }
+
+    /**
+     * Surplus cash keeps its face whatever the market does: the repricing reaches only the business, at the beta that
+     * moves the whole fair value by the share's own beta, as the factor moves its price, so a market move still opens
+     * no gap for the pull to close. A fall of a whole log point leaves fair value above the cash. Value carried at the
+     * board's prices is still left alone, as a share of the book beside the cash.
+     */
+    public function testAMarketRepricingLeavesSurplusCashAtFace(): void
+    {
+        $cash = 12.0;
+        $beta = 0.8;
+        foreach ([0.0, 0.5] as $marked) {
+            $strike = fn(float $shift): array => $this->engine->strikeFairValue($this->repricedContext($shift, $beta, markedShare: $marked, excessCash: $cash));
+            $calm = $strike(0.0);
+            $business = $calm['perceived_fair_value'] - $cash;
+            $crash = $strike(-1.0);
+
+            $this->assertGreaterThan(0.0, $business);
+            $this->assertGreaterThanOrEqual($cash, $crash['perceived_fair_value'], "marked {$marked}");
+            $stakeShare = $marked * 30.0 / (30.0 - $cash);
+            $this->assertEqualsWithDelta(
+                $cash + ($business * ($stakeShare + ((1.0 - $stakeShare) * exp(-Valuation::cashFreeBeta($beta, $business, $cash))))),
+                $crash['perceived_fair_value'],
+                1e-9,
+                "marked {$marked}: cash at face, the business at its own beta.",
+            );
+            $this->assertEqualsWithDelta($crash['perceived_fair_value'] / $calm['perceived_fair_value'], $crash['market_repricing'], 1e-12, 'The tracker divides out the same repricing.');
+            foreach ($crash['analyst_targets'] as $analyst => $target) {
+                $this->assertGreaterThanOrEqual($cash, $target, $analyst);
+            }
+        }
+
+        $logValue = fn(float $shift): float => log($this->engine->strikeFairValue($this->repricedContext($shift, $beta, excessCash: $cash))['perceived_fair_value']);
+        $this->assertEqualsWithDelta($beta, ($logValue(1e-5) - $logValue(-1e-5)) / 2e-5, 1e-6, 'To first order fair value moves by the share\'s beta, as its price does.');
     }
 
     /**

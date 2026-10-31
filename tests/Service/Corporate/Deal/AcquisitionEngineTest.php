@@ -1037,6 +1037,34 @@ class AcquisitionEngineTest extends TestCase
     }
 
     /**
+     * A chartered trust files the businesses it owns under its own industry, so a deal drawn into its home book would
+     * buy another trust and book it as plant: it calls that deal off, and adds to the toolmaker it entered.
+     */
+    public function testATrustAddsToABusinessItEnteredButNeverBuysItsOwnKind(): void
+    {
+        $tools = Segments::enteredKey('Tools & Accessories');
+        $deal = function (float $segmentDraw) use ($tools): ?array {
+            $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
+            $this->bookIssuedDebt();
+            $this->mathUtilityMock->script(generateUniform: [0.0, $segmentDraw]);
+            $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+            $engine = new AcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+            $stock = $this->buildLedgeredAcquirer('BRKW', 4_000_000_000.0, 1_000_000_000.0, 100_000_000.0);
+            $stock->setIndustry('Investment Companies');
+            $stock->setManagementStyle(ManagementStyle::Steward);
+            $ledger->resolveIndustryCapacityRatio($stock, 16_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
+            $momentum = SegmentBooks::open([Segments::MAIN => 0.8, $tools => 0.2], 1.0, []);
+            $stock->setEarningsMomentumZ(SegmentBooks::openEconomics('BRKW', $momentum, 1.0, 0.20) + $momentum);
+            $ledger->resolveSegmentSupply($stock, $tools, 4_000_000_000.0, 4_000_000_000.0, 0.05, 1.0, 0.0, 0.0, 10, 252);
+
+            return $engine->evaluatePrivateAcquisition($stock, $this->healthyMacro(), 1.0);
+        };
+
+        $this->assertNull($deal(0.5), 'the home book holds four fifths of the plant; a deal there is called off');
+        $this->assertIsArray($deal(0.9), 'the toolmaker it entered takes the top fifth');
+    }
+
+    /**
      * A carmaker whose plant earns less than its cost of capital buys into heavy machinery next door, where an
      * incumbent has filed what its plant earns: the deal opens its books and adds the business as a segment of its own,
      * earning the drawn share of the incumbent's margin at the incumbent's turnover, with nothing to learn; it buys the

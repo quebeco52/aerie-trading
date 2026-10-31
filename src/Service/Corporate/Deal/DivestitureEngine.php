@@ -128,7 +128,8 @@ class DivestitureEngine
 
         // A business entered in play that does not earn its cost is sold whatever the rest of the company is doing:
         // firms refocus by selling the businesses they diversified into (Kaplan & Weisbach 1992; John & Ofek 1995).
-        $failedEntry = SegmentBooks::forSale($seller);
+        // Permanent capital keeps what it bought, so only distress sells for it.
+        $failedEntry = $ctx->strategy->investsByCharter() ? null : SegmentBooks::forSale($seller);
         if ($failedEntry !== null) {
             $this->determineRefocusingSale($ctx, $failedEntry);
         } elseif ($this->isInOpenDistressEpisode($ctx) || $this->shouldAbortDivestiture($ctx)) {
@@ -213,9 +214,9 @@ class DivestitureEngine
         // business: a slump shorter than that horizon is not decline, and a distress premium on the firm's financing
         // is not value destroyed by its operations.
         $longRunReturn = $stock->getLongRunReturn();
-        // A trust's stakes earn their price as well as their dividend.
+        // A trust's stakes earn their dividends and their price beside the operating return.
         $ctx->throughCycleReturn = ($longRunReturn !== null ? (float) $longRunReturn : $ctx->currentReturn)
-            + $ctx->strategy->getExpectedHoldingGainReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
+            + $ctx->strategy->getExpectedHoldingReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
         $ctx->hurdleRate = self::businessCostOfCapital($stock, $ctx->macroState);
 
         $ctx->evaSpread = $ctx->throughCycleReturn - $ctx->hurdleRate;
@@ -275,6 +276,9 @@ class DivestitureEngine
             [$ctx->minFraction, $ctx->maxFraction] = [self::DIV_DISTRESSED_FRACTION_MIN, self::DIV_DISTRESSED_FRACTION_MAX];
             $ctx->saleMultiple = $this->mathUtility->generateUniformBetween(self::DIV_DISTRESSED_MULTIPLE_MIN, self::DIV_DISTRESSED_MULTIPLE_MAX);
             $ctx->annualProbability = self::DIV_DISTRESSED_ANNUAL_PROB;
+        } elseif ($ctx->strategy->investsByCharter()) {
+            $ctx->dealExecuted = false;
+            return;
         } else {
             $ctx->divestedFraction = $this->mathUtility->generateUniformBetween(self::DIV_PREMIUM_FRACTION_MIN, self::DIV_PREMIUM_FRACTION_MAX);
             [$ctx->minFraction, $ctx->maxFraction] = [self::DIV_PREMIUM_FRACTION_MIN, self::DIV_PREMIUM_FRACTION_MAX];

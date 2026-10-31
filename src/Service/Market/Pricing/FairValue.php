@@ -85,14 +85,24 @@ final class FairValue
             $ctx->franchisePower,
         );
 
-        // Value at the market's discount rate: the repricing the market factor has put on equities reaches the name by
-        // its beta, as the factor reaches its price, so a market move leaves no gap for the pull to close. Value
-        // already carried at the board's prices has had it through them, so only the rest is repriced.
-        $repricing = $ctx->marketMarkedValueShare
-            + ((1.0 - $ctx->marketMarkedValueShare) * ($ctx->macroState?->equityRepricing($ctx->beta) ?? 1.0));
-        $state['perceived_fair_value'] *= $repricing;
-        $state['analyst_targets'] = array_map(static fn(float $target): float => $target * $repricing, $state['analyst_targets']);
-        $state['market_repricing'] = $repricing;
+        // Value at the market's discount rate: the repricing the market factor has put on equities reaches the
+        // business, and surplus cash stays at face. The business takes the share's beta, which the price loads, with
+        // the cash taken out at this value's own weights (Valuation::cashFreeBeta()), so the whole value moves by the
+        // share's beta as its price does and a market move leaves no gap for the pull to close. Value already carried
+        // at the board's prices has had it through them, so only the rest is repriced: the stakes are a share of the
+        // book beside the cash.
+        $preRepricing = $state['perceived_fair_value'];
+        $cash = min(max(0.0, $ctx->excessCashPerShare), $preRepricing);
+        $business = $preRepricing - $cash;
+        $nonCashBook = $ctx->bookValuePerShare - $cash;
+        $markedShare = $ctx->marketMarkedValueShare > 0.0 && $nonCashBook > 0.0
+            ? min(1.0, $ctx->marketMarkedValueShare * $ctx->bookValuePerShare / $nonCashBook)
+            : min(1.0, $ctx->marketMarkedValueShare);
+        $businessBeta = Valuation::cashFreeBeta($ctx->beta, $business, $cash);
+        $repricing = $markedShare + ((1.0 - $markedShare) * ($ctx->macroState?->equityRepricing($businessBeta) ?? 1.0));
+        $state['perceived_fair_value'] = $cash + ($business * $repricing);
+        $state['analyst_targets'] = array_map(static fn(float $target): float => $cash + (max(0.0, $target - $cash) * $repricing), $state['analyst_targets']);
+        $state['market_repricing'] = $state['perceived_fair_value'] / $preRepricing;
         $state['franchise_base'] *= $repricing;
 
         return $state;
@@ -394,14 +404,18 @@ final class FairValue
         $liquidityDampener = 1.0 / (1.0 + ($systemicStressIndex * self::FUNDING_LIQUIDITY_STRESS_FACTOR));
         $dynamicReversion = $reversionSpeed * $liquidityDampener;
 
+        // Each analyst prices the closed-end discount the consensus does: a leg struck before it reads as upside the
+        // structure never pays.
+        $structure = 1.0 - $strategy->getStructuralValuationDiscount($macroState ?? new MacroStateDTO());
+
         return [
             'perceived_fair_value' => $perceivedFairValue,
             'dynamic_reversion'    => $dynamicReversion,
             'policy_repricing'     => $policyRepricing,
             'analyst_targets'      => [
-                'growth_analyst' => max(0.01, ($legs['earnings_value'] * $franchiseMultiple) + $excessCashPerShare),
-                'income_analyst' => max(0.01, ($legs['dividend_value'] * $franchiseMultiple) + $excessCashPerShare),
-                'value_analyst'  => max(0.01, ($legs['book_value'] * self::VALUE_ANALYST_BOOK_MULT * $franchiseMultiple) + $excessCashPerShare),
+                'growth_analyst' => max(0.01, ($legs['earnings_value'] * $structure * $franchiseMultiple) + $excessCashPerShare),
+                'income_analyst' => max(0.01, ($legs['dividend_value'] * $structure * $franchiseMultiple) + $excessCashPerShare),
+                'value_analyst'  => max(0.01, ($legs['book_value'] * $structure * self::VALUE_ANALYST_BOOK_MULT * $franchiseMultiple) + $excessCashPerShare),
             ],
             'franchise_base' => $franchiseBase,
             'franchise_share' => $franchiseShare,

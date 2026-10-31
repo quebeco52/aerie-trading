@@ -84,7 +84,9 @@ class CapitalAllocationContext
     public ?float $bankApy = null;
     public bool $debtActionTaken = false;
 
-    public float $totalCashSpent = 0.0; // buybacks
+    public float $totalCashSpent = 0.0; // buybacks and redemptions
+    /** Cash per share returned by mandatory redemption, the share count unchanged. */
+    public float $redemptionPerShare = 0.0;
     /** Cash actually received from shares issued this quarter, net of any offering discount. */
     public float $equityRaised = 0.0;
     public float $newShares = 0.0;

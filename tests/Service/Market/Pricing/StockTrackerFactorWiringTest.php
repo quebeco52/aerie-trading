@@ -291,6 +291,29 @@ final class StockTrackerFactorWiringTest extends TestCase
         $this->assertEqualsWithDelta(log(1.10), $seen->momentumTrend, 1e-9);
     }
 
+    /** A redemption beside the dividend is cash per share alike: the holder's return adds both back. */
+    public function testARedemptionPaidOnTheReportTickIsCreditedToTheReturn(): void
+    {
+        $captured = null;
+        $seen = null;
+        $tracker = $this->buildTracker(
+            1.0,
+            [110.0],
+            $captured,
+            agentStrategy: $this->observingStrategy($seen),
+            earningsReport: static function (Stock $stock): array {
+                $stock->setPrice('107.00');
+
+                return [['type' => 'EARNINGS', 'ticker' => 'TEST', 'description' => 'Q', 'change_percent' => 0.0, 'dividend_per_share' => 1.0, 'redemption_per_share' => 2.0]];
+            },
+        );
+
+        $tracker->updateStocks([$this->stock()], 1.0 / 252.0, false, new MacroStateDTO());
+
+        $this->assertNotNull($seen, 'the agents were shown the tick');
+        $this->assertEqualsWithDelta(log(1.10), $seen->logReturn, 1e-9);
+    }
+
     public function testWithoutAReportTheReturnIsThePriceAlone(): void
     {
         $captured = null;

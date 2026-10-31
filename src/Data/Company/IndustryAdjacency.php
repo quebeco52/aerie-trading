@@ -136,10 +136,13 @@ final class IndustryAdjacency
         ['Conglomerates', 'Building Products & Equipment', self::DISTANT],
         ['Conglomerates', 'Packaged Foods', self::DISTANT],
         ['Conglomerates', 'Industrial Distribution', self::DISTANT],
-        ['Investment Companies', 'Packaged Foods', self::DISTANT],
-        ['Investment Companies', 'Household & Personal Products', self::DISTANT],
+        // A trust buys only what its charter stewards: engineering, the grid, the port and the network.
+        ['Investment Companies', 'Specialty Industrial Machinery', self::RELATED],
+        ['Investment Companies', 'Tools & Accessories', self::RELATED],
+        ['Investment Companies', 'Electrical Equipment & Parts', self::DISTANT],
         ['Investment Companies', 'Building Products & Equipment', self::DISTANT],
-        ['Investment Companies', 'Industrial Distribution', self::DISTANT],
+        ['Investment Companies', 'Marine Ports & Services', self::DISTANT],
+        ['Investment Companies', 'Communication Equipment', self::DISTANT],
         ['Investment Companies', 'Utilities - Independent Power Producers', self::DISTANT],
     ];
 

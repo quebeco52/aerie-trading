@@ -10,6 +10,7 @@ use App\Data\District\Institutions;
 use App\Entity\Stock;
 use App\Repository\StockEventRepository;
 use App\Repository\StockRepository;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Lore\CompanyProfiles;
 use App\Service\Market\Chart\PriceChangeFeed;
 
@@ -84,9 +85,11 @@ class CompanyProfilePageBuilder
     private function holders(string $ticker): array
     {
         $holders = [];
+        $stock = $this->stocks->findOneByTicker($ticker);
         foreach (AnchorHoldings::STAKES as $holder => $stakes) {
             if (isset($stakes[$ticker])) {
-                $holders[] = ['name' => $this->nameOf($holder), 'ticker' => $holder, 'share' => $stakes[$ticker]->fraction()];
+                $share = $stock !== null ? AnchorStakeLedger::fraction($stock, $holder) : $stakes[$ticker]->fraction();
+                $holders[] = ['name' => $this->nameOf($holder), 'ticker' => $holder, 'share' => $share];
             }
         }
 
@@ -109,7 +112,9 @@ class CompanyProfilePageBuilder
     {
         $holdings = [];
         foreach (AnchorHoldings::forHolder($ticker) as $held => $share) {
-            $holdings[] = ['name' => $this->nameOf($held), 'ticker' => $held, 'share' => $share];
+            $heldStock = $this->stocks->findOneByTicker($held);
+            $share = $heldStock !== null ? AnchorStakeLedger::fraction($heldStock, $ticker) : $share;
+            $holdings[] = ['name' => $heldStock?->getName() ?? $held, 'ticker' => $held, 'share' => $share];
         }
 
         return $holdings;

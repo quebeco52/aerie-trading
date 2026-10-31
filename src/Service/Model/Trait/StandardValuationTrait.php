@@ -42,6 +42,12 @@ trait StandardValuationTrait
         return 0.0;
     }
 
+    /** An operating company's operations are what its own valuation prices: nothing to restate. */
+    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate): float
+    {
+        return 0.0;
+    }
+
     /** An operating company's own news is news about the margin it earns. */
     public function carriesFranchise(): bool
     {

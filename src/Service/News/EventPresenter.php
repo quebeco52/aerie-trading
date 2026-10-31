@@ -281,6 +281,7 @@ class EventPresenter
             $text = match ($kind) {
                 'dividend' => sprintf('Paid %s/sh · %s yield', UiExtension::money((float) $action['perShare']), UiExtension::percent((float) $action['yield'])),
                 'buyback' => sprintf('Repurchased %s shares', WireFormat::shares((float) $action['shares'])),
+                'redemption' => sprintf('Redeemed %s/sh · %s returned', UiExtension::money((float) $action['perShare']), WireFormat::money((float) $action['value'])),
                 'bonds' => sprintf('Issued %s bonds (%s)', WireFormat::money((float) $action['amount']), (string) $action['purpose']),
                 default => rtrim((string) ($action['text'] ?? ''), '.'),
             };

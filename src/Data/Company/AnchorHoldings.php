@@ -11,11 +11,13 @@ namespace App\Data\Company;
  * market it holds falls. Declared as a CONVICTION (see AnchorStake) rather than a percentage, so adding a
  * holding is one word and the class retunes in one place.
  *
- * A tier resolves to a fraction of the held company's MARKET CAP. Split-proof by construction, and the
- * archetype's own behaviour — a sphere defends its ownership percentage. Unmodelled: it sitting a buyback
- * or an issue out. It tenders and subscribes pro rata instead, in cash (AnchorStakeLedger::settleProRata).
+ * A tier resolves to the fraction of the held company's MARKET CAP the stake OPENS at, which is split-proof by
+ * construction. From there the holder buys its part of every issue, and the held company returns its surplus by
+ * mandatory redemption, pro rata to every holder (redeemsProRata()), so the fraction holds. A retirement that does
+ * reach the market the holder sits out, tendering only to keep the float trading
+ * (AnchorStakeLedger::settleShareChange).
  *
- * Ownership here and the holding's `public_float` are one fact; the float is derived from this, never typed
+ * Ownership here and the holding's `public_float` are one fact; the opening float is derived from this, never typed
  * beside it. Guarded in AnchorHoldingsTest.
  */
 final class AnchorHoldings
@@ -27,8 +29,11 @@ final class AnchorHoldings
      */
     public const MIN_CONSOLIDATED_SHARE = 0.20;
 
-    /** Least tradable float a listing must keep once every anchor block is subtracted, or nobody can trade it. */
-    public const MIN_TRADABLE_FLOAT = 0.05;
+    /**
+     * Least tradable float a listing must keep once every anchor block is subtracted (10%), the exchange's continuing
+     * listing rule: a block holder sells into a buyback rather than take a company below it.
+     */
+    public const MIN_TRADABLE_FLOAT = 0.10;
 
     /**
      * Holder ticker => held ticker => how firmly it is held.
@@ -71,6 +76,22 @@ final class AnchorHoldings
     public static function tiersForHolder(string $ticker): array
     {
         return self::STAKES[$ticker] ?? [];
+    }
+
+    /**
+     * Whether a sphere holds a block of the company. Its board returns surplus capital by mandatory redemption, every
+     * holder paid pro rata and keeping its percentage, rather than buying on the market, where the sphere would see
+     * its block grow until it had to tender into the buyback to keep the float trading.
+     */
+    public static function redeemsProRata(string $ticker): bool
+    {
+        foreach (self::STAKES as $stakes) {
+            if (isset($stakes[$ticker])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

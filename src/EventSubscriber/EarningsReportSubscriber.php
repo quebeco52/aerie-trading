@@ -95,7 +95,7 @@ class EarningsReportSubscriber implements EventSubscriberInterface
         $report->setInventoryWriteDown(Decimal::format($ctx->inventoryWriteDown, 4));
         $report->setReceivablesProvision(Decimal::format($ctx->receivablesProvision, 4));
         $report->setDeferredTaxExpense(Decimal::format($ctx->deferredTaxExpense + $accrualTax, 4));
-        $report->setDeferredTaxLiability($stock->getDeferredTaxLiability());
+        $report->setDeferredTaxLiability(Decimal::format((float) $stock->getDeferredTaxLiability() + max(0.0, $stock->getListedStakesDeferredTax()), 4));
         $report->setCashTaxPaid(Decimal::format($ctx->cashTaxPaid, 4));
 
         // Balance sheet. The lease is computed the same way the leverage and solvency tests compute it, so

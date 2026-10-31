@@ -19,6 +19,7 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
+use App\Service\Math\Valuation;
 use App\Service\News\MarketEventPublisher;
 use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\ScriptedDraws;
@@ -500,7 +501,8 @@ class DebtEngineTest extends TestCase
         $slump = $engine->analyzeDebtHealth($stock, new MacroStateDTO(policyRateEma: 0.04, corporateTaxRate: 0.20, yield5yEma: 0.04, equityRiskPremium: MacroConstants::BASE_EQUITY_RISK_PREMIUM + 0.02));
 
         $this->assertEqualsWithDelta($calm->costOfEquity, $calm->valuationCostOfEquity, 1e-12, 'At the base premium the two readings agree.');
-        $this->assertEqualsWithDelta($slump->leveredBeta * 0.02, $slump->costOfEquity - $calm->costOfEquity, 1e-9, 'A slump\'s premium raises the hurdle by beta times its rise,');
+        // Net cash leaves the business unlevered, so its beta is the asset beta; the share's own beta is lower.
+        $this->assertEqualsWithDelta(1.0 * 0.02, $slump->costOfEquity - $calm->costOfEquity, 1e-9, 'A slump\'s premium raises the hurdle by the business\'s beta times its rise,');
         $this->assertGreaterThan($calm->wacc, $slump->wacc, 'and the WACC new capital must clear,');
         $this->assertEqualsWithDelta($calm->valuationCostOfEquity, $slump->valuationCostOfEquity, 1e-12, 'while valuation is struck at the through-the-cycle premium.');
         $this->assertEqualsWithDelta($calm->valuationWacc, $slump->valuationWacc, 1e-12);
@@ -1330,6 +1332,56 @@ class DebtEngineTest extends TestCase
         $marked = $beta('900000000');
         $this->assertLessThan($incomeOnly - 0.02, $marked, 'Valued on its dividends alone, the trust looks more geared than it is.');
         $this->assertEqualsWithDelta(0.90, $marked, 0.08, 'On its marked assets a lightly borrowed trust carries about its asset beta.');
+    }
+
+    /**
+     * Net cash is a zero-beta asset beside the business, so the share's beta is the business's times V / (V + C).
+     * Above half of book in cash the invested capital sits on its floor, so the business V is the same at both hoards
+     * and the two betas pin the form. The costs of equity stay on the business's beta: a hoard lowers no hurdle.
+     */
+    /**
+     * A stake's expected return is weighed against the hurdle at the premium the hurdle charges: the two asset costs
+     * differ by the beta times the gap between the premium the market implies and the through-the-cycle one.
+     */
+    public function testTheHurdlesAssetCostReadsThePremiumTheMarketImplies(): void
+    {
+        $stock = new Stock();
+        $stock->setBeta('0.90');
+        $macro = new MacroStateDTO(equityRiskPremium: 0.070);
+
+        $this->assertEqualsWithDelta(
+            0.90 * (0.070 - MacroConstants::BASE_EQUITY_RISK_PREMIUM),
+            DebtEngine::hurdleAssetCostOfCapital($stock, $macro) - DebtEngine::assetCostOfCapital($stock, $macro),
+            1e-12,
+        );
+    }
+
+    public function testNetCashDilutesTheBetaByItsShareOfTheEquity(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $health = fn(string $treasury): DebtHealthDTO => $engine->analyzeDebtHealth(
+            $this->leveredFirm('CASH', '1.10', '0.02')->setWholesaleDebt('100000000')->setCorporateTreasury($treasury),
+            $macro,
+        );
+
+        $small = $health('600000000');
+        $large = $health('900000000');
+        $this->assertLessThan(1.10, $small->leveredBeta, 'Cash lowers the share\'s beta.');
+        $business = 500_000_000.0 * $small->leveredBeta / (1.10 - $small->leveredBeta);
+        $this->assertGreaterThan(0.0, $business);
+        $this->assertEqualsWithDelta(1.10 * $business / ($business + 800_000_000.0), $large->leveredBeta, 1e-9, 'beta_A x V / (V + C) at the same V.');
+        $businessCost = Valuation::calculateCAPM($macro->equityRiskFreeRate, 1.10, MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+        $this->assertEqualsWithDelta($businessCost, $large->valuationCostOfEquity, 1e-12, 'The business is discounted at its own beta.');
+        $this->assertEqualsWithDelta($small->costOfEquity, $large->costOfEquity, 1e-12);
+
+        $levered = $engine->analyzeDebtHealth($this->leveredFirm('LEV', '1.10', '0.02'), $macro);
+        $this->assertEqualsWithDelta(
+            Valuation::calculateCAPM($macro->equityRiskFreeRate, $levered->leveredBeta, MacroConstants::BASE_EQUITY_RISK_PREMIUM),
+            $levered->valuationCostOfEquity,
+            1e-12,
+            'Net debt leaves the Hamada beta as it was: the share and the business carry the same beta.',
+        );
     }
 
     /**

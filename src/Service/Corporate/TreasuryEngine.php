@@ -7,6 +7,7 @@ namespace App\Service\Corporate;
 use App\Data\Company\ManagementProfile;
 use App\DTO\CapitalAllocationContext;
 use App\Entity\Stock;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
@@ -93,6 +94,17 @@ class TreasuryEngine
          */
         private SecuritiesBookService $securitiesBook = new SecuritiesBookService(new \App\Service\Market\Bond\BondPricingEngine()),
     ) {}
+
+    /**
+     * What an offering filed: the shares and the cash they raised, which the block holders settle their part at, and
+     * the line the report shows (empty for one too small to make its news).
+     *
+     * @return array{kind: string, shares: float, value: float, text: string}
+     */
+    private static function offeringFact(float $shares, float $value, string $description): array
+    {
+        return ['kind' => 'offering', 'shares' => $shares, 'value' => $value, 'text' => $description];
+    }
 
     /**
      * Whether a financing action is material enough to the firm to make its news: measured against its total
@@ -325,15 +337,16 @@ class TreasuryEngine
             && $offeringPrice >= (float) $stock->getTotalEquity() / $shares) {
             $sharesIssued = $raise / $offeringPrice;
             $stock->setSharesOutstanding((string) ($shares + $sharesIssued));
-            // Sold into the market at the 10b-18 pace, as any offering's stock is.
-            $stock->addCorporateFlowBacklog(-$sharesIssued);
+            // Sold into the market at the 10b-18 pace, as any offering's stock is, but for the block holders' part.
+            $stock->addCorporateFlowBacklog(-AnchorStakeLedger::marketSharesOfIssue($stock, $sharesIssued));
             $ctx->newShares = (float) $stock->getSharesOutstanding();
             $ctx->newTreasury += $raise;
             $ctx->equityRaised += $raise;
             $stock->setTotalEquity(\bcadd($this->formatBc($stock->getTotalEquity()), $this->formatBc($raise), 4));
-            if (self::isNewsworthy($stock, $raise)) {
-                $ctx->events[] = ['description' => 'Sold ' . WireFormat::money($raise) . ' of new shares into the market to fund development.'];
-            }
+            $description = self::isNewsworthy($stock, $raise)
+                ? 'Sold ' . WireFormat::money($raise) . ' of new shares into the market to fund development.'
+                : '';
+            $ctx->events[] = ['description' => $description, 'fact' => self::offeringFact($sharesIssued, $raise, $description)];
         }
 
         $spend = min($budget, max(0.0, $ctx->newTreasury - $minOperatingCash));
@@ -799,8 +812,9 @@ class TreasuryEngine
 
                 $stock->setSharesOutstanding((string) ($sharesNow + $sharesIssued));
                 // The offering is placed at the discount above; the stock it put into investors' hands is
-                // then sold down through the flow channel at the 10b-18 pace (the post-offering overhang).
-                $stock->addCorporateFlowBacklog(-$sharesIssued);
+                // then sold down through the flow channel at the 10b-18 pace (the post-offering overhang). The
+                // block holders take their part off the market.
+                $stock->addCorporateFlowBacklog(-AnchorStakeLedger::marketSharesOfIssue($stock, $sharesIssued));
                 // The engine writes the context's share count back to the stock after allocation, so the
                 // dilution has to reach the context too or the raise lands as cash with no shares behind it.
                 $ctx->newShares = (float) $stock->getSharesOutstanding();
@@ -811,9 +825,11 @@ class TreasuryEngine
                 $stock->setTotalEquity(\bcadd($currentEquityStr, $this->formatBc($targetRaise), 4));
 
                 $amount = WireFormat::money($targetRaise);
+                $description = "Issued new shares to raise {$amount} and {$reason}.";
                 $ctx->events[] = [
-                    'description' => "Issued new shares to raise {$amount} and {$reason}.",
+                    'description' => $description,
                     'shock' => self::SEASONED_EQUITY_OFFERING_ANNOUNCEMENT_PCT,
+                    'fact' => self::offeringFact($sharesIssued, $targetRaise, $description),
                 ];
 
                 $ctx->failedEmergencyBorrow = false;

@@ -145,6 +145,12 @@ class MarketPricingContext
         $baselineVolatility = (float) $stock->getVolatility();
         $treasury = (float) $stock->getCorporateTreasury();
         $excessCash = \App\Service\Corporate\CorporateMetrics::excessOperatingCash($stock);
+        // A sphere's filed book moves once a quarter; the listed portfolio inside it moves every tick, and fair value
+        // is struck on the second, with its subsidiaries at what they earn: its net asset value.
+        $markedBook = $anchorStakes->resolveMarkedBookValuePerShare($stock);
+        $netAssetValue = $markedBook === null
+            ? null
+            : $markedBook + (\App\Service\Corporate\DebtEngine::subsidiaryRevaluation($stock, $strategy, $macroState) / $shares);
 
         return new self(
             currentPrice: (float) $stock->getPrice(),
@@ -160,10 +166,8 @@ class MarketPricingContext
             marketJumpMultiplier: $macroState->marketJumpMultiplier,
             marketVol: $macroState->marketVolatility,
             macroState: $macroState,
-            // A sphere's filed book moves once a quarter; the listed portfolio inside it moves every
-            // tick, and fair value is struck on the second.
-            bookValuePerShare: $anchorStakes->resolveMarkedBookValuePerShare($stock) ?? (float) $stock->getBookValuePerShare(),
-            marketMarkedValueShare: $anchorStakes->resolveMarkedStakeShare($stock),
+            bookValuePerShare: $netAssetValue ?? (float) $stock->getBookValuePerShare(),
+            marketMarkedValueShare: $netAssetValue === null ? 0.0 : $anchorStakes->resolveMarkedStakeShare($stock, $netAssetValue),
             maShock: $maShock,
             currentRoic: $strategy->getEffectiveReturn($stock),
             trailingReturn: self::trailingReturn($stock, $strategy),

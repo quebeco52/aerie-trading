@@ -165,13 +165,13 @@ final class StandardDebtPhysicsTraitTest extends TestCase
     }
 
     /**
-     * Net debt nets cash against debt but stops at zero: a cash-rich firm is unlevered, not negatively levered.
+     * Net debt nets cash against debt and keeps its sign: below zero is net cash, which the equity's beta reads.
      */
-    public function testNetDebtCapitalFloorsAtZero(): void
+    public function testNetDebtCapitalIsSignedNetCashBelowZero(): void
     {
         $this->assertSame(400.0, $this->model->getNetDebtCapital(1000.0, 1000.0, 600.0));
         $this->assertSame(0.0, $this->model->getNetDebtCapital(1000.0, 1000.0, 1000.0));
-        $this->assertSame(0.0, $this->model->getNetDebtCapital(1000.0, 1000.0, 5000.0), 'Surplus cash cannot make debt capital negative.');
+        $this->assertSame(-4000.0, $this->model->getNetDebtCapital(1000.0, 1000.0, 5000.0), 'Surplus cash is net cash, not zero.');
     }
 
     /**

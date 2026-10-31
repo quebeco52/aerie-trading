@@ -8,6 +8,7 @@ use App\Data\Company\AnchorHoldings;
 use App\Data\Company\AnchorStake;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Chart\PriceChangeFeed;
 
 /**
@@ -51,7 +52,7 @@ class AnchorPortfolioBuilder
 
         foreach ($this->stocks->findBy(['ticker' => array_keys($stakes)]) as $held) {
             $ticker = $held->getTicker();
-            $ownership = $stakes[$ticker] ?? 0.0;
+            $ownership = AnchorStakeLedger::fraction($held, $stock->getTicker());
             $price = (float) $held->getPrice();
             $isBankrupt = $held->isBankrupt();
 

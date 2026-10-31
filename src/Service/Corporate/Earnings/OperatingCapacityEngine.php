@@ -254,9 +254,10 @@ final class OperatingCapacityEngine
         // Capital tied up in construction earns nothing yet, but only so much of the base may be excluded:
         // a firm mid-megaproject still runs the plant it already has. Goodwill earns nothing either — it is
         // the premium paid over the plant — so an impairment cannot shrink capacity. A financial's base is
-        // its earning assets, which never contained goodwill.
+        // its earning assets, which never contained goodwill. A holding company's listed stakes sell nothing:
+        // they earn the dividends their companies pay.
         $revenueGeneratingCapital = CorporateMetrics::revenueGeneratingCapital(
-            $this->operatingCapital($ctx),
+            $strategy->getPlantCapital($stock, $this->operatingCapital($ctx)),
             $stock->getTotalCipAmount(),
             $strategy->isFinancial() ? 0.0 : (float) $stock->getGoodwill(),
         );
@@ -691,7 +692,7 @@ final class OperatingCapacityEngine
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $construction = (float) $stock->getCipBalance() + $ctx->completedCip;
         // The shares are of the capital the plant sells on, which the plant placed this quarter has just joined.
-        $capital = CorporateMetrics::revenueGeneratingCapital($this->operatingCapital($ctx), $stock->getTotalCipAmount(), (float) $stock->getGoodwill());
+        $capital = CorporateMetrics::revenueGeneratingCapital($ctx->strategy->getPlantCapital($stock, $this->operatingCapital($ctx)), $stock->getTotalCipAmount(), (float) $stock->getGoodwill());
         $state = SegmentBooks::completePending($momentum, $construction > 0.0 ? $ctx->completedCip / $construction : 1.0, $capital)
             + SegmentBooks::learn($momentum, $ctx->dt);
         if ($state !== []) {

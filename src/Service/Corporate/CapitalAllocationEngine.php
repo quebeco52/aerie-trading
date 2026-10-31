@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
+use App\Data\Company\AnchorHoldings;
 use App\DTO\CapitalAllocationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\Earnings\InvestmentMarkLedger;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MathUtility;
@@ -94,11 +96,13 @@ class CapitalAllocationEngine
         $this->executeDividends($ctx);
         $this->executeCorporateStrategy($ctx);
         $this->executeBuybacks($ctx);
+        $this->payHolders($ctx);
         $this->finalizeLiquidity($ctx);
 
         return [
             'new_shares' => $ctx->newShares,
             'dividend_paid' => $ctx->newDividend,
+            'redemption_per_share' => $ctx->redemptionPerShare,
             'total_paid' => $ctx->totalPaid,
             'total_cash_spent' => $ctx->totalCashSpent,
             'equity_raised' => $ctx->equityRaised,
@@ -153,7 +157,7 @@ class CapitalAllocationEngine
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
 
-        $trueReturn = $ctx->strategy->getTrueReturn($stock) + $ctx->strategy->getExpectedHoldingGainReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
+        $trueReturn = $ctx->strategy->getTrueReturn($stock) + $ctx->strategy->getExpectedHoldingReturn($stock, DebtEngine::hurdleAssetCostOfCapital($stock, $ctx->macroState));
 
         // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986) As a firm approaches market
         // saturation, internal reinvestment slows and target payout scales toward cash cow levels.
@@ -301,8 +305,6 @@ class CapitalAllocationEngine
         $ctx->totalPaid = $ctx->newDividend * $ctx->sharesOutstanding;
 
         if ($ctx->newDividend > 0.0) {
-            $this->corporateLedgerService->processDividendPayment($stock, $ctx->newDividend, new \DateTime());
-
             $stock->setLastDividend((string) $ctx->newDividend);
             $yield = (($ctx->newDividend * 4) / max($ctx->currentPrice, 0.01)) * 100;
 
@@ -399,8 +401,8 @@ class CapitalAllocationEngine
             }
         }
 
-        // The whole firm's return against its cost of capital: a trust's stakes earn their price too.
-        $trueReturn = $ctx->strategy->getTrueReturn($stock) + $ctx->strategy->getExpectedHoldingGainReturn($stock, DebtEngine::assetCostOfCapital($stock, $ctx->macroState));
+        // The whole firm's return against its cost of capital: a trust's stakes earn their dividends and price too.
+        $trueReturn = $ctx->strategy->getTrueReturn($stock) + $ctx->strategy->getExpectedHoldingReturn($stock, DebtEngine::hurdleAssetCostOfCapital($stock, $ctx->macroState));
         $hurdleRate = $ctx->strategy->getHurdleRate($ctx->health);
         $economicSpread = $trueReturn - $hurdleRate;
 
@@ -419,12 +421,17 @@ class CapitalAllocationEngine
 
         // A share retired below intrinsic book raises every remaining share's book value, whatever the
         // business does next. Zero for an operating company, whose case is the earnings test above; for a
-        // closed-end structure that test can never find it, because a trust's economic spread sits at zero
+        // closed-end structure that test cannot find it, because a trust's stakes earn about their cost
         // and the discount inflates the very P/E being compared.
-        $repurchaseAccretion = $ctx->strategy->resolveRepurchaseAccretion($stock, $ctx->currentPrice);
+        $netAssetValuePerShare = (float) $stock->getBookValuePerShare()
+            + (DebtEngine::subsidiaryRevaluation($stock, $ctx->strategy, $ctx->macroState) / max(1.0, $ctx->sharesOutstanding));
+        $repurchaseAccretion = $ctx->strategy->resolveRepurchaseAccretion($stock, $ctx->currentPrice, $netAssetValuePerShare);
         $isTradingBelowBook = $repurchaseAccretion >= self::MIN_ACCRETIVE_REPURCHASE_DISCOUNT;
+        // A closed-end structure never buys at or above its net asset value, whatever its return or its cash: a share
+        // retired there takes value from every share that stays. It pays its surplus out as a dividend instead.
+        $isPricedAboveNetAssets = $ctx->strategy->getStructuralValuationDiscount($ctx->macroState) > 0.0 && $ctx->currentPrice >= $netAssetValuePerShare;
 
-        if (($economicSpread > 0.02 && $isPricedBelowItsMultiple) || $isHoarder || $isUnderLeveraged || $capitalSurplusReturn > 0.0 || $saturationSeverity > 0.20 || $isTradingBelowBook) {
+        if (!$isPricedAboveNetAssets && (($economicSpread > 0.02 && $isPricedBelowItsMultiple) || $isHoarder || $isUnderLeveraged || $capitalSurplusReturn > 0.0 || $saturationSeverity > 0.20 || $isTradingBelowBook)) {
             $maxWillingSpend = $ctx->strategy->calculateMaxBuybackSpend($excessCash, $ctx->retainedEarningsThisQuarter, $isMegaHoarder);
 
             // Saturation Buyback Unlock: Mature firms distribute non-reinvestable excess cash
@@ -496,7 +503,18 @@ class CapitalAllocationEngine
             $maxSharesToBuy = (int) floor($ctx->sharesOutstanding * 0.95);
             $sharesRepurchased = min($sharesRepurchased, $maxSharesToBuy);
 
-            if ($sharesRepurchased > 0) {
+            if ($sharesRepurchased > 0 && AnchorHoldings::redeemsProRata((string) $stock->getTicker())) {
+                // The same cash, returned by mandatory redemption: each share of record is paid alike and none is
+                // retired, so no holder sells on the market and the sphere's percentage holds.
+                $ctx->totalCashSpent = $sharesRepurchased * max($ctx->currentPrice, 0.01);
+                $ctx->redemptionPerShare = $ctx->totalCashSpent / max(1.0, $ctx->sharesOutstanding);
+
+                $ctx->events[] = [
+                    'description' => "Returned $" . number_format($ctx->redemptionPerShare, 2) . '/share by mandatory redemption (' . WireFormat::money($ctx->totalCashSpent) . ' total).',
+                    'shock' => 0.0,
+                    'fact' => ['kind' => 'redemption', 'perShare' => $ctx->redemptionPerShare, 'value' => $ctx->totalCashSpent],
+                ];
+            } elseif ($sharesRepurchased > 0) {
                 $ctx->totalCashSpent = $sharesRepurchased * max($ctx->currentPrice, 0.01);
                 $newSharesVal = max(1.0, (float) $stock->getSharesOutstanding() - $sharesRepurchased);
                 $sharesStr = (string) $newSharesVal;
@@ -504,18 +522,31 @@ class CapitalAllocationEngine
                 $ctx->newShares = $newSharesVal;
 
                 // The repurchase reaches the price as what it is — shares bought in the market — through the
-                // order-flow channel and the 10b-18 pacing in StockTracker, not as a shock struck here.
-                $stock->addCorporateFlowBacklog((float) $sharesRepurchased);
+                // order-flow channel and the 10b-18 pacing in StockTracker, not as a shock struck here. Only the
+                // float's part is bought there: the block holders settle theirs off the market.
+                $stock->addCorporateFlowBacklog(AnchorStakeLedger::marketSharesOfBuyback($stock, (float) $sharesRepurchased));
 
                 $ctx->events[] = [
                     'description' => "Bought back " . number_format($sharesRepurchased) . " shares.",
                     'shock' => 0.0,
-                    'fact' => ['kind' => 'buyback', 'shares' => $sharesRepurchased],
+                    'fact' => ['kind' => 'buyback', 'shares' => $sharesRepurchased, 'value' => $ctx->totalCashSpent],
                 ];
             }
         }
 
         $ctx->newTreasury -= $ctx->totalCashSpent;
+    }
+
+    /**
+     * Credits the player holders once for the quarter, with the dividend and any redemption beside it: both are cash
+     * per share of record.
+     */
+    private function payHolders(CapitalAllocationContext $ctx): void
+    {
+        $distribution = $ctx->newDividend + $ctx->redemptionPerShare;
+        if ($distribution > 0.0) {
+            $this->corporateLedgerService->processDividendPayment($ctx->stock, $distribution, new \DateTime());
+        }
     }
 
     /**

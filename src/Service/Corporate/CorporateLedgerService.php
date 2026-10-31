@@ -411,7 +411,7 @@ class CorporateLedgerService
 
         foreach (is_array($facts['actions'] ?? null) ? $facts['actions'] : [] as $i => $action) {
             $facts['actions'][$i] = match ($action['kind'] ?? null) {
-                'dividend' => ['perShare' => (float) $action['perShare'] * $priceRatio] + $action,
+                'dividend', 'redemption' => ['perShare' => (float) $action['perShare'] * $priceRatio] + $action,
                 'buyback' => ['shares' => round((float) $action['shares'] / $priceRatio)] + $action,
                 default => $action,
             };

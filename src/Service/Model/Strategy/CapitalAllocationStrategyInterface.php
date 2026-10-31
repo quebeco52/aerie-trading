@@ -43,8 +43,17 @@ interface CapitalAllocationStrategyInterface
      * How far below intrinsic book the market prices the firm — the accretion a repurchase captures
      * directly, before any view about earnings. Zero for an operating company, whose case is the return it
      * makes on capital. A closed-end structure is the exception, and it is why a trust's board buys at all.
+     *
+     * @param float $netAssetValuePerShare Book per share with a holding company's subsidiaries at their value.
      */
-    public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice): float;
+    public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice, float $netAssetValuePerShare): float;
+
+    /**
+     * Whether the firm is permanent capital investing by a charter: it buys only businesses in the industries the
+     * charter names, never another of its own kind, and sells no slice at a premium and no business it bought
+     * because it earns less than it hoped, only what distress forces.
+     */
+    public function investsByCharter(): bool;
 
     /**
      * The book equity-to-assets ratio the firm manages its capital toward, or null for a firm that runs no

@@ -541,6 +541,11 @@ class DivestitureEngineTest extends TestCase
         $this->assertStringContainsString('sold its heavy machinery business', (string) $published);
         $this->assertStringContainsString('loss on sale', (string) $published);
         $this->assertBalanced($stock, 'selling a business bought into a new industry');
+
+        // Permanent capital keeps what it bought: the same business, held by a trust, stays.
+        $trust = $seller(true);
+        $trust->setIndustry('Investment Companies');
+        $this->assertNull($engine->evaluateCorporateDivestiture($trust, $macro, 1.0), 'a trust sells nothing it is not forced to');
     }
 
     /**

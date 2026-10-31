@@ -290,6 +290,7 @@ class OpeningBoardBuilder
             $stock = $sphere['stock'];
             $strategy = Sectors::strategyFor($stock->getIndustry());
             $this->anchorStakes->markToMarket($stock, $strategy->getEffectiveTaxRate($openingMacro->corporateTaxRate));
+            $this->anchorStakes->openDividendRate($stock);
 
             // The stake list is edited by hand in a file that knows nothing about the balance sheet it has
             // to fit inside. Refused rather than logged: a portfolio that swallows the book leaves the
@@ -314,6 +315,9 @@ class OpeningBoardBuilder
                 $stock->getTotalCipAmount(),
                 $sphere['assetAgeRatio'],
             );
+
+            // Struck again now its net asset value exists: the stakes marked, the subsidiaries carved out of them.
+            $this->strikeOpeningPrice($stock, $openingMacro);
         }
     }
 }

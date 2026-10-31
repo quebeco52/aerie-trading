@@ -8,8 +8,11 @@ use App\Data\Company\AnchorHoldings;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\EarningsEngine;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Event\ShockEvent;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
 
 /**
  * Earnings strategy for Permanent-Capital Investment Companies & Industrial Holding Spheres.
@@ -21,26 +24,28 @@ use App\Service\Math\MathUtility;
  * price the same information twice. The book IS the valuation, and the earnings line is left unread.
  *
  * Financial Physics:
- * - Net Asset Value: the intrinsic multiple on book is exactly one, so the term the parent receives as a
- *   ROIC-scaled multiple arrives instead as net asset value per share.
+ * - Net Asset Value, a sum of the parts: the stakes at market net of the tax deferred on them, the cash at
+ *   face, and the subsidiaries at what their earnings are worth (resolveSubsidiaryRevaluation()), as a
+ *   holding company publishes it. The intrinsic multiple on it is exactly one.
  * - The book is MARKED, which is what makes the rest true. Stakes are declared in AnchorHoldings and valued
  *   by AnchorStakeLedger at the held companies' market caps — opened at seed, onto the balance sheet at
  *   every report, into the valuation every tick. Before this a sphere compounded straight through the
  *   crashes that halve a real trust's book.
  * - Nothing about the composition is declared. Treasury is a ledger balance, the stakes are priced off the
- *   board, the consolidated sleeve is what those leave — as BALANCES against capital employed, never as
- *   shares of NAV. Three sleeve dials have been deleted from this class, each stale within one retune.
+ *   board, the consolidated sleeve is what those leave: capital employed less the stakes
+ *   (getPlantCapital()), which is all the subsidiaries sell on.
  * - The Holding-Company Discount is the defining feature of the class, not a haircut on it: control blocks
- *   cannot be sold at the screen price and a realised stake is taxed on exit, so the parts never make the
- *   sum. Sentiment moves it, not fundamentals (Lee, Shleifer & Thaler 1991) — it gaps wide in a downturn
+ *   cannot be sold at the screen price and the foundation's control means no holder can force the break-up
+ *   that would close the gap. The tax on exit and the subsidiaries' returns are in the net asset value
+ *   already. Sentiment moves it, not fundamentals (Lee, Shleifer & Thaler 1991) — it gaps wide in a downturn
  *   and closes in an expansion while the assets underneath do neither.
  * - The income mix INVERTS the asset mix, as an accounting fact: a controlled subsidiary is consolidated
- *   and contributes its whole top line, a minority stake only the dividend it declares. So the anchor
+ *   and contributes its whole top line, a stake only the dividend its company declares. So the anchor
  *   stakes that ARE the trust barely appear on its income statement.
- * - Dividends received are twice damped — declared out of trailing earnings, then smoothed by the board —
- *   so the receipt line is the quietest thing in the group and it arrives late.
- * - Only the consolidated subsidiaries buy anything, so the input basket is charged against that stream
- *   alone. Dividends and treasury income have no cost of goods.
+ * - Revenue is the subsidiaries' sales alone. The dividends received are the ones the held companies
+ *   paid (AnchorStakeLedger::accrueDividends()), booked below the operating line as investment income,
+ *   and the treasury earns the money market and the credit book through the parent's interest income.
+ *   Neither has a cost of goods, so neither passes through the subsidiaries' margin.
  * - NOT a financial, deliberately: an investment COMPANY, not an investment trust. isFinancial() is built
  *   for a closed-end fund that consolidates nothing — it skips the fixed asset ledger, forbids organic
  *   capex, depreciates total EQUITY and drops the firm out of the industry share ledger. Here the
@@ -57,10 +62,11 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
 
     // --- Holding-Company Discount ---
     /**
-     * Long-run discount to NAV at a neutral cycle: control blocks are unsaleable at the screen price and a realised
-     * stake is taxed on exit.
+     * Long-run discount to NAV at a neutral cycle (20%): control blocks are unsaleable at the screen price and the
+     * foundation's control rules out the break-up that would close it. The exit tax and the subsidiaries' returns are
+     * inside the NAV it is struck on.
      */
-    public const NAV_DISCOUNT_BASE = 0.30;
+    public const NAV_DISCOUNT_BASE = 0.20;
 
     /**
      * Widening per unit of output gap below neutral. The discount is a sentiment index, so it gaps out in a contraction
@@ -74,11 +80,11 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
      */
     public const NAV_DISCOUNT_SENTIMENT_SCALAR = 0.60;
 
-    /** Floor: even at a cyclical peak a control block cannot be sold at the screen price. */
-    public const MIN_NAV_DISCOUNT = 0.15;
+    /** Floor (5%): even at a cyclical peak a control block cannot be sold at the screen price. */
+    public const MIN_NAV_DISCOUNT = 0.05;
 
-    /** Ceiling: past this the trust is worth more broken up than held, and the foundation's own bid arrives. */
-    public const MAX_NAV_DISCOUNT = 0.50;
+    /** Ceiling (45%): past this the trust is worth more broken up than held, and the foundation's own bid arrives. */
+    public const MAX_NAV_DISCOUNT = 0.45;
 
     // --- Industry Structure ---
     /**
@@ -94,47 +100,13 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
      */
     public const BASE_COVERAGE_VISIBILITY = 0.55;
 
-    // --- NAV to Revenue Conversion ---
-    /**
-     * Revenue a controlled subsidiary books per unit of carrying value. Consolidation takes the whole top line, so a
-     * fifth of the book can be most of the income statement.
-     */
-    public const WHOLLY_OWNED_ASSET_TURNOVER = 0.30;
-
-    /**
-     * Revenue a listed stake books per unit of market value: its dividend yield, and nothing else, however much the
-     * company earns.
-     */
-    public const LISTED_DIVIDEND_YIELD = 0.035;
-
-    /**
-     * Revenue the treasury books per unit of its value: blended yield on cash, short sovereign paper and the credit
-     * book.
-     */
-    public const TREASURY_INCOME_YIELD = 0.040;
-
     // --- Stream Volatility Scalars ---
     /** Volatility multiplier for consolidated subsidiary sales: real operating businesses, priced as such. */
     public const WHOLLY_OWNED_VARIANCE_SCALAR = 0.30;
 
-    /**
-     * Volatility multiplier for dividends received. Set from trailing earnings then smoothed again, so this is the
-     * quietest line in the group.
-     */
-    public const LISTED_DIVIDEND_VARIANCE_SCALAR = 0.06;
-
     // --- Macro Sensitivities ---
     /** Output gap sensitivity of subsidiary volume. Niche manufacturers sell replacement demand, not new-build. */
     public const WHOLLY_OWNED_MACRO_SCALAR = 0.70;
-
-    /**
-     * Sensitivity of upstreamed dividends to the LAGGED cycle. Small on purpose: the board's smoothing damps on top of
-     * the delay.
-     */
-    public const LISTED_DIVIDEND_MACRO_SCALAR = 0.25;
-
-    /** Years between the cycle and the dividend it eventually pays, via the parent's distributed-lag helper. */
-    public const DEMAND_LAG_YEARS = 1.50;
 
     // --- Valuation ---
     /**
@@ -145,39 +117,13 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     public const FAIR_VALUE_BOOK_WEIGHT = 1.0;
 
     /**
-     * The volume the consolidated subsidiaries are staffed to, at their share of the balance-sheet income mix.
-     * Dividends received and treasury income are returns on stakes and cash: no payroll or plant is sized to
-     * them, so they count in the mix but carry no activity. Not zero, because the controlled half is real
-     * factories and berths, and their cost base has to see the recession its sales already do.
+     * The volume the consolidated subsidiaries are staffed to: their sales are the whole revenue line, so their cost
+     * base sees the recession their sales do. Dividends received and treasury income are returns on stakes and cash,
+     * below the operating line, and no payroll or plant is sized to them.
      */
     public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
     {
-        $weights = $this->resolveIncomeWeights($stock);
-        $totalWeight = array_sum($weights);
-        if ($totalWeight <= 0.0) {
-            return 0.0;
-        }
-
-        return ($weights['wholly_owned'] / $totalWeight) * $this->resolveOwnedVolumeShift($stock, $macroState);
-    }
-
-    /**
-     * Income weights from balances, not shares of NAV: the consolidated sleeve is invested capital less the
-     * marked stakes and books its whole top line; a stake books its dividend; the treasury its yield.
-     *
-     * @return array{wholly_owned: float, listed_portfolio: float, financial_investments: float}
-     */
-    private function resolveIncomeWeights(Stock $stock): array
-    {
-        $treasuryValue = max(0.0, (float) $stock->getCorporateTreasury());
-        $listedValue = $this->resolveListedStakeValue($stock);
-        $consolidatedValue = max(0.0, $stock->getInvestedCapital() - $listedValue);
-
-        return [
-            'wholly_owned'          => $consolidatedValue * self::WHOLLY_OWNED_ASSET_TURNOVER,
-            'listed_portfolio'      => $listedValue * self::LISTED_DIVIDEND_YIELD,
-            'financial_investments' => $treasuryValue * self::TREASURY_INCOME_YIELD,
-        ];
+        return $this->resolveOwnedVolumeShift($stock, $macroState);
     }
 
     /** Consolidated subsidiary volume: the output gap at the firm's floored cyclical beta. */
@@ -197,43 +143,15 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
         MacroStateDTO $macroState,
         MathUtility $mathUtility,
     ): SectorPhysicsResult {
-        $params = $this->resolveModelParameters($stock, [
-        ]);
-
         $pricingPower = $this->resolvePricingPower($stock);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
-        // Map assets to income based on ownership type, normalized across active streams.
-        $activeWeights = $streams->resolveActiveStreamWeights($this->resolveIncomeWeights($stock));
-
-        $ownedWeight  = $activeWeights['wholly_owned'];
-        $listedWeight = $activeWeights['listed_portfolio'];
-        $floatWeight  = $activeWeights['financial_investments'];
-
-        $ownedZ  = $ownedWeight > 0.0 ? $streams->generateDemandZ('wholly_owned') : 0.0;
-        $listedZ = $listedWeight > 0.0 ? $streams->generateZ('listed_portfolio', 0.55) : 0.0;
-        $floatZ  = $floatWeight > 0.0 ? $streams->generateZ('financial_investments', 0.15) : 0.0;
-        $eventZ  = $streams->generateExogenousZ('event', 0.10);
-
-        // --- Consolidated subsidiaries: an operating business, responding to the cycle it is in ---
-        $ownedMacroBoost = $this->resolveOwnedVolumeShift($stock, $macroState);
-
-        // --- Dividends received: the cycle as it was, not as it is ---
-        // Declared out of trailing earnings, then smoothed by the board: delay and damping are separate.
-        $laggedGap = $this->resolveLaggedOutputGap($macroState);
-        $listedMacroBoost = $laggedGap * self::LISTED_DIVIDEND_MACRO_SCALAR;
-
-        // --- Treasury: the parent's contrarian float book, unchanged ---
-        $dealActivityShift = $macroState->dealActivityDeviation();
-        $contrarianSurge = $this->resolveContrarianFloatSurge(
-            $macroState,
-            $macroState->outputGapEma,
-            $macroState->macroCreditSpreadEma,
-            $macroState->macroCreditSpread - $macroState->macroCreditSpreadEma,
-            max(0.0, $dealActivityShift) * self::DEAL_ACTIVITY_DIVESTITURE_SCALAR,
-        );
+        // The subsidiaries are the only line that sells anything; the capacity they sell on is theirs alone
+        // (getPlantCapital()).
+        $ownedZ = $streams->generateDemandZ('wholly_owned');
+        $eventZ = $streams->generateExogenousZ('event', 0.10);
 
         // --- Tail risk: a subsidiary written down, which is the one event a trust reports itself ---
         $eventType = null;
@@ -243,32 +161,17 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             $eventType = ShockEvent::CONGLOMERATE_SUBSIDIARY_WRITEDOWN;
         }
 
-        $ownedShock  = $ownedZ  * ($baselineVol * self::WHOLLY_OWNED_VARIANCE_SCALAR);
-        $listedShock = $listedZ * ($baselineVol * self::LISTED_DIVIDEND_VARIANCE_SCALAR);
-        $floatShock  = $floatZ  * ($baselineVol * self::FLOAT_VARIANCE_SCALAR);
+        // --- Consolidated subsidiaries: an operating business, responding to the cycle it is in ---
+        $ownedShock = $ownedZ * ($baselineVol * self::WHOLLY_OWNED_VARIANCE_SCALAR);
+        $streamRevenues = [
+            'wholly_owned' => max(0.0, $expectedRevenue * (1.0 + $ownedShock + $this->resolveOwnedVolumeShift($stock, $macroState))),
+        ];
 
-        $streamRevenues = [];
-        if ($ownedWeight > 0.0) {
-            $streamRevenues['wholly_owned'] = max(0.0, $expectedRevenue * $ownedWeight * (1.0 + $ownedShock + $ownedMacroBoost));
-        }
-        if ($listedWeight > 0.0) {
-            $streamRevenues['listed_portfolio'] = max(0.0, $expectedRevenue * $listedWeight * (1.0 + $listedShock + $listedMacroBoost));
-        }
-        if ($floatWeight > 0.0) {
-            $streamRevenues['financial_investments'] = max(0.0, $expectedRevenue * $floatWeight * (1.0 + $floatShock + $contrarianSurge));
-        }
-
-        $actualRevenue = array_sum($streamRevenues);
+        $actualRevenue = $streamRevenues['wholly_owned'];
         $streams->recordStreamShares($streamRevenues);
 
-        // Charge input basket against operating revenue only; dividends and coupons carry no COGS.
-        $ownedShare = $actualRevenue > 0.0 ? ($streamRevenues['wholly_owned'] ?? 0.0) / $actualRevenue : 0.0;
-        $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin)
-            * max(0.0, $ownedShare);
-
+        $ppiCostDrag = $this->resolveInputCostDrag($stock, $macroState, $streams, $pricingPower, $realizedVariableMargin);
         $clampedMargin = $this->clampMargin($realizedVariableMargin + $ppiCostDrag);
-
-        $specialCharge = $restructuringPenalty * $actualRevenue;
 
         return new SectorPhysicsResult(
             actualRevenue: $actualRevenue,
@@ -277,23 +180,27 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             isPublicEvent: $eventType !== null ? true : null,
             streamZ: $streams->getStreamZ(),
             streamRevenue: $streamRevenues,
-            specialCharge: $specialCharge,
+            specialCharge: $restructuringPenalty * $actualRevenue,
         );
     }
 
     /**
-     * A listed stake books only its dividend: the rest of the return it is held for, the asset cost of capital, is its
-     * price. Before tax, as the deferred tax on the mark is part of the capital and is not paid while the stake is
-     * held.
+     * A listed stake earns the asset cost of capital it is held for: the dividends the held companies pay it
+     * (AnchorStakeLedger::trailingDividends()), after the tax the trust pays on them, and its price for the rest, so a
+     * company that returns its cash by buyback leaves more of the return in the price. The price gain before tax, as
+     * the deferred tax on the mark is part of the capital and is not paid while the stake is held.
      */
-    public function getExpectedHoldingGainReturn(Stock $stock, float $assetCostOfCapital): float
+    public function getExpectedHoldingReturn(Stock $stock, float $assetCostOfCapital): float
     {
         $investedCapital = $stock->getInvestedCapital();
-        if ($investedCapital <= 0.0) {
+        $stakes = $this->resolveListedStakeValue($stock);
+        if ($investedCapital <= 0.0 || $stakes <= 0.0) {
             return 0.0;
         }
 
-        return $this->resolveListedStakeValue($stock) * ($assetCostOfCapital - self::LISTED_DIVIDEND_YIELD) / $investedCapital;
+        $dividends = AnchorStakeLedger::trailingDividends($stock);
+
+        return (($stakes * $assetCostOfCapital) - (AnchorStakeLedger::taxRate($stock) * $dividends)) / $investedCapital;
     }
 
     /**
@@ -352,28 +259,33 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             'exchange_rate_index_ema',
             'import_price_level',
             'industrial_metals_index_ema',
-            'macro_credit_spread',
             'macro_credit_spread_ema',
             'output_gap_ema',
-            'output_gap_lag_18m',
-            'perceived_neutral_rate',
-            'policy_rate_ema',
             'tips_breakeven_ema',
             'real_wage_gap',
         ];
     }
 
     /**
-     * The treasury's income is already in the revenue line and must not be booked twice.
-     *
-     * The trait's version pays the policy rate less a spread on surplus cash — right for a manufacturer
-     * whose cash is a buffer. Here the same balance IS a business line: financial_investments draws its
-     * weight from Stock::corporateTreasury and runs the contrarian float physics over it. Idle cash at the
-     * front rate is precisely what a sphere's dry powder is not.
+     * The subsidiaries at what their earnings are worth, less the capital they run on (the value-driver formula on
+     * their own capital, Valuation::operatingCapitalValue()). Their return is the operating line's own, the revenue
+     * line being theirs alone, faded from the trailing year toward the return the board holds them to.
      */
-    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
+    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate): float
     {
-        return 0.0;
+        $capital = $this->getPlantCapital($stock, $stock->getInvestedCapital());
+        if ($capital <= 0.0) {
+            return 0.0;
+        }
+
+        $anchor = (float) $stock->getBaselineRoic();
+        $history = $stock->getQuarterlyOperatingHistory() ?? [];
+        $trailing = count($history) >= EarningsEngine::TTM_QUARTERS
+            ? array_sum(array_column($history, 'ebit')) * (1.0 - $taxRate) / $capital
+            : $anchor;
+        $return = $this->getValuationReturn($trailing, $anchor, $assetCostOfCapital);
+
+        return Valuation::operatingCapitalValue($capital, $return, $assetCostOfCapital, $growth) - $capital;
     }
 
     /**
@@ -398,15 +310,24 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
      * share still lifts NAV per share, but that discount is the price of the structure, not a mispricing, and a board
      * buying there every quarter would retire its whole float, as the foundation's control block does not tender.
      */
-    public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice): float
+    public function resolveRepurchaseAccretion(Stock $stock, float $currentPrice, float $netAssetValuePerShare): float
     {
-        $navPerShare = (float) $stock->getBookValuePerShare();
+        $navPerShare = $netAssetValuePerShare;
 
         if ($navPerShare <= 0.0 || $currentPrice <= 0.0) {
             return 0.0;
         }
 
         return max(0.0, 1.0 - ($currentPrice / ($navPerShare * (1.0 - self::NAV_DISCOUNT_BASE))));
+    }
+
+    /**
+     * Permanent capital buys to hold, in the industries its charter names (IndustryAdjacency): it sells a business
+     * only when distress forces it to.
+     */
+    public function investsByCharter(): bool
+    {
+        return true;
     }
 
     /**

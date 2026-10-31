@@ -543,22 +543,28 @@ class StockTracker
         $priceAfterReport = $tick->priceAfterReport;
 
         $dividendPaidPerShare = 0.0;
+        $redeemedPerShare = 0.0;
         foreach ($tick->reportEvents ?? [] as $generatedEvent) {
             $dividendPaidPerShare += (float) ($generatedEvent['dividend_per_share'] ?? 0.0);
+            $redeemedPerShare += (float) ($generatedEvent['redemption_per_share'] ?? 0.0);
         }
+        // Cash every holder of record was paid: the dividend and any redemption, both off the price ex-date.
+        $distributedPerShare = $dividendPaidPerShare + $redeemedPerShare;
 
-        // Index dividend points: float-adjusted dividend cash per ticker for index point calculations.
-        if ($dividendPaidPerShare > 0.0) {
-            $board->dividendPoints[$stock->getTicker()] = $dividendPaidPerShare
-                * (float) $stock->getSharesOutstanding()
-                * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()));
-            $board->strategicStakeCash += $dividendPaidPerShare
-                * (float) $stock->getSharesOutstanding()
+        // Index dividend points: float-adjusted cash per ticker for index point calculations. Paid on the shares of
+        // record, the count before the report's buyback or issue settles, which the holders' shares are of. An anchor
+        // books the dividend as income and the redemption as a return of its stake.
+        if ($distributedPerShare > 0.0) {
+            $board->dividendPoints[$stock->getTicker()] = $distributedPerShare * $tick->floatSharesAtStart;
+            $board->strategicStakeCash += $distributedPerShare
+                * $tick->sharesAtStart
                 * StrategicHoldings::stake($stock->getTicker());
+            $this->anchorStakes->accrueDividends($stock, $dividendPaidPerShare, $tick->sharesAtStart);
+            $this->anchorStakes->settleRedemption($stock, $redeemedPerShare, $tick->sharesAtStart);
         }
 
         $tick->logReturn = $priceAtStart > 0.0 && $priceAfterReport > 0.0
-            ? log(($priceAfterReport + $dividendPaidPerShare) / $priceAtStart)
+            ? log(($priceAfterReport + $distributedPerShare) / $priceAtStart)
             : 0.0;
 
         // The board's float-weighted price return, measured before any split like the trend is: the fund
@@ -593,6 +599,40 @@ class StockTracker
     }
 
     /**
+     * The tick's change in share count, split into the buyback the report filed and the issues that make up the rest,
+     * each settled with the anchor holders at what it was struck at: a buyback at what the company paid, an offering
+     * at its discounted price, any other issue at the tick's price.
+     */
+    private function settleAnchorStakes(StockTick $tick, float $shareChange, float $price): void
+    {
+        $retired = 0.0;
+        $retiredValue = 0.0;
+        $offered = 0.0;
+        $offeredValue = 0.0;
+
+        foreach ($tick->reportEvents ?? [] as $generatedEvent) {
+            foreach (is_array($generatedEvent['actions'] ?? null) ? $generatedEvent['actions'] : [] as $action) {
+                if (($action['kind'] ?? null) === 'buyback') {
+                    $retired += (float) $action['shares'];
+                    $retiredValue += (float) ($action['value'] ?? ((float) $action['shares'] * $price));
+                } elseif (($action['kind'] ?? null) === 'offering') {
+                    $offered += (float) $action['shares'];
+                    $offeredValue += (float) $action['value'];
+                }
+            }
+        }
+
+        $retirePrice = $retired > 0.0 && $retiredValue > 0.0 ? $retiredValue / $retired : $price;
+        $offerPrice = $offered > 0.0 && $offeredValue > 0.0 ? $offeredValue / $offered : $price;
+        $issued = max(0.0, $shareChange + $retired);
+        $retired = $issued - $shareChange;
+        $offered = min($offered, $issued);
+        $issuePrice = $issued > 0.0 ? (($offered * $offerPrice) + (($issued - $offered) * $price)) / $issued : $price;
+
+        $this->anchorStakes->settleShareChange($tick->stock, $issued, $issuePrice, $retired, $retirePrice);
+    }
+
+    /**
      * CORPORATE ACTIONS (SPLITS)
      *
      * The company's own issuance and buybacks settle with the holders who keep their percentage, then a split restates
@@ -607,13 +647,14 @@ class StockTracker
         // in the earnings engine change it, and only a split should reach the agents as a share ratio.
         $preSplitShares = (float) $stock->getSharesOutstanding();
 
+        // The anchor holders settle first, since a buyback they sit out moves the float the lines below read.
+        $this->settleAnchorStakes($tick, $preSplitShares - $tick->sharesAtStart, $price);
+
         // The company's own issuance net of buybacks, as float at this tick's price, measured in pre-split shares
         // so a split -- a change of units, not of ownership -- never reads as either.
         $board->netIssuance += (($preSplitShares * max(0.0, min(1.0, (float) $stock->getPublicFloatPercentage()))) - $tick->floatSharesAtStart)
             * $price;
         $board->strategicStakeCash -= StrategicHoldings::stake($stock->getTicker()) * ($preSplitShares - $tick->sharesAtStart) * $price;
-        // The anchor holders keep their percentage the same way, out of their own treasuries.
-        $this->anchorStakes->settleProRata($stock, $preSplitShares - $tick->sharesAtStart, $price);
 
         $splitResult = $this->corporateActionEngine->processSplits(
             $stock,

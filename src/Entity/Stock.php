@@ -314,6 +314,14 @@ class Stock
     private ?string $listedStakesCarrying = null;
 
     /**
+     * @var string Deferred tax on the listed stakes' mark above what they cost, signed: a liability on an unrealised
+     *             gain, an asset on a loss. Kept apart from the plant's timing difference, which reverses on its own
+     *             schedule, while this is paid only when a stake is sold.
+     */
+    #[ORM\Column(type: Types::DECIMAL, precision: 30, scale: 4, options: ['default' => '0.0000'])]
+    private string $listedStakesDeferredTax = '0.0000';
+
+    /**
      * @var float|null Macaulay duration in years of the firm's investment securities book. Null falls back to
      *                 the sector default. Seeded per firm on purpose: rate risk without a cross-section is a
      *                 market where every lender lives or dies together.
@@ -1243,6 +1251,18 @@ class Stock
         return $this;
     }
 
+    /** Signed: positive is a liability on the stakes' unrealised gain, negative an asset on their loss. */
+    public function getListedStakesDeferredTax(): float
+    {
+        return (float) $this->listedStakesDeferredTax;
+    }
+
+    public function setListedStakesDeferredTax(float $listedStakesDeferredTax): self
+    {
+        $this->listedStakesDeferredTax = self::cleanBcStr($listedStakesDeferredTax, 4);
+        return $this;
+    }
+
     public function getLeaseLiability(): ?float
     {
         return $this->leaseLiability === null ? null : (float) $this->leaseLiability;
@@ -2122,6 +2142,7 @@ class Stock
             // Deferred tax assets: the loss carryforward's, and the securities book's when it carries a loss.
             + (float) $this->deferredTaxAsset
             + max(0.0, -(float) $this->securitiesDeferredTax)
+            + max(0.0, -(float) $this->listedStakesDeferredTax)
             + max(0.0, $leaseLiability);
     }
 
@@ -2135,6 +2156,7 @@ class Stock
             + (float) ($this->payables ?? 0.0)
             + (float) $this->deferredTaxLiability
             + max(0.0, (float) $this->securitiesDeferredTax)
+            + max(0.0, (float) $this->listedStakesDeferredTax)
             + max(0.0, $leaseLiability);
     }
 
@@ -2179,8 +2201,9 @@ class Stock
         $debt = (float) $this->getTotalDebt();
         $cash = (float) $this->corporateTreasury;
         // Net deferred tax: the liability is capital employed, the loss carryforward's asset is not operating
-        // capital (it is a claim on future tax, not plant), so it comes out like cash.
-        $deferredTax = (float) $this->deferredTaxLiability - (float) $this->deferredTaxAsset;
+        // capital (it is a claim on future tax, not plant), so it comes out like cash. The tax on a holding
+        // company's stakes finances the stakes, which invested capital carries at their mark.
+        $deferredTax = (float) $this->deferredTaxLiability - (float) $this->deferredTaxAsset + (float) $this->listedStakesDeferredTax;
 
         return max(1.0, max($equity * 0.50, ($equity + $debt + $deferredTax - $cash + $workingCapitalShift)));
     }

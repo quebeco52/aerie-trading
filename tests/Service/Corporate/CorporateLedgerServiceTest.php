@@ -539,10 +539,13 @@ class CorporateLedgerServiceTest extends TestCase
                 ['kind' => 'buyback', 'shares' => 410_288_930],
                 ['kind' => 'bonds', 'amount' => 18.31e9, 'purpose' => 'expansion'],
                 ['kind' => 'note', 'text' => 'Launched next-gen AI platform.'],
+                ['kind' => 'redemption', 'perShare' => 2.00, 'value' => 4.1e9],
             ],
         ]]);
 
         $this->assertSame(2.94, $rewrites[7]['eps']);
+        $this->assertEqualsWithDelta(0.50, $rewrites[7]['actions'][4]['perShare'], 1e-12, 'A redemption is paid per share.');
+        $this->assertEqualsWithDelta(4.1e9, $rewrites[7]['actions'][4]['value'], 1.0);
         $this->assertSame(0.08, $rewrites[7]['surprise']);
         $this->assertEqualsWithDelta(0.15, $rewrites[7]['actions'][0]['perShare'], 1e-12);
         $this->assertEqualsWithDelta(1_641_155_720, $rewrites[7]['actions'][1]['shares'], 1e-6);
@@ -556,6 +559,7 @@ class CorporateLedgerServiceTest extends TestCase
         $this->assertSame('$0.08', $presented->surpriseAmount);
         $this->assertSame('Paid $0.15/sh · 1.97% yield', $presented->pills[0]['text']);
         $this->assertSame('Repurchased 1.64B shares', $presented->pills[1]['text']);
+        $this->assertSame('Redeemed $0.50/sh · $4.10B returned', $presented->pills[4]['text']);
     }
 
     /** A filing with special items carries a reported figure beside the adjusted one; both are per share. */

@@ -898,6 +898,26 @@ class EarningsEngineReportTest extends TestCase
         $this->assertEqualsWithDelta((50.0 * (1.0 + $gap)) - 1.0, (float) $stock->getPrice(), 1e-6);
     }
 
+    /** A redemption leaves the price on the ex-date as the dividend does, and is no news either. */
+    public function testARedemptionLeavesThePriceWithTheDividend(): void
+    {
+        $marketEngine = $this->createStub(MarketEngine::class);
+        $marketEngine->method('strikeFairValue')->willReturn(['perceived_fair_value' => 110.0, 'analyst_targets' => []]);
+        $engine = $this->buildEngine(marketEngine: $marketEngine);
+
+        $stock = (new Stock())->setTicker('VANE')->setIndustry('Software - Application')->setPrice('50.00')->setSharesOutstanding('1000');
+        $ctx = new EarningsSimulationContext($stock, new \App\DTO\MacroStateDTO(), new \App\Service\Model\Sector\StandardCorporateBusinessModel(), 'none');
+        $ctx->fairValueBeforeReport = 100.0;
+        $ctx->costOfEquityBeforeReport = 0.09;
+        $ctx->allocation = ['dividend_paid' => 1.0, 'redemption_per_share' => 2.0];
+
+        (new \ReflectionMethod($engine, 'executeAnnouncementReturn'))->invoke($engine, $ctx);
+
+        $gap = EarningsEngine::reportPriceGap(100.0, 110.0, 3.0, 0.09);
+        $this->assertEqualsWithDelta($gap, $ctx->priceGapPct, 1e-12);
+        $this->assertEqualsWithDelta((50.0 * (1.0 + $gap)) - 3.0, (float) $stock->getPrice(), 1e-6);
+    }
+
     /** The revenue of the quarter just filed, as the last entry of the operating history records it. */
     private function filedQuarterRevenue(Stock $stock): float
     {

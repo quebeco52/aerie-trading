@@ -108,8 +108,13 @@ class MarketPricingContextTest extends TestCase
 
         $context = MarketPricingContext::forStock($sphere, $macroState, $this->health($sphere, $macroState), $ledger);
 
-        $this->assertSame($ledger->resolveMarkedBookValuePerShare($sphere), $context->bookValuePerShare);
+        // Its net asset value: the marked book with the subsidiaries at what they earn.
+        $strategy = \App\Data\Company\Sectors::strategyFor('Investment Companies');
+        $netAssetValue = (float) $ledger->resolveMarkedBookValuePerShare($sphere)
+            + (DebtEngine::subsidiaryRevaluation($sphere, $strategy, $macroState) / (float) $sphere->getSharesOutstanding());
+        $this->assertEqualsWithDelta($netAssetValue, $context->bookValuePerShare, 1e-9);
         $this->assertNotEqualsWithDelta((float) $sphere->getBookValuePerShare(), $context->bookValuePerShare, 1.0);
+        $this->assertEqualsWithDelta($ledger->resolveMarkedStakeShare($sphere, $netAssetValue), $context->marketMarkedValueShare, 1e-12);
     }
 
     /**

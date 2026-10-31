@@ -150,12 +150,13 @@ interface OperatingStrategyInterface
     public function getEffectiveReturn(Stock $stock): float;
     public function getTrueReturn(Stock $stock): float;
     /**
-     * Return on invested capital the firm's marked holdings are expected to add through their price, at the asset
-     * cost of capital they are held for (DebtEngine::assetCostOfCapital()); it reaches equity through the mark rather
-     * than the income statement. Zero for a firm holding none. Added where the whole firm's return is tested against
-     * its cost of capital, never to its earnings or cash.
+     * Return on invested capital the firm's marked holdings add beside its operating return, which leaves them out:
+     * the dividends they pay it, booked below the operating line, and the price gain they are expected to earn for
+     * the rest of the asset cost of capital they are held for (DebtEngine::assetCostOfCapital()). Zero for a firm
+     * holding none. Added where the whole firm's return is tested against its cost of capital, never to its earnings
+     * or cash.
      */
-    public function getExpectedHoldingGainReturn(Stock $stock, float $assetCostOfCapital): float;
+    public function getExpectedHoldingReturn(Stock $stock, float $assetCostOfCapital): float;
     /**
      * Through-the-cycle EBITDA: the long-run return on today's invested capital, before tax, plus depreciation. Null
      * before the firm has a long-run return.

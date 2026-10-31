@@ -173,8 +173,11 @@ class CompanySnapshotBuilder
             return null;
         }
 
-        $navPerShare = $this->anchorStakes->resolveMarkedBookValuePerShare($stock)
-            ?? (float) $stock->getBookValuePerShare();
+        // As the trust publishes it: the marked book with its subsidiaries at what they earn.
+        $markedBook = $this->anchorStakes->resolveMarkedBookValuePerShare($stock);
+        $navPerShare = $markedBook === null
+            ? (float) $stock->getBookValuePerShare()
+            : $markedBook + (DebtEngine::subsidiaryRevaluation($stock, $strategy, $macroState) / max(1.0, (float) $stock->getSharesOutstanding()));
 
         if ($navPerShare <= 0.0 || $price <= 0.0) {
             return null;

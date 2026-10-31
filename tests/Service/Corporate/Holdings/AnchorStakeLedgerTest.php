@@ -166,27 +166,108 @@ class AnchorStakeLedgerTest extends TestCase
         $gain = $this->ledger->markToMarket($sphere, 0.25);
 
         $this->assertEqualsWithDelta($carried, $gain, 1.0);
-        $this->assertEqualsWithDelta($gain * 0.25, (float) $sphere->getDeferredTaxLiability(), 1.0);
+        $this->assertEqualsWithDelta($gain * 0.25, $sphere->getListedStakesDeferredTax(), 1.0);
+        $this->assertSame('0.0000', $sphere->getDeferredTaxLiability(), 'the plant\'s timing difference is its own balance');
         $this->assertEqualsWithDelta($equity + ($gain * 0.75), (float) $sphere->getTotalEquity(), 1.0);
     }
 
-    /** The overhang unwinds when the portfolio falls, and can never release tax that was never postponed. */
-    public function testTheOverhangUnwindsAndNeverGoesNegative(): void
+    /**
+     * Below cost the overhang turns into an asset, and a fall and the recovery from it leave the book where it began:
+     * before, a floor at zero kept the tax on the recovery and none on the fall.
+     */
+    public function testAFallBelowCostAndTheRecoveryLeaveTheBookWhereItBegan(): void
     {
         $this->ledger->beginTick($this->flatBoard(200_000_000_000.0));
         $sphere = $this->sphere();
+        $sphere->setDeferredTaxLiability('30000000000.0000');
         $this->ledger->markToMarket($sphere, 0.25);
+        $equity = (float) $sphere->getTotalEquity();
 
-        $this->ledger->beginTick($this->flatBoard(400_000_000_000.0));
+        $this->ledger->beginTick($this->flatBoard(150_000_000_000.0));
         $this->ledger->markToMarket($sphere, 0.25);
-        $peakDeferred = (float) $sphere->getDeferredTaxLiability();
-        $this->assertGreaterThan(0.0, $peakDeferred);
+        $this->assertLessThan(0.0, $sphere->getListedStakesDeferredTax(), 'a loss below cost is an asset');
+        $this->assertSame('30000000000.0000', $sphere->getDeferredTaxLiability(), 'the plant\'s deferred tax is untouched');
 
-        // Straight back down, and further than it came up.
-        $this->ledger->beginTick($this->flatBoard(50_000_000_000.0));
+        $this->ledger->beginTick($this->flatBoard(200_000_000_000.0));
         $this->ledger->markToMarket($sphere, 0.25);
+        $this->assertEqualsWithDelta(0.0, $sphere->getListedStakesDeferredTax(), 1.0);
+        $this->assertEqualsWithDelta($equity, (float) $sphere->getTotalEquity(), 1.0);
+    }
 
-        $this->assertSame(0.0, (float) $sphere->getDeferredTaxLiability());
+    /** A tender realises its share of the portfolio's gain, and the tax deferred on it is paid. */
+    public function testATenderPaysTheTaxOnTheGainItRealises(): void
+    {
+        $sphere = $this->sphere();
+        $sphere->setCorporateTreasury('100000000000.0000');
+        $held = $this->flatBoard(200_000_000_000.0);
+        $albt = $this->holding($held, 'ALBT');
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere, 0.25);
+        foreach ($held as $stock) {
+            $stock->setPrice('400');
+        }
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere, 0.25);
+        $deferred = $sphere->getListedStakesDeferredTax();
+        $carrying = (float) $sphere->getListedStakesCarrying();
+        $equity = (float) $sphere->getTotalEquity();
+
+        // Float at the minimum, so a buyback forces the anchor to tender.
+        $albt->setPublicFloatPercentage((string) AnchorHoldings::MIN_TRADABLE_FLOAT);
+        $albt->setSharesOutstanding('900000000');
+        $this->ledger->settleShareChange($albt, 0.0, 0.0, 100_000_000.0, 400.0);
+
+        // No float to spare, so it tenders exactly its pro-rata part.
+        $proceeds = AnchorHoldings::forHolder('BRKW')['ALBT'] * 100_000_000.0 * 400.0;
+        $taxDue = ($proceeds / $carrying) * $deferred;
+        $this->assertGreaterThan(0.0, $taxDue);
+        $this->assertEqualsWithDelta($deferred - $taxDue, $sphere->getListedStakesDeferredTax(), 1.0);
+        $this->assertEqualsWithDelta(100_000_000_000.0 + $proceeds - $taxDue, (float) $sphere->getCorporateTreasury(), 1.0);
+        $this->assertEqualsWithDelta($equity, (float) $sphere->getTotalEquity(), 1.0, 'tax that was already deferred is no new loss');
+    }
+
+    /**
+     * A mandatory redemption pays every holder alike: the holder's fraction and the float hold, the cash is a return
+     * of the stake, and the part of the stake it redeems pays the tax deferred on it. Its value does not move, within
+     * the tick or after the price has fallen ex-date by what was paid.
+     */
+    public function testARedemptionReturnsPartOfTheStakeAndMovesNoFraction(): void
+    {
+        $sphere = $this->sphere();
+        $sphere->setCorporateTreasury('100000000000.0000');
+        $held = $this->flatBoard(200_000_000_000.0);
+        $albt = $this->holding($held, 'ALBT');
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere, 0.25);
+        foreach ($held as $stock) {
+            $stock->setPrice('400');
+        }
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere, 0.25);
+        $deferred = $sphere->getListedStakesDeferredTax();
+        $carrying = (float) $sphere->getListedStakesCarrying();
+        $equity = (float) $sphere->getTotalEquity();
+        $float = (float) $albt->getPublicFloatPercentage();
+        $fraction = AnchorStakeLedger::fraction($albt, 'BRKW');
+        $value = (float) $this->ledger->resolveMarkedBookValuePerShare($sphere);
+
+        $this->ledger->settleRedemption($albt, 4.0, 1_000_000_000.0);
+
+        $proceeds = $fraction * 4.0 * 1_000_000_000.0;
+        $taxDue = ($proceeds / $carrying) * $deferred;
+        $this->assertGreaterThan(0.0, $taxDue);
+        $this->assertSame($fraction, AnchorStakeLedger::fraction($albt, 'BRKW'), 'redeemed alike, its percentage holds');
+        $this->assertSame($float, (float) $albt->getPublicFloatPercentage());
+        $this->assertEqualsWithDelta($carrying - $proceeds, (float) $sphere->getListedStakesCarrying(), 1.0);
+        $this->assertEqualsWithDelta($deferred - $taxDue, $sphere->getListedStakesDeferredTax(), 1.0);
+        $this->assertEqualsWithDelta(100_000_000_000.0 + $proceeds - $taxDue, (float) $sphere->getCorporateTreasury(), 1.0);
+        $this->assertEqualsWithDelta($equity, (float) $sphere->getTotalEquity(), 1.0, 'a return of the stake, not income');
+        $this->assertEqualsWithDelta($value, (float) $this->ledger->resolveMarkedBookValuePerShare($sphere), 1e-6, 'the cash left the company it came from');
+
+        $albt->setPrice('396');
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->assertEqualsWithDelta($value, (float) $this->ledger->resolveMarkedBookValuePerShare($sphere), 1e-6, 'ex-date, the stake fell by what was paid');
+        $this->assertSame(0.0, AnchorStakeLedger::dividendsReceivable($sphere), 'no income was paid');
     }
 
     /** Assets moved by the whole mark, so liabilities and equity together must move by the same amount. */
@@ -241,6 +322,14 @@ class AnchorStakeLedgerTest extends TestCase
         $this->assertEqualsWithDelta(($filedEquity + ($carried * 0.50)) / 1_000_000_000.0, $marked, 0.01);
         // The filed book has not moved: only the report moves it.
         $this->assertSame($filedEquity, (float) $sphere->getTotalEquity());
+
+        // Net of the tax the report books on it, so the report moves nothing the valuation had not seen.
+        $this->ledger->beginTick($this->flatBoard(200_000_000_000.0));
+        $this->ledger->markToMarket($sphere, 0.25);
+        $this->ledger->beginTick($this->flatBoard(300_000_000_000.0));
+        $beforeReport = (float) $this->ledger->resolveMarkedBookValuePerShare($sphere);
+        $this->ledger->markToMarket($sphere, 0.25);
+        $this->assertEqualsWithDelta((float) $sphere->getTotalEquity() / 1_000_000_000.0, $beforeReport, 1e-6);
     }
 
     /** The stakes' share of the marked book is the part of the sphere's value the board's prices carry. */
@@ -266,7 +355,6 @@ class AnchorStakeLedgerTest extends TestCase
         $this->assertNull($this->ledger->resolveMarkedBookValuePerShare(StockBuilder::create('CBIL')->build()));
     }
 
-    /** Stakes are fractions of capitalisation precisely so a split cannot move them. */
     /**
      * A sphere keeps its percentage by subscribing for its fraction of an issue, in cash. Without the cash the
      * stake rose with the raise, and the holder booked as a gain the money it never put up.
@@ -279,43 +367,136 @@ class AnchorStakeLedgerTest extends TestCase
         $this->ledger->beginTick([...$held, $sphere]);
         $this->ledger->markToMarket($sphere);
         $carrying = (float) $sphere->getListedStakesCarrying();
+        $fraction = AnchorHoldings::forHolder('BRKW')['ALBT'];
 
         // ALBT sells 100M new shares at $200, a $20B raise; the sphere's part is its fraction of it.
-        $this->ledger->settleProRata($this->holding($held, 'ALBT'), 100_000_000.0, 200.0);
-        $paid = AnchorHoldings::forHolder('BRKW')['ALBT'] * 20_000_000_000.0;
+        $albt = $this->holding($held, 'ALBT');
+        $albt->setSharesOutstanding('1100000000');
+        $this->ledger->settleShareChange($albt, 100_000_000.0, 200.0, 0.0, 0.0);
+        $paid = $fraction * 20_000_000_000.0;
 
         $this->assertEqualsWithDelta(100_000_000_000.0 - $paid, (float) $sphere->getCorporateTreasury(), 1.0);
         $this->assertEqualsWithDelta($carrying + $paid, (float) $sphere->getListedStakesCarrying(), 1.0);
+        $this->assertEqualsWithDelta($fraction, AnchorStakeLedger::fraction($albt, 'BRKW'), 1e-12, 'an issue it subscribes to keeps its percentage');
         $this->assertEqualsWithDelta(0.0, $this->ledger->markToMarket($sphere), 1.0, 'a mark later in the tick sees the shares it paid for');
 
         // The next tick's board carries the new shares at the same price: still nothing to book.
-        $next = array_map(
-            static fn(Stock $stock): Stock => $stock->getTicker() === 'ALBT'
-                ? StockBuilder::create('ALBT')->withPrice(200.0)->withSharesOutstanding(1_100_000_000)->build()
-                : $stock,
-            $held,
-        );
-        $this->ledger->beginTick([...$next, $sphere]);
+        $albt->setPrice('200');
+        $this->ledger->beginTick([...$held, $sphere]);
         $this->assertEqualsWithDelta(0.0, $this->ledger->markToMarket($sphere), 1.0);
         $this->assertEqualsWithDelta(1_880_000_000_000.0, (float) $sphere->getTotalEquity(), 1.0);
     }
 
-    /** Into a buyback it tenders its fraction, and is paid for the shares it gives up. */
-    public function testABuybackIsTenderedIntoForCash(): void
+    /** A buyback it sits out: no cash moves, and its fraction rises by the shares the float gave up. */
+    public function testABuybackIsSatOutAndRaisesTheHoldersPercentage(): void
     {
         $sphere = $this->sphere();
         $sphere->setCorporateTreasury('100000000000.0000');
         $held = $this->flatBoard(200_000_000_000.0);
+        $albt = $this->holding($held, 'ALBT');
+        $albt->setPublicFloatPercentage('0.6000');
         $this->ledger->beginTick([...$held, $sphere]);
         $this->ledger->markToMarket($sphere);
         $carrying = (float) $sphere->getListedStakesCarrying();
+        $fraction = AnchorHoldings::forHolder('BRKW')['ALBT'];
 
-        $this->ledger->settleProRata($this->holding($held, 'ALBT'), -50_000_000.0, 200.0);
-        $received = AnchorHoldings::forHolder('BRKW')['ALBT'] * 10_000_000_000.0;
+        $albt->setSharesOutstanding('950000000');
+        $this->ledger->settleShareChange($albt, 0.0, 0.0, 50_000_000.0, 200.0);
 
-        $this->assertEqualsWithDelta(100_000_000_000.0 + $received, (float) $sphere->getCorporateTreasury(), 1.0);
-        $this->assertEqualsWithDelta($carrying - $received, (float) $sphere->getListedStakesCarrying(), 1.0);
+        $this->assertEqualsWithDelta(100_000_000_000.0, (float) $sphere->getCorporateTreasury(), 1.0, 'nothing tendered, nothing paid');
+        $this->assertEqualsWithDelta($carrying, (float) $sphere->getListedStakesCarrying(), 1.0);
+        $this->assertEqualsWithDelta($fraction / 0.95, AnchorStakeLedger::fraction($albt, 'BRKW'), 1e-9);
+        $this->assertEqualsWithDelta(0.6 + $fraction - ($fraction / 0.95), (float) $albt->getPublicFloatPercentage(), 1e-4, 'the float gave up what the holder kept');
+        $this->assertEqualsWithDelta(0.0, $this->ledger->markToMarket($sphere), 1.0, 'bought back at its price, the stake is worth what it was');
+    }
+
+    /** It tenders only what keeps the company trading, and is paid for that. */
+    public function testTheHolderTendersOnlyWhatKeepsTheMinimumFloatTrading(): void
+    {
+        $sphere = $this->sphere();
+        $sphere->setCorporateTreasury('100000000000.0000');
+        $held = $this->flatBoard(200_000_000_000.0);
+        $albt = $this->holding($held, 'ALBT');
+        $fraction = AnchorHoldings::forHolder('BRKW')['ALBT'];
+        $albt->setPublicFloatPercentage((string) (AnchorHoldings::MIN_TRADABLE_FLOAT + 0.05));
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere);
+
+        // A fifth of the company is retired: sitting it out would leave less than the minimum trading.
+        $albt->setSharesOutstanding('800000000');
+        $this->ledger->settleShareChange($albt, 0.0, 0.0, 200_000_000.0, 200.0);
+
+        $ceiling = $fraction + 0.05;
+        $tendered = ($fraction * 1_000_000_000.0) - ($ceiling * 800_000_000.0);
+        $this->assertEqualsWithDelta(AnchorHoldings::MIN_TRADABLE_FLOAT, (float) $albt->getPublicFloatPercentage(), 1e-4);
+        $this->assertEqualsWithDelta($ceiling, AnchorStakeLedger::fraction($albt, 'BRKW'), 1e-9);
+        $this->assertEqualsWithDelta(100_000_000_000.0 + ($tendered * 200.0), (float) $sphere->getCorporateTreasury(), 1.0);
         $this->assertEqualsWithDelta(0.0, $this->ledger->markToMarket($sphere), 1.0, 'what it tendered was paid for, not lost');
+    }
+
+    /** The block holders settle off the market, so a buyback buys from the market only the float's part and theirs. */
+    public function testOnlyTheFloatsPartOfAShareChangeGoesThroughTheMarket(): void
+    {
+        $free = StockBuilder::create('FREE')->withSharesOutstanding(1_000_000_000)->build();
+        $free->setPublicFloatPercentage('0.7000');
+        $this->assertEqualsWithDelta(70_000_000.0, AnchorStakeLedger::marketSharesOfBuyback($free, 100_000_000.0), 1.0);
+        $this->assertEqualsWithDelta(70_000_000.0, AnchorStakeLedger::marketSharesOfIssue($free, 100_000_000.0), 1.0);
+
+        $albt = StockBuilder::create('ALBT')->withSharesOutstanding(1_000_000_000)->build();
+        $albt->setPublicFloatPercentage('0.4000');
+        $fraction = AnchorHoldings::forHolder('BRKW')['ALBT'];
+        // The anchor sits the buyback out, so the float sells its share too; an issue it buys its part of.
+        $this->assertEqualsWithDelta((0.4 + $fraction) * 100_000_000.0, AnchorStakeLedger::marketSharesOfBuyback($albt, 100_000_000.0), 1.0);
+        $this->assertEqualsWithDelta(0.4 * 100_000_000.0, AnchorStakeLedger::marketSharesOfIssue($albt, 100_000_000.0), 1.0);
+    }
+
+    /**
+     * The holder is paid its fraction of a held company's dividend, which its book carries until its report books it.
+     */
+    public function testAHeldCompanysDividendIsPaidToTheHolderAndMovesNoValue(): void
+    {
+        $sphere = $this->sphere();
+        $held = $this->flatBoard(200_000_000_000.0);
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere);
+        $before = $this->ledger->resolveMarkedBookValuePerShare($sphere);
+        $fraction = AnchorHoldings::forHolder('BRKW')['ALBT'];
+
+        $albt = $this->holding($held, 'ALBT');
+        $this->ledger->accrueDividends($albt, 2.0, 1_000_000_000.0);
+        $albt->setPrice('198');
+        $this->ledger->beginTick([...$held, $sphere]);
+
+        $paid = $fraction * 2.0 * 1_000_000_000.0;
+        $this->assertEqualsWithDelta($paid, AnchorStakeLedger::dividendsReceivable($sphere), 1.0);
+        $this->assertEqualsWithDelta((float) $before, (float) $this->ledger->resolveMarkedBookValuePerShare($sphere), 1e-6, 'ex-dividend, the stake fell by what was paid');
+
+        $this->assertEqualsWithDelta($paid, $this->ledger->collectDividends($sphere), 1.0);
+        $this->assertEqualsWithDelta(0.0, AnchorStakeLedger::dividendsReceivable($sphere), 1.0, 'booked once');
+        $this->assertEqualsWithDelta($paid * 4.0, AnchorStakeLedger::trailingDividends($sphere), 1.0, 'the first quarter opens the trailing rate');
+        $this->assertEqualsWithDelta(0.0, $this->ledger->collectDividends($sphere), 1.0);
+    }
+
+    /**
+     * A report that pays a dividend and buys back shares pays the dividend on the shares of record: the holder that sat
+     * the buyback out is paid on every share it holds, which its fraction of the smaller count shows once the buyback
+     * settles.
+     */
+    public function testADividendBesideABuybackIsPaidOnTheSharesOfRecord(): void
+    {
+        $sphere = $this->sphere();
+        $held = $this->flatBoard(200_000_000_000.0);
+        $this->ledger->beginTick([...$held, $sphere]);
+        $this->ledger->markToMarket($sphere);
+        $fraction = AnchorHoldings::forHolder('BRKW')['ALBT'];
+
+        $albt = $this->holding($held, 'ALBT');
+        $albt->setSharesOutstanding('900000000');
+        $this->ledger->accrueDividends($albt, 2.0, 1_000_000_000.0);
+        $this->ledger->settleShareChange($albt, 0.0, 0.0, 100_000_000.0, 200.0);
+
+        $this->assertEqualsWithDelta($fraction * 1_000_000_000.0 * 2.0, AnchorStakeLedger::dividendsReceivable($sphere), 1.0);
+        $this->assertEqualsWithDelta(AnchorStakeLedger::dividendsReceivable($sphere), AnchorStakeLedger::fraction($albt, 'BRKW') * 900_000_000.0 * 2.0, 1.0);
     }
 
     /** @param list<Stock> $board */
@@ -330,6 +511,7 @@ class AnchorStakeLedgerTest extends TestCase
         $this->fail("{$ticker} is not on the board");
     }
 
+    /** Stakes are fractions of capitalisation precisely so a split cannot move them. */
     public function testASplitInAHoldingLeavesTheSphereUntouched(): void
     {
         $this->ledger->beginTick($this->flatBoard(200_000_000_000.0));
