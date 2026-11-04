@@ -78,8 +78,8 @@ class MarketPricingContext
         /** Book equity less goodwill, per share; null when the caller has none, and the P/B leg then reads book. */
         public ?float $tangibleBookValuePerShare = null,
         /**
-         * Share of fair value already carried at the board's prices (a sphere's listed stakes), which the market's
-         * repricing has reached through those prices; zero for a firm holding none.
+         * Share of fair value already carried at the market's prices, which the market's repricing has reached: all of
+         * a sphere's net asset value, zero for a firm holding no stakes.
          */
         public float $marketMarkedValueShare = 0.0,
         /** The payout ratio the firm's dividend policy steers to; zero for a firm with no dividend policy. */
@@ -146,7 +146,8 @@ class MarketPricingContext
         $treasury = (float) $stock->getCorporateTreasury();
         $excessCash = \App\Service\Corporate\CorporateMetrics::excessOperatingCash($stock);
         // A sphere's filed book moves once a quarter; the listed portfolio inside it moves every tick, and fair value
-        // is struck on the second, with its subsidiaries at what they earn: its net asset value.
+        // is struck on the second, with its subsidiaries at what they earn: its net asset value. Its stakes stand at
+        // the board's prices and its subsidiaries are repriced with them, so all of it is at the market's prices.
         $markedBook = $anchorStakes->resolveMarkedBookValuePerShare($stock);
         $netAssetValue = $markedBook === null
             ? null
@@ -167,7 +168,7 @@ class MarketPricingContext
             marketVol: $macroState->marketVolatility,
             macroState: $macroState,
             bookValuePerShare: $netAssetValue ?? (float) $stock->getBookValuePerShare(),
-            marketMarkedValueShare: $netAssetValue === null ? 0.0 : $anchorStakes->resolveMarkedStakeShare($stock, $netAssetValue),
+            marketMarkedValueShare: $netAssetValue === null ? 0.0 : 1.0,
             maShock: $maShock,
             currentRoic: $strategy->getEffectiveReturn($stock),
             trailingReturn: self::trailingReturn($stock, $strategy),

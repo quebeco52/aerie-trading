@@ -1010,6 +1010,45 @@ class MarketEngineTest extends TestCase
         $this->assertEqualsWithDelta($this->engine->strikeFairValue($context)['perceived_fair_value'], $result['perceived_fair_value'], 1e-9);
     }
 
+    /**
+     * A closed-end structure's discount is on everything it holds: a dollar of surplus cash inside it adds a dollar
+     * less the discount to fair value and to every analyst's target, where an operating company's adds the dollar. Its
+     * net asset value is all at the market's prices already, so a market move reprices none of it a second time.
+     */
+    public function testATrustsCashTakesItsDiscountAndItsAssetsAreNotRepricedTwice(): void
+    {
+        $strike = fn(string $model, float $cash, float $shift = 0.0, float $marked = 0.0): array => $this->engine->strikeFairValue(new MarketPricingContext(
+            currentPrice: 100.0,
+            currentVolatility: 0.2,
+            longTermVolatility: 0.2,
+            dt: 1.0 / 252.0,
+            lambda: 0.0,
+            beta: 0.8,
+            macroState: new MacroStateDTO(equityValuationShift: $shift),
+            bookValuePerShare: 100.0 + $cash,
+            currentRoic: 0.08,
+            trailingReturn: 0.08,
+            revenuePerShare: 20.0,
+            businessModel: $model,
+            liveCostOfEquity: 0.08,
+            marketMarkedValueShare: $marked,
+            excessCashPerShare: 30.0 + $cash,
+        ));
+        $structure = 1.0 - \App\Data\Company\Sectors::getBusinessModelStrategy('investment_company')->getStructuralValuationDiscount(new MacroStateDTO());
+        $this->assertLessThan(1.0, $structure);
+
+        $added = 10.0;
+        $trust = $strike('investment_company', 0.0, marked: 1.0);
+        $richer = $strike('investment_company', $added, marked: 1.0);
+        $this->assertEqualsWithDelta($added * $structure, $richer['perceived_fair_value'] - $trust['perceived_fair_value'], 1e-9);
+        foreach ($trust['analyst_targets'] as $school => $target) {
+            $this->assertEqualsWithDelta($added * $structure, $richer['analyst_targets'][$school] - $target, 1e-9, $school);
+        }
+        $this->assertEqualsWithDelta($added, $strike('tech', $added)['perceived_fair_value'] - $strike('tech', 0.0)['perceived_fair_value'], 1e-9);
+
+        $this->assertEqualsWithDelta($trust['perceived_fair_value'], $strike('investment_company', 0.0, 0.3, 1.0)['perceived_fair_value'], 1e-9);
+    }
+
     /** An own jump is no franchise news: fair value does not take it. */
     public function testAnOwnJumpLeavesTheFranchiseAlone(): void
     {

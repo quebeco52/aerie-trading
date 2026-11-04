@@ -68,8 +68,10 @@ interface ValuationStrategyInterface
      *
      * @param float $assetCostOfCapital The businesses' through-the-cycle cost of capital, on their asset beta.
      * @param float $growth             Their expected nominal growth.
+     * @param float $marketRepricing    The factor the market's valuation shift puts on listed businesses of their
+     *                                  beta (MacroStateDTO::equityRepricing()), which values them as the board does.
      */
-    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate): float;
+    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate, float $marketRepricing): float;
 
     /**
      * Whether the firm's own news is news about the margin it earns (Stock::$franchisePower). A trust's own news is

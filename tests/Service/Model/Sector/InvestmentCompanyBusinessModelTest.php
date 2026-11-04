@@ -303,7 +303,8 @@ class InvestmentCompanyBusinessModelTest extends TestCase
 
     /**
      * The net asset value takes the subsidiaries at what their earnings are worth: at their cost of capital they are
-     * worth their capital, below it less, above it more, and the step is what the value-driver formula gives.
+     * worth their capital, below it less, above it more, and the step is what the value-driver formula gives. The
+     * market's repricing reaches their whole value, as it reaches a listed business's, and not the capital alone.
      */
     public function testTheSubsidiariesAreValuedOnWhatTheyEarn(): void
     {
@@ -319,14 +320,16 @@ class InvestmentCompanyBusinessModelTest extends TestCase
         };
 
         $earning(0.08);
-        $this->assertEqualsWithDelta(0.0, $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate), $capital * 1e-9, 'earning their cost, worth their capital');
+        $this->assertEqualsWithDelta(0.0, $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate, 1.0), $capital * 1e-9, 'earning their cost, worth their capital');
 
         $earning(0.06);
-        $this->assertEqualsWithDelta($capital * (0.06 - 0.08) / (0.08 - $growth), $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate), $capital * 1e-6);
+        $this->assertEqualsWithDelta($capital * (0.06 - 0.08) / (0.08 - $growth), $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate, 1.0), $capital * 1e-6);
 
         $earning(0.10);
-        $this->assertGreaterThan(0.0, $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate));
-        $this->assertSame(0.0, (new \App\Service\Model\Sector\StandardCorporateBusinessModel())->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate), 'an operating company is valued whole');
+        $this->assertGreaterThan(0.0, $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate, 1.0));
+        $worth = $capital + $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate, 1.0);
+        $this->assertEqualsWithDelta(($worth * 1.25) - $capital, $this->model->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate, 1.25), $capital * 1e-9, 'repriced whole');
+        $this->assertSame(0.0, (new \App\Service\Model\Sector\StandardCorporateBusinessModel())->resolveSubsidiaryRevaluation($stock, 0.08, $growth, $taxRate, 1.0), 'an operating company is valued whole');
     }
 
     /** A trust never borrows to retire its shares, however little debt it carries; an operating company would. */

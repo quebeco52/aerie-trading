@@ -332,21 +332,6 @@ class AnchorStakeLedgerTest extends TestCase
         $this->assertEqualsWithDelta((float) $sphere->getTotalEquity() / 1_000_000_000.0, $beforeReport, 1e-6);
     }
 
-    /** The stakes' share of the marked book is the part of the sphere's value the board's prices carry. */
-    public function testTheMarkedStakeShareIsTheStakesOverTheMarkedBook(): void
-    {
-        $this->ledger->beginTick($this->flatBoard(200_000_000_000.0));
-        $sphere = $this->sphere();
-        $this->ledger->markToMarket($sphere);
-        $this->ledger->beginTick($this->flatBoard(300_000_000_000.0));
-
-        $stakes = (float) $this->ledger->resolveStakeValue($sphere);
-        $book = (float) $this->ledger->resolveMarkedBookValuePerShare($sphere) * 1_000_000_000.0;
-        $this->assertEqualsWithDelta($stakes / $book, $this->ledger->resolveMarkedStakeShare($sphere), 1e-12);
-        $this->assertGreaterThan(0.0, $this->ledger->resolveMarkedStakeShare($sphere));
-        $this->assertSame(0.0, $this->ledger->resolveMarkedStakeShare(StockBuilder::create('CBIL')->build()), 'A firm holding none carries nothing at the board\'s prices.');
-    }
-
     public function testAnUnmarkedFirmFallsBackToItsFiledBook(): void
     {
         $this->ledger->beginTick($this->flatBoard(200_000_000_000.0));

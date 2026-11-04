@@ -86,13 +86,13 @@ final class FairValue
         );
 
         // Value at the market's discount rate: the repricing the market factor has put on equities reaches the
-        // business, and surplus cash stays at face. The business takes the share's beta, which the price loads, with
-        // the cash taken out at this value's own weights (Valuation::cashFreeBeta()), so the whole value moves by the
-        // share's beta as its price does and a market move leaves no gap for the pull to close. Value already carried
-        // at the board's prices has had it through them, so only the rest is repriced: the stakes are a share of the
-        // book beside the cash.
+        // business, and surplus cash stays at the value struck on it. The business takes the share's beta, which the
+        // price loads, with the cash taken out at this value's own weights (Valuation::cashFreeBeta()), so the whole
+        // value moves by the share's beta as its price does and a market move leaves no gap for the pull to close.
+        // Value already carried at the board's prices has had it through them, so only the rest is repriced: the stakes
+        // are a share of the book beside the cash.
         $preRepricing = $state['perceived_fair_value'];
-        $cash = min(max(0.0, $ctx->excessCashPerShare), $preRepricing);
+        $cash = min(max(0.0, $ctx->excessCashPerShare * self::structure(\App\Data\Company\Sectors::getBusinessModelStrategy($ctx->businessModel), $ctx->macroState)), $preRepricing);
         $business = $preRepricing - $cash;
         $nonCashBook = $ctx->bookValuePerShare - $cash;
         $markedShare = $ctx->marketMarkedValueShare > 0.0 && $nonCashBook > 0.0
@@ -142,7 +142,8 @@ final class FairValue
      *                                                  moves, per share, keyed by lever.
      * @param float|null $longRunReturn  The firm's measured long-run return; the trailing return's gap to it is valued
      *                                   as it fades.
-     * @param float $excessCashPerShare  Cash beyond what the business needs to run, valued at face beside it.
+     * @param float $excessCashPerShare  Cash beyond what the business needs to run, valued at face beside it (less a
+     *                                   closed-end structure's discount).
      * @param float $capacityGap         Log of the plant the expected market calls for over the plant in use.
      * @param float $capacitySpare       A company with plant by segment: its segments' plant to spare, valued apart.
      * @param float $franchisePower     The log-odds shift the firm's own news has given its structural margin.
@@ -184,8 +185,11 @@ final class FairValue
         $macro = $macroState ?? new MacroStateDTO();
 
         // Cash beyond what the business needs is worth its face: every leg below values the business on the book it
-        // runs on, and the surplus is added back after at face.
+        // runs on, and the surplus is added back after at face. Inside a closed-end structure it takes the discount
+        // the structure trades at, as everything it holds does: its holders cannot reach that cash either.
         $bookValuePerShare = max(0.0, $bookValuePerShare - $excessCashPerShare);
+        $structure = self::structure($strategy, $macroState);
+        $surplusCash = $excessCashPerShare * $structure;
 
         // Every leg below values EQUITY: levered earnings on a P/E, book equity on a P/B, the dividends its policy
         // pays. All are discounted at the cost of equity on the return the firm earns on its equity (Damodaran 2012,
@@ -337,7 +341,7 @@ final class FairValue
             // Closed-end structures trade below the assets they hold, by a gap that moves with the cycle. Applied
             // here rather than inside the consensus so it reaches the reversion target: the price is pulled toward
             // the discounted value, which is what makes a widening discount a fall rather than a mispricing.
-            $fairValue *= (1.0 - $strategy->getStructuralValuationDiscount($macroState ?? new MacroStateDTO()));
+            $fairValue *= self::structure($strategy, $macroState);
 
             return [
                 'fair_value' => $fairValue,
@@ -381,7 +385,7 @@ final class FairValue
             $legs = $underExpectedLaws(false);
             // Laws unrevised would strike the same legs again, a ratio of exactly one.
             $policyRepricing = $macroState->lawsAheadRevised()
-                ? ($legs['fair_value'] + $excessCashPerShare) / ($underExpectedLaws(true)['fair_value'] + $excessCashPerShare)
+                ? ($legs['fair_value'] + $surplusCash) / ($underExpectedLaws(true)['fair_value'] + $surplusCash)
                 : 1.0;
         }
 
@@ -396,7 +400,7 @@ final class FairValue
         $franchiseMultiple = Valuation::leveredValueMultiple(Valuation::franchiseValueMultiple($franchiseShare, FirmEconomics::franchiseProfitMultiple($baselineMargin, $franchisePower)), $franchiseLeverage);
         $franchiseBase = max(0.0, $legs['fair_value']);
 
-        $perceivedFairValue = max(0.01, ($franchiseBase * $franchiseMultiple) + $excessCashPerShare);
+        $perceivedFairValue = max(0.01, ($franchiseBase * $franchiseMultiple) + $surplusCash);
 
         // Brunnermeier-Pedersen Funding Liquidity Dampener (2009)
         // During macroeconomic stress and systemic crises, funding liquidity dries up and capital-constrained
@@ -406,21 +410,29 @@ final class FairValue
 
         // Each analyst prices the closed-end discount the consensus does: a leg struck before it reads as upside the
         // structure never pays.
-        $structure = 1.0 - $strategy->getStructuralValuationDiscount($macroState ?? new MacroStateDTO());
 
         return [
             'perceived_fair_value' => $perceivedFairValue,
             'dynamic_reversion'    => $dynamicReversion,
             'policy_repricing'     => $policyRepricing,
             'analyst_targets'      => [
-                'growth_analyst' => max(0.01, ($legs['earnings_value'] * $structure * $franchiseMultiple) + $excessCashPerShare),
-                'income_analyst' => max(0.01, ($legs['dividend_value'] * $structure * $franchiseMultiple) + $excessCashPerShare),
-                'value_analyst'  => max(0.01, ($legs['book_value'] * $structure * self::VALUE_ANALYST_BOOK_MULT * $franchiseMultiple) + $excessCashPerShare),
+                'growth_analyst' => max(0.01, ($legs['earnings_value'] * $structure * $franchiseMultiple) + $surplusCash),
+                'income_analyst' => max(0.01, ($legs['dividend_value'] * $structure * $franchiseMultiple) + $surplusCash),
+                'value_analyst'  => max(0.01, ($legs['book_value'] * $structure * self::VALUE_ANALYST_BOOK_MULT * $franchiseMultiple) + $surplusCash),
             ],
             'franchise_base' => $franchiseBase,
             'franchise_share' => $franchiseShare,
             'franchise_multiple' => $franchiseMultiple,
             'franchise_leverage' => $franchiseLeverage,
         ];
+    }
+
+    /**
+     * What a closed-end structure leaves of the value it holds, after the discount it trades at; one for any other
+     * firm.
+     */
+    private static function structure(\App\Service\Model\BusinessModelInterface $strategy, ?MacroStateDTO $macroState): float
+    {
+        return 1.0 - $strategy->getStructuralValuationDiscount($macroState ?? new MacroStateDTO());
     }
 }

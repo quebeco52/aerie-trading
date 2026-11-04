@@ -49,3 +49,11 @@ Question family: does the investment holding company's price, beta, EVA and capi
   1-4 rw3 rw4; python3 var/harness/brkw/rw4x.py 1-4 rw3 rw4) > var/harness/brkw/brkw_rw4_4s25y.out`. `rw4x.py`: held-firm
   quantities from the OUT record (split-adjusted EPS/DPS CAGR, TSR, price path, cash, redemption/price) and the
   redemption checks from `hrep`/`red`/`redtick` rows and end-row `red_*` (receipt vs fraction x cash, tax). ~2.3 min.
+- rw5 (11-01, rw4 = e35cbe03 + the trust's NAV at the market's prices: `DebtEngine::subsidiaryRevaluation()` reprices
+  the subsidiaries by `equityRepricing(beta)`, `marketMarkedValueShare` 1 for a sphere, surplus cash takes the
+  structural discount in `FairValue`). `nav_sop` changes definition between rw4 and rw5 (each arm's published NAV);
+  `mbvps` (marked book, no subsidiary revaluation) is the same in both. Batch: `bin/harness-batch var/harness/brkw/run.sh
+  1-4 rw5 && (python3 var/harness/brkw/rw2.py 1-4 rw3 rw4 rw5; python3 var/harness/brkw/rw3x.py 1-4 rw4 rw5; python3
+  var/harness/brkw/rw4x.py 1-4 rw4 rw5; python3 var/harness/brkw/rw5x.py 1-4 rw4 rw5) > var/harness/brkw/brkw_rw5_4s25y.out`.
+  `rw5x.py`: P/NAVsop mean/p10/p90/share > 1/< 0.5, P/mbv, pfv/NAV, px/pfv, cash/NAV mean/y10/y25/max/slope, lbeta,
+  NI, BRKW TSR (works on any arm). ~2.6 min for 4 runs.

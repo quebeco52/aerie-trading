@@ -8,6 +8,7 @@
 #   rw2   working tree 10-31 (3): + whole holding return, dividends on shares of record, charter deals
 #   rw3   working tree 10-31 (5): rw2 + AnchorHoldings::MIN_TRADABLE_FLOAT 0.05 -> 0.10
 #   rw4   working tree 10-31 (6): rw3 + held firms return surplus by pro-rata redemption
+#   rw5   working tree 11-01: rw4 + subsidiaries repriced in NAV, nothing repriced twice, cash takes the discount
 # Env: YEARS (25), TPY (360). Outputs runs/<arm>-<seed>.{jsonl,brkw.jsonl,log}.
 set -eu
 H=$(cd "$(dirname "$0")" && pwd)
@@ -15,8 +16,8 @@ PROJ=$(cd "$H/../../.." && pwd)
 mkdir -p "$H/runs"
 case "$1" in
   base) BASEV=${BASE:?set BASE=<tree>} ;;
-  fix|bb|pay|rw|rw2|rw3|rw4|probe0) BASEV="" ;;
-  *) echo "usage: run.sh base|fix|bb|pay|rw|rw2|rw3|rw4|probe0 <seed>" >&2; exit 2 ;;
+  fix|bb|pay|rw|rw2|rw3|rw4|rw5|probe0) BASEV="" ;;
+  *) echo "usage: run.sh base|fix|bb|pay|rw|rw2|rw3|rw4|rw5|probe0 <seed>" >&2; exit 2 ;;
 esac
 rm -f "$H/runs/$1-$2.jsonl" "$H/runs/$1-$2.brkw.jsonl"
 BO="$H/runs/$1-$2.brkw.jsonl"

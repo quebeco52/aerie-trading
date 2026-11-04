@@ -457,26 +457,6 @@ final class AnchorStakeLedger
     }
 
     /**
-     * Share of the holder's net asset value its listed stakes are, at the board's prices and net of the tax a move in
-     * them accrues: the part of its value the market's repricing has already reached through those prices. Zero for a
-     * firm holding none.
-     *
-     * @param float|null $netAssetValuePerShare The value it is a share of; the marked book when none is given.
-     */
-    public function resolveMarkedStakeShare(Stock $holder, ?float $netAssetValuePerShare = null): float
-    {
-        $netAssetValuePerShare ??= $this->resolveMarkedBookValuePerShare($holder);
-        $marketValue = $this->resolveStakeValue($holder);
-        if ($netAssetValuePerShare === null || $marketValue === null || $netAssetValuePerShare <= 0.0) {
-            return 0.0;
-        }
-
-        $rate = self::taxRate($holder);
-
-        return min(1.0, max(0.0, $marketValue * (1.0 - $rate) / ($netAssetValuePerShare * max(1.0, (float) $holder->getSharesOutstanding()))));
-    }
-
-    /**
      * Book value per share including the portfolio's move since the last report and the dividends it has been paid
      * since, each net of the tax the report books on it; null for a firm holding none.
      */

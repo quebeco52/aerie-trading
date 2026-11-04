@@ -246,6 +246,32 @@ class CorporateLedgerServiceTest extends TestCase
         $this->assertSame(2, $alerts[0][1]['factor']);
     }
 
+    /** A split restates the past filings' EPS with their share counts, so the earnings chart has no step at it. */
+    public function testASplitRestatesTheFiledEpsWithTheShareCount(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('SPLIT_CORP');
+
+        $this->connectionMock->method('fetchAllAssociative')->willReturn([]);
+        $statements = [];
+        $this->connectionMock->method('executeStatement')
+            ->willReturnCallback(static function (string $sql, array $params) use (&$statements): int {
+                $statements[] = $sql;
+
+                return 1;
+            });
+
+        $this->service->processStockSplit($stock, 4.0, false);
+        $this->service->processStockSplit($stock, 4.0, true, 2.50);
+
+        $filings = array_values(array_filter($statements, static fn(string $sql): bool => str_contains($sql, 'corporate_report')));
+        $this->assertCount(2, $filings);
+        $this->assertStringContainsString('reported_eps = reported_eps / :factor', $filings[0]);
+        $this->assertStringContainsString('consensus_eps = consensus_eps / :factor', $filings[0]);
+        $this->assertStringContainsString('reported_eps = reported_eps * :factor', $filings[1]);
+        $this->assertStringContainsString('consensus_eps = consensus_eps * :factor', $filings[1]);
+    }
+
     /** A buy stop escrowed no cash, so a reverse split's remnant refund pays it nothing; its stop is restated. */
     public function testAReverseSplitRefundsNoRemnantOnABuyStopAndRestatesItsStop(): void
     {

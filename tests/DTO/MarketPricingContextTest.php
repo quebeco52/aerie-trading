@@ -114,7 +114,39 @@ class MarketPricingContextTest extends TestCase
             + (DebtEngine::subsidiaryRevaluation($sphere, $strategy, $macroState) / (float) $sphere->getSharesOutstanding());
         $this->assertEqualsWithDelta($netAssetValue, $context->bookValuePerShare, 1e-9);
         $this->assertNotEqualsWithDelta((float) $sphere->getBookValuePerShare(), $context->bookValuePerShare, 1.0);
-        $this->assertEqualsWithDelta($ledger->resolveMarkedStakeShare($sphere, $netAssetValue), $context->marketMarkedValueShare, 1e-12);
+        // All of it at the market's prices: the stakes at the board's, the subsidiaries repriced with them.
+        $this->assertSame(1.0, $context->marketMarkedValueShare);
+        $operating = $this->firm('CBIL', 'Tools & Accessories');
+        $this->assertSame(0.0, MarketPricingContext::forStock($operating, $macroState, $this->health($operating, $macroState), $ledger)->marketMarkedValueShare);
+    }
+
+    /**
+     * The subsidiaries stand in net asset value at the market's prices: a market repricing reaches their whole value at
+     * their beta, as it reaches a listed business's, while the stakes take it through the board's own prices.
+     */
+    public function testASpheresSubsidiariesAreRepricedWithTheMarket(): void
+    {
+        $sphere = StockBuilder::create('BRKW')
+            ->withPrice(100.0)
+            ->withSharesOutstanding(1_000_000_000)
+            ->withTotalEquity(1_880_000_000_000.0)
+            ->build()
+            ->setIndustry('Investment Companies');
+        $sphere->setListedStakesCarrying('1118700000000');
+        $sphere->setBeta('0.9');
+        $board = [];
+        foreach (array_keys(AnchorHoldings::forHolder('BRKW')) as $ticker) {
+            $board[] = StockBuilder::create($ticker)->withPrice(350.0)->withSharesOutstanding(1_000_000_000)->build();
+        }
+        $ledger = new AnchorStakeLedger();
+        $ledger->beginTick($board);
+        $strategy = \App\Data\Company\Sectors::strategyFor('Investment Companies');
+        $nav = fn(float $shift): float => MarketPricingContext::forStock($sphere, new MacroStateDTO(equityValuationShift: $shift), $this->health($sphere, new MacroStateDTO(equityValuationShift: $shift)), $ledger)->bookValuePerShare;
+
+        $calm = new MacroStateDTO();
+        $worth = $strategy->getPlantCapital($sphere, $sphere->getInvestedCapital()) + DebtEngine::subsidiaryRevaluation($sphere, $strategy, $calm);
+        $this->assertGreaterThan(0.0, $worth);
+        $this->assertEqualsWithDelta($worth * (exp(0.9 * 0.2) - 1.0) / (float) $sphere->getSharesOutstanding(), $nav(0.2) - $nav(0.0), 1e-6);
     }
 
     /**

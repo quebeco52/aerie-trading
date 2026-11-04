@@ -172,3 +172,26 @@ rw3 rw4`). Means rw3 / rw4, paired rw4 - rw3 (se):
 Caveats: 4 seeds; board does not pair; held-firm treasury fall checked in code (CapitalAllocationEngine executeBuybacks
 subtracts totalCashSpent on both branches), not measured. Harness fix after this run: a held firm's split on a
 redemption tick was read as a subscription (2 ticks in 8 runs, dropped in rw4x.py); BrkwHarnessTest now skips splits.
+
+## 2026-11-01: 11-01 rw5, the trust's NAV at the market's prices (arm `rw5` vs `rw4` = e35cbe03)
+
+Question: with subsidiaries repriced by `equityRepricing(beta)` in NAV, no second repricing in FairValue and the
+structural discount on surplus cash, does BRKW trade at a discount to NAV, and what happens to cash and payouts.
+`bin/harness-batch var/harness/brkw/run.sh 1-4 rw5`, seeds 1-4 x 25 years, 360 ticks/year, rw4 stored. Table
+`brkw_rw5_4s25y.out` (`rw2.py 1-4 rw3 rw4 rw5` + `rw3x.py`/`rw4x.py 1-4 rw4 rw5` + new `rw5x.py 1-4 rw4 rw5`:
+q-row P/NAVsop quantiles, P/mbv, pfv/NAV, px/pfv, cash/NAV path, BRKW TSR). Means rw4 / rw5, paired rw5 - rw4 (se):
+- P/NAVsop mean 0.733 / 0.755 (+0.022, 0.027), p10 0.523 / 0.599 (+0.08, 0.05), p90 0.951 / 0.877 (-0.074, 0.013),
+  share > 1 0.035 / 0.013 (-0.02, 0.01), share < 0.5 0.135 / 0.018 (-0.12, 0.06).
+- P/mbv (same definition both arms) mean 0.805 / 0.792 (-0.013, 0.003), p10 0.632 / 0.610, p90 0.998 / 0.955 (-0.043,
+  0.007), share > 1 0.090 / 0.048 (-0.043, 0.010). NAVsop/mbv 1.13 / 1.05 (-0.07, 0.05).
+- pfv/NAVsop 0.754 / 0.782 (+0.03, 0.035): rw4 was already at ~0.75, not 1.00, in this harness; pfv/mbv 0.835 / 0.823
+  (-0.012, 0.014). px/pfv 0.973 / 0.968 (-0.005, 0.018).
+- cash/NAVsop mean 0.204 / 0.264 (+0.060, 0.017), y10 0.195 / 0.289 (+0.09, 0.07; seed 2 0.52), y25 0.254 / 0.271
+  (+0.02, 0.03), max 0.309 / 0.434 (+0.13, 0.05); slope y20-25 +0.004 / +0.002 per year (two seeds falling). Cash y25
+  662 / 734 bn (+72, 128): the ratio rise is mostly the smaller NAVsop denominator.
+- bb/NI 0.314 / 0.302 (-0.01, 0.05), firing share 0.66 / 0.56 (-0.10, 0.035), div/NI 0.534 / 0.534, DPS CAGR 2.45% /
+  2.6%, DPS cuts 1.5 / 0.25 per run (-1.25, 0.95), yield 3.95% / 3.94%.
+- lbeta 0.802 / 0.782 (-0.020, 0.006), TSR 9.9% / 9.5% a year (-0.4pp, 0.4), NI 86.4 / 84.4 bn/y (-2, 9.5).
+- board (does not pair): cap y25 71.1 / 71.4 T$, deaths 0 / 0.25, defaults 1.75 / 0.75.
+
+Caveats: 4 seeds; nav_sop changes definition between arms, so P/mbv is the like-for-like price measure.

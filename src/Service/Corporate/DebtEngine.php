@@ -921,8 +921,9 @@ class DebtEngine
 
     /**
      * What a holding company's consolidated businesses are worth above the capital they run on, at their
-     * through-the-cycle cost of capital and the growth their markets give them: the step from its marked book to its
-     * net asset value. Zero for a firm holding no stakes.
+     * through-the-cycle cost of capital and the growth their markets give them, repriced as the market reprices listed
+     * businesses of their beta: the step from its marked book to its net asset value. Zero for a firm holding no
+     * stakes.
      */
     public static function subsidiaryRevaluation(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy, MacroStateDTO $macroState): float
     {
@@ -933,7 +934,7 @@ class DebtEngine
         $costOfCapital = self::assetCostOfCapital($stock, $macroState);
         $growth = Valuation::calculateExpectedNominalGrowth(SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime), $macroState->tipsBreakeven, $costOfCapital);
 
-        return $strategy->resolveSubsidiaryRevaluation($stock, $costOfCapital, $growth, $strategy->getEffectiveTaxRate($macroState->corporateTaxRate));
+        return $strategy->resolveSubsidiaryRevaluation($stock, $costOfCapital, $growth, $strategy->getEffectiveTaxRate($macroState->corporateTaxRate), $macroState->equityRepricing((float) $stock->getBeta()));
     }
 
     public function resolveCovenantLeverageMultiple(Stock $stock, \App\Service\Model\BusinessModelInterface $strategy): ?float

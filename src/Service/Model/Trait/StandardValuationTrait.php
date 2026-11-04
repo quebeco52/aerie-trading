@@ -43,7 +43,7 @@ trait StandardValuationTrait
     }
 
     /** An operating company's operations are what its own valuation prices: nothing to restate. */
-    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate): float
+    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate, float $marketRepricing): float
     {
         return 0.0;
     }

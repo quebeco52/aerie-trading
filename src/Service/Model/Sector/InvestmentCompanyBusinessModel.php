@@ -269,9 +269,11 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
     /**
      * The subsidiaries at what their earnings are worth, less the capital they run on (the value-driver formula on
      * their own capital, Valuation::operatingCapitalValue()). Their return is the operating line's own, the revenue
-     * line being theirs alone, faded from the trailing year toward the return the board holds them to.
+     * line being theirs alone, faded from the trailing year toward the return the board holds them to. Repriced as the
+     * market reprices listed businesses, the way a holding company marks unlisted ones off their listed peers, so its
+     * whole net asset value stands at the market's prices beside its stakes.
      */
-    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate): float
+    public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate, float $marketRepricing): float
     {
         $capital = $this->getPlantCapital($stock, $stock->getInvestedCapital());
         if ($capital <= 0.0) {
@@ -285,7 +287,7 @@ class InvestmentCompanyBusinessModel extends ConglomerateBusinessModel
             : $anchor;
         $return = $this->getValuationReturn($trailing, $anchor, $assetCostOfCapital);
 
-        return Valuation::operatingCapitalValue($capital, $return, $assetCostOfCapital, $growth) - $capital;
+        return (Valuation::operatingCapitalValue($capital, $return, $assetCostOfCapital, $growth) * $marketRepricing) - $capital;
     }
 
     /**

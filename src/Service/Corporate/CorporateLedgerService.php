@@ -173,8 +173,13 @@ class CorporateLedgerService
                     $factorType,
                 );
 
+                // The filed and expected EPS go with the share count, so the earnings chart reads one basis.
                 $conn->executeStatement(
-                    'UPDATE corporate_report SET shares = FLOOR(shares / :factor) WHERE stock_id = :stock_id',
+                    'UPDATE corporate_report
+                     SET shares = FLOOR(shares / :factor),
+                         reported_eps = reported_eps * :factor,
+                         consensus_eps = consensus_eps * :factor
+                     WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
                     $factorType,
                 );
@@ -198,7 +203,11 @@ class CorporateLedgerService
                 );
 
                 $conn->executeStatement(
-                    'UPDATE corporate_report SET shares = ' . SplitOrderBook::scaledUp('shares') . ' WHERE stock_id = :stock_id',
+                    'UPDATE corporate_report
+                     SET shares = ' . SplitOrderBook::scaledUp('shares') . ',
+                         reported_eps = reported_eps / :factor,
+                         consensus_eps = consensus_eps / :factor
+                     WHERE stock_id = :stock_id',
                     ['factor' => $factor, 'stock_id' => $stock->getId()],
                     $factorType,
                 );
