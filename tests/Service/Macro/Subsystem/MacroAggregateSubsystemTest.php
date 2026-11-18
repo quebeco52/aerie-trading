@@ -1324,8 +1324,8 @@ class MacroAggregateSubsystemTest extends TestCase
         $state->interbankLiquiditySpreadEma = MacroConstants::INTERBANK_BASELINE_SPREAD;
         $state->governmentSpendingIndexEma = MacroConstants::GOVT_SPENDING_BASELINE;
         $state->residentialPropertyIndexEma = AssetMarketSubsystem::RESIDENTIAL_BASELINE;
-        $state->exchangeRateIndexEma = AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
-        $state->exchangeRateTrend = AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
+        $state->exchangeRateIndexEma = MacroConstants::EXCHANGE_RATE_BASELINE;
+        $state->exchangeRateTrend = MacroConstants::EXCHANGE_RATE_BASELINE;
         $state->energyPriceIndexEma = MacroConstants::ENERGY_BASELINE;
         $state->freightRateIndexEma = MacroConstants::FREIGHT_BASELINE;
         $state->capitalStockOverhang = 0.0;
@@ -1720,7 +1720,7 @@ class MacroAggregateSubsystemTest extends TestCase
 
     public function testATariffPassesIntoImportPricesInFull(): void
     {
-        $this->assertEqualsWithDelta(log(1.10), OpenEconomy::importPriceLevelTarget(92.0, 0.10) - OpenEconomy::importPriceLevelTarget(92.0), 1e-15);
+        $this->assertEqualsWithDelta(log(1.10), MacroTransmission::importPriceLevelTarget(92.0, 0.10) - MacroTransmission::importPriceLevelTarget(92.0), 1e-15);
     }
 
     public function testATariffCompressesImportedGoodsAndDrawsRetaliationOnGoodsExports(): void
@@ -2215,7 +2215,7 @@ class MacroAggregateSubsystemTest extends TestCase
         }
 
         $priceResponse = (OpenEconomy::EXPORT_PRICE_PASS_THROUGH * OpenEconomy::EXPORT_PRICE_ELASTICITY * OpenEconomy::DISTRICT_VALUE_ADDED_EXPORT_SHARE)
-            + (OpenEconomy::IMPORT_PRICE_PASS_THROUGH * OpenEconomy::IMPORT_PRICE_ELASTICITY * OpenEconomy::DISTRICT_DOMESTIC_IMPORT_SHARE);
+            + (MacroTransmission::IMPORT_PRICE_PASS_THROUGH * OpenEconomy::IMPORT_PRICE_ELASTICITY * OpenEconomy::DISTRICT_DOMESTIC_IMPORT_SHARE);
         $longTerm = -$priceResponse * log(0.90);
 
         $this->assertSame(0.0, $settled->netExportGap, 'A currency sitting at its own trend moves no trade.');
@@ -2327,7 +2327,7 @@ class MacroAggregateSubsystemTest extends TestCase
         $atRest = $this->neutralBorrowingState();
         $appreciated = $this->neutralBorrowingState();
         $appreciated->exchangeRateIndexEma = 110.0;
-        $appreciated->importPriceLevel = OpenEconomy::importPriceLevelTarget($atRest->exchangeRateIndexEma);
+        $appreciated->importPriceLevel = MacroTransmission::importPriceLevelTarget($atRest->exchangeRateIndexEma);
 
         $dt = 0.01;
         $levelGap = 0.0;
@@ -2337,9 +2337,9 @@ class MacroAggregateSubsystemTest extends TestCase
         }
 
         $importedShare = ConsumerPrices::IMPORTED_SHARE_OF_GOODS * (ConsumerPrices::INFLATION_WEIGHT_GOODS + ConsumerPrices::INFLATION_WEIGHT_COMMODITY);
-        $expected = -$importedShare * (1.0 - ConsumerPrices::IMPORT_DISTRIBUTION_SHARE) * OpenEconomy::IMPORT_PRICE_PASS_THROUGH * log(1.10);
+        $expected = -$importedShare * (1.0 - ConsumerPrices::IMPORT_DISTRIBUTION_SHARE) * MacroTransmission::IMPORT_PRICE_PASS_THROUGH * log(1.10);
         $this->assertEqualsWithDelta($expected, $levelGap, 0.0005, 'A 10% appreciation takes about 0.8% off the price level.');
-        $this->assertEqualsWithDelta(OpenEconomy::importPriceLevelTarget($appreciated->exchangeRateIndexEma), $appreciated->importPriceLevel, 1e-9, 'and import prices have settled.');
+        $this->assertEqualsWithDelta(MacroTransmission::importPriceLevelTarget($appreciated->exchangeRateIndexEma), $appreciated->importPriceLevel, 1e-9, 'and import prices have settled.');
     }
 
     /**

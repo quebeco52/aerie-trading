@@ -11,16 +11,17 @@ use App\DTO\SectorCoverageProfile;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Corporate\Industry\IndustryRegimeView;
-use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\ModelParam;
 use App\Service\Model\StreamContext;
 
+/** @phpstan-require-extends AbstractBusinessModel */
 trait StandardOperatingPhysicsTrait
 {
     /** Calendar quarter [0..3] of the report in progress, as the engine keys its seasonality; null outside a report. */
@@ -376,7 +377,7 @@ trait StandardOperatingPhysicsTrait
      * The output gap as it has actually reached this firm, distributed over its transmission lag.
      *
      * The lag is the economy's, not the firm's: every firm with the same delay meets the same cycle, so the macro
-     * publishes it (MovingAverages::DEMAND_TRANSMISSION_LAGS) and the model only reads it. Mid-downturn a
+     * publishes it (MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS) and the model only reads it. Mid-downturn a
      * long-lag builder is still working through a boom-era book while a spot seller is already in the slump. At
      * zero lag the helper returns the quarter-smoothed gap, the demand a quarter's sales meet.
      */
@@ -864,7 +865,7 @@ trait StandardOperatingPhysicsTrait
         }
 
         // Zero rather than absent: every loading stays as it was, so only the sector's term leaves each stream's draw.
-        $state = MacroStateDTO::fromArray(array_replace($macroState->toArray(), ['sector_demand_z' => [$sector => 0.0] + $macroState->sectorDemandZ]));
+        $state = $macroState->with(['sectorDemandZ' => [$sector => 0.0] + $macroState->sectorDemandZ]);
         $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $realizedVariableMargin, $fixedCosts, $baselineVol, $state, MathUtility::replaying($draws));
 
         return $physics->actualRevenue;
@@ -890,7 +891,7 @@ trait StandardOperatingPhysicsTrait
     {
         $sector = (string) $stock->getSector();
         $state = isset($macroState->sectorDemandZ[$sector])
-            ? MacroStateDTO::fromArray(array_replace($macroState->toArray(), ['sector_demand_z' => [$sector => 0.0] + $macroState->sectorDemandZ]))
+            ? $macroState->with(['sectorDemandZ' => [$sector => 0.0] + $macroState->sectorDemandZ])
             : $macroState;
         $this->reportedCalendarQuarter = $calendarQuarter;
 

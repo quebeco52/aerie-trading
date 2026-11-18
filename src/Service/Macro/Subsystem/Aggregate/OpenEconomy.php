@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace App\Service\Macro\Subsystem\Aggregate;
 
 use App\Service\Macro\MacroState;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Math\MacroConstants;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\TimeSeries;
 
 /**
@@ -68,8 +68,6 @@ final class OpenEconomy
     public const EXPORT_PRICE_PASS_THROUGH = 0.552;
     /** Long-term price elasticity of export volumes (0.321). */
     public const EXPORT_PRICE_ELASTICITY = 0.321;
-    /** Long-term pass-through of the real exchange rate to import prices in domestic currency (0.605). */
-    public const IMPORT_PRICE_PASS_THROUGH = 0.605;
     /** Long-term price elasticity of import volumes (0.298). */
     public const IMPORT_PRICE_ELASTICITY = 0.298;
     /**
@@ -110,7 +108,7 @@ final class OpenEconomy
         );
         $state->realExchangeRateTradeLag = TimeSeries::calculateDistributedLag(
             $state->realExchangeRateTradeLag,
-            self::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend),
+            MacroTransmission::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend),
             $dt,
             self::TRADE_VOLUME_ADJUSTMENT_YEARS,
         );
@@ -164,19 +162,6 @@ final class OpenEconomy
     }
 
     /**
-     * The currency against its own trend, in logs: the competitiveness trade volumes answer. The trend, not the index's
-     * nominal baseline, is the reference, since the currency settles away from 100 by construction.
-     *
-     * @param float $exchangeRateIndexEma The currency index, smoothed over a quarter.
-     * @param float $exchangeRateTrend    The currency's own long-run trend.
-     * @return float Log real exchange rate gap; positive is an appreciation.
-     */
-    public static function realExchangeRateGap(float $exchangeRateIndexEma, float $exchangeRateTrend): float
-    {
-        return ($exchangeRateTrend > 0.0 && $exchangeRateIndexEma > 0.0) ? log($exchangeRateIndexEma / $exchangeRateTrend) : 0.0;
-    }
-
-    /**
      * Net exports at a mainland gap, a (lagged) real exchange rate gap and the allied defence spending delivered, as a
      * share of GDP.
      *
@@ -205,7 +190,7 @@ final class OpenEconomy
     {
         $domesticContent = 1.0 - self::FOREIGN_VALUE_ADDED_SHARE_OF_EXPORTS;
         $priceResponse = (self::EXPORT_PRICE_PASS_THROUGH * self::EXPORT_PRICE_ELASTICITY * self::DISTRICT_VALUE_ADDED_EXPORT_SHARE)
-            + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_DOMESTIC_IMPORT_SHARE);
+            + (MacroTransmission::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * self::DISTRICT_DOMESTIC_IMPORT_SHARE);
         $retaliatoryDuty = self::retaliatoryDuty($tariffDuty);
         $retaliatedExportShare = ((self::DISTRICT_EXPORT_SHARE * self::GOODS_SHARE_OF_EXPORTS) - self::DISTRICT_DEFENSE_EXPORT_SHARE) * $domesticContent;
 
@@ -266,7 +251,7 @@ final class OpenEconomy
     public static function goodsImportVolumeGap(float $domesticDemandGap, float $realExchangeRateGap, float $tariffDuty = 0.0): float
     {
         return (self::IMPORT_DEMAND_ELASTICITY * $domesticDemandGap)
-            + (self::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * $realExchangeRateGap)
+            + (MacroTransmission::IMPORT_PRICE_PASS_THROUGH * self::IMPORT_PRICE_ELASTICITY * $realExchangeRateGap)
             - (self::IMPORT_PRICE_ELASTICITY * $tariffDuty);
     }
 
@@ -277,22 +262,5 @@ final class OpenEconomy
     private static function retaliatoryDuty(float $tariffDuty): float
     {
         return log(1.0 + (MacroConstants::TARIFF_RETALIATION_RATIO * (exp($tariffDuty) - 1.0)));
-    }
-
-    /**
-     * The log import price level, relative to domestic prices, that the currency and the tariff settle it at: the
-     * long-term pass-through times the index against its baseline, plus the whole duty, which passes into
-     * duty-inclusive prices in full (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). Only its change is ever
-     * read, so the baseline sets no level of its own.
-     *
-     * @param float $exchangeRateIndexEma The currency index, smoothed over a quarter.
-     * @param float $importTariffRate     The average tariff on imports.
-     * @return float Log relative import price level.
-     */
-    public static function importPriceLevelTarget(float $exchangeRateIndexEma, float $importTariffRate = 0.0): float
-    {
-        $index = $exchangeRateIndexEma > 0.0 ? $exchangeRateIndexEma : AssetMarketSubsystem::EXCHANGE_RATE_BASELINE;
-
-        return (-self::IMPORT_PRICE_PASS_THROUGH * log($index / AssetMarketSubsystem::EXCHANGE_RATE_BASELINE)) + log(1.0 + $importTariffRate);
     }
 }

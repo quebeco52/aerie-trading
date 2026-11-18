@@ -7,7 +7,6 @@ namespace App\Tests\Service\Model;
 use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use App\Service\Macro\MacroState;
-use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\LuxuryBusinessModel;
@@ -40,7 +39,7 @@ final class DemandTransmissionLagTest extends TestCase
         $state = new MacroState();
         $state->outputGap = self::SLUMP;
         $state->outputGapEma = self::SLUMP;
-        foreach (array_keys(MovingAverages::DEMAND_TRANSMISSION_LAGS) as $field) {
+        foreach (array_keys(MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS) as $field) {
             $state->$field = self::BOOM;
         }
 
@@ -60,7 +59,7 @@ final class DemandTransmissionLagTest extends TestCase
         }
 
         $readings = [];
-        foreach (array_keys(MovingAverages::DEMAND_TRANSMISSION_LAGS) as $field) {
+        foreach (array_keys(MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS) as $field) {
             $readings[$field] = $state->$field;
         }
 
@@ -150,11 +149,8 @@ final class DemandTransmissionLagTest extends TestCase
         $lagYears = $model->getDemandLagYears();
         $this->assertGreaterThan(0.0, $lagYears, $modelClass . ' declares a lag of zero, which is the default.');
 
-        $field = MovingAverages::demandTransmissionLagField($lagYears);
-        $macroState = MacroStateDTO::fromArray(array_replace(
-            (new MacroStateDTO(outputGapEma: self::SLUMP))->toArray(),
-            [MacroFieldRegistry::wireKeys()[$field] => self::BOOM],
-        ));
+        $field = MacroFieldRegistry::demandTransmissionLagField($lagYears);
+        $macroState = (new MacroStateDTO(outputGapEma: self::SLUMP))->with([$field => self::BOOM]);
 
         $this->assertSame(self::BOOM, $model->resolveLaggedOutputGap($macroState), $modelClass . ' declares a demand lag but does not read it.');
     }
@@ -163,7 +159,7 @@ final class DemandTransmissionLagTest extends TestCase
     public function testALagTheMacroDoesNotPublishIsRejected(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        MovingAverages::demandTransmissionLagField(0.60);
+        MacroFieldRegistry::demandTransmissionLagField(0.60);
     }
 
     /** The generic model is contemporaneous, so the fallback stays the neutral case. */

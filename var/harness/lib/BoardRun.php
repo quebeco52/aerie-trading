@@ -552,12 +552,11 @@ abstract class BoardRun extends KernelTestCase
      */
     private function withDemandLags(MacroStateDTO $recorded, float $dt): MacroStateDTO
     {
-        $vars = (fn(): array => get_object_vars($this))->call($recorded);
-        foreach (App\Service\Macro\Subsystem\Aggregate\MovingAverages::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
-            $this->replayLags[$field] = TimeSeries::calculateDistributedLag($this->replayLags[$field] ?? App\Data\Macro\MacroFieldRegistry::defaults()[$field], $vars['outputGapEma'], $dt, $lagYears);
+        foreach (App\Data\Macro\MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
+            $this->replayLags[$field] = TimeSeries::calculateDistributedLag($this->replayLags[$field] ?? App\Data\Macro\MacroFieldRegistry::defaults()[$field], $recorded->outputGapEma, $dt, $lagYears);
         }
 
-        return new MacroStateDTO(...array_merge($vars, $this->replayLags));
+        return $recorded->with($this->replayLags);
     }
 
     private function captureReport(CorporateReport $report): void

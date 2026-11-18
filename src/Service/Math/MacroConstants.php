@@ -201,6 +201,14 @@ final class MacroConstants
 
     // --- Exchange Rate ---
     /**
+     * Baseline exchange rate index (neutral purchasing power parity).
+     *
+     * The NOMINAL anchor targetFx is built on, not the level the index settles at: the safe-haven bid is rectified and
+     * the sovereign risk discount is one-sided, so a run at rest sits near 97.3. A consumer wanting "is the currency
+     * strong" reads MacroState::exchangeRateTrend instead.
+     */
+    public const EXCHANGE_RATE_BASELINE = 100.0;
+    /**
      * Quarterly log-change sd of a small open economy's trade-weighted currency (BIS broad nominal effective rates via
      * FRED, quarter-end months 1994-2019: CHF 2.4%, GBP 2.9%, SEK 2.7%).
      */

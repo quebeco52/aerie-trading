@@ -9,6 +9,7 @@ use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
+use App\Service\Math\Valuation;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
@@ -138,7 +139,7 @@ final class MarketFactorNewsTest extends TestCase
         $this->assertEqualsWithDelta($firstDay, log($struck->marketJumpMultiplier / $quiet->marketJumpMultiplier), 1e-12, 'The day\'s share reaches prices as a market-wide jump,');
         $this->assertEqualsWithDelta($firstDay, $struck->equityValuationShift - $quiet->equityValuationShift, 1e-12, 'and equity value with it.');
 
-        $fade = exp(-AssetMarketSubsystem::equityValuationShiftFade() * self::DT);
+        $fade = exp(-Valuation::equityValuationShiftFade() * self::DT);
         $expected = $firstDay;
         for ($day = 1; $day < 60; $day++) {
             $quietMarket->updateSystemicMarketFactor($quiet, self::DT);

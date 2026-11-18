@@ -253,4 +253,47 @@ class MacroStateDTOTest extends TestCase
         $this->assertTrue($standing(['expectedLevers' => ['bankLevyRate' => 0.002] + $levers])->lawsAheadRevised(), 'the forecast');
         $this->assertTrue($standing(['expectedPolicyFrom' => 9.0])->lawsAheadRevised(), 'when it takes effect');
     }
+
+    public function testWithReplacesOnlyTheRequestedFields(): void
+    {
+        $base = new MacroStateDTO(
+            outputGap: 0.02,
+            outputGapEma: 0.015,
+            outputGapLag12m: -0.01,
+            sectorDemandZ: ['Energy' => 0.5, 'Utilities' => -0.2],
+        );
+
+        $this->assertSame($base, $base->with([]));
+
+        $updated = $base->with([
+            'outputGap' => -0.03,
+            'sectorDemandZ' => ['Energy' => 0.0, 'Utilities' => -0.2],
+        ]);
+
+        $this->assertSame(-0.03, $updated->outputGap);
+        $this->assertSame(0.015, $updated->outputGapEma);
+        $this->assertSame(-0.01, $updated->outputGapLag12m);
+        $this->assertSame(['Energy' => 0.0, 'Utilities' => -0.2], $updated->sectorDemandZ);
+        $this->assertSame(0.02, $base->outputGap, 'The original DTO stays immutable.');
+    }
+
+    public function testWithRejectsUnknownField(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        (new MacroStateDTO())->with(['notARealMacroField' => 1.0]);
+    }
+
+    public function testWithWireOverridesReplacesByWireKeyAndRejectsUnknownKey(): void
+    {
+        $base = new MacroStateDTO(macroCreditSpread: 0.025, macroCreditSpreadEma: 0.020);
+
+        $this->assertSame($base, $base->withWireOverrides([]));
+
+        $updated = $base->withWireOverrides(['macro_credit_spread' => 0.010]);
+        $this->assertSame(0.010, $updated->macroCreditSpread);
+        $this->assertSame(0.020, $updated->macroCreditSpreadEma);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $base->withWireOverrides(['not_a_wire_key' => 0.0]);
+    }
 }

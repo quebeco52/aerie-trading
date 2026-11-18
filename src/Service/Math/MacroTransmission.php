@@ -61,6 +61,10 @@ final class MacroTransmission
      */
     public const AD_SPEND_MOOD_ELASTICITY = 0.50;
 
+    // --- Open Economy: Real Exchange Rate & Import Prices (IMF WEO October 2015, Ch. 3, Table 3.1) ---
+    /** Long-term pass-through of the real exchange rate to import prices in domestic currency (0.605). */
+    public const IMPORT_PRICE_PASS_THROUGH = 0.605;
+
     /**
      * Clients' advertising budgets over their steady level: the output gap plus the confidence residual over it, both
      * scaled by the reader's cyclicality. An agency earns a take on these budgets; a broadcaster sells them airtime.
@@ -464,5 +468,35 @@ final class MacroTransmission
 
         $baseSlope = $maxCapacity > 0 ? ($kappa / $maxCapacity) : 0.25;
         return $baseSlope * $downwardRigidityFactor * $outputGap;
+    }
+
+    /**
+     * The currency against its own trend, in logs: the competitiveness trade volumes answer. The trend, not the index's
+     * nominal baseline, is the reference, since the currency settles away from 100 by construction.
+     *
+     * @param float $exchangeRateIndexEma The currency index, smoothed over a quarter.
+     * @param float $exchangeRateTrend    The currency's own long-run trend.
+     * @return float Log real exchange rate gap; positive is an appreciation.
+     */
+    public static function realExchangeRateGap(float $exchangeRateIndexEma, float $exchangeRateTrend): float
+    {
+        return ($exchangeRateTrend > 0.0 && $exchangeRateIndexEma > 0.0) ? log($exchangeRateIndexEma / $exchangeRateTrend) : 0.0;
+    }
+
+    /**
+     * The log import price level, relative to domestic prices, that the currency and the tariff settle it at: the
+     * long-term pass-through times the index against its baseline, plus the whole duty, which passes into
+     * duty-inclusive prices in full (Amiti, Redding & Weinstein 2019; Fajgelbaum et al. 2020). Only its change is ever
+     * read, so the baseline sets no level of its own.
+     *
+     * @param float $exchangeRateIndexEma The currency index, smoothed over a quarter.
+     * @param float $importTariffRate     The average tariff on imports.
+     * @return float Log relative import price level.
+     */
+    public static function importPriceLevelTarget(float $exchangeRateIndexEma, float $importTariffRate = 0.0): float
+    {
+        $index = $exchangeRateIndexEma > 0.0 ? $exchangeRateIndexEma : MacroConstants::EXCHANGE_RATE_BASELINE;
+
+        return (-self::IMPORT_PRICE_PASS_THROUGH * log($index / MacroConstants::EXCHANGE_RATE_BASELINE)) + log(1.0 + $importTariffRate);
     }
 }

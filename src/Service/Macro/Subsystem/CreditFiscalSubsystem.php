@@ -10,7 +10,6 @@ use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Recorder\MacroDiagnosticsProbe;
 use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
-use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Service\Macro\Subsystem\Aggregate\ProductivityGrowth;
@@ -160,7 +159,7 @@ class CreditFiscalSubsystem
     public const FISCAL_STABILIZER_SENSITIVITY = self::FOUNDING_NET_TAX_RATE * (self::NET_TAX_OUTPUT_ELASTICITY - 1.0);
     /**
      * Mean lag, in years, of the tax a trailing year's earnings carry behind the tax charged: half the year, as a
-     * first-order lag (the convention of MovingAverages::DEMAND_TRANSMISSION_LAGS).
+     * first-order lag (the convention of MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS).
      */
     public const TRAILING_EARNINGS_MEAN_LAG_YEARS = 0.5;
 

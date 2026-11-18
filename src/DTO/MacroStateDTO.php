@@ -5,20 +5,15 @@ declare(strict_types=1);
 namespace App\DTO;
 
 use App\Data\Macro\MacroFieldRegistry;
-use App\Service\Macro\MacroEngine;
 use App\Service\Macro\MacroState;
-use App\Service\Macro\Subsystem\Aggregate\DomesticDemand;
-use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
-use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
-use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\Valuation;
 
 /**
@@ -47,7 +42,7 @@ readonly class MacroStateDTO
 
     /**
      * The output gap as it reaches order books 3 to 18 months behind the economy
-     * (MovingAverages::demandTransmissionLagField).
+     * (MacroFieldRegistry::demandTransmissionLagField).
      */
     public float $outputGapLag3m;
     public float $outputGapLag6m;
@@ -847,7 +842,7 @@ readonly class MacroStateDTO
             return $this->outputGapEma;
         }
 
-        return $this->{MovingAverages::demandTransmissionLagField($lagYears)};
+        return $this->{MacroFieldRegistry::demandTransmissionLagField($lagYears)};
     }
 
     /**
@@ -857,7 +852,7 @@ readonly class MacroStateDTO
      */
     public function laggedOutputGapChange(float $lagYears): float
     {
-        $lagYears = max(min(MovingAverages::DEMAND_TRANSMISSION_LAGS), $lagYears);
+        $lagYears = max(min(MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS), $lagYears);
 
         return ($this->outputGapEma - $this->laggedOutputGap($lagYears)) / $lagYears;
     }
@@ -913,7 +908,7 @@ readonly class MacroStateDTO
      */
     public function exchangeRateGap(): float
     {
-        return OpenEconomy::realExchangeRateGap($this->exchangeRateIndexEma, $this->exchangeRateTrend);
+        return MacroTransmission::realExchangeRateGap($this->exchangeRateIndexEma, $this->exchangeRateTrend);
     }
 
     /**
@@ -923,7 +918,7 @@ readonly class MacroStateDTO
      */
     public function importPriceDeviation(): float
     {
-        return $this->importPriceLevel - OpenEconomy::importPriceLevelTarget($this->exchangeRateTrend);
+        return $this->importPriceLevel - MacroTransmission::importPriceLevelTarget($this->exchangeRateTrend);
     }
 
     /**
@@ -1028,7 +1023,7 @@ readonly class MacroStateDTO
      */
     public function equityValuationShiftReturn(): float
     {
-        return -$this->equityValuationShift * AssetMarketSubsystem::equityValuationShiftFade();
+        return -$this->equityValuationShift * Valuation::equityValuationShiftFade();
     }
 
     /**
@@ -1074,6 +1069,58 @@ readonly class MacroStateDTO
     public function sentimentResidual(): float
     {
         return $this->consumerSentimentMood / self::INDEX_SCALE;
+    }
+
+    /**
+     * Returns a copy of this snapshot with the named fields replaced.
+     *
+     * Accepts PHP property names (the keys of MacroFieldRegistry::wireKeys()); any unknown field throws so a typo
+     * cannot silently drop an override.
+     *
+     * @param array<string, mixed> $overrides Property name => replacement value.
+     */
+    public function with(array $overrides): self
+    {
+        if ($overrides === []) {
+            return $this;
+        }
+
+        $fields = MacroFieldRegistry::wireKeys();
+        foreach (array_keys($overrides) as $field) {
+            if (!isset($fields[$field])) {
+                throw new \InvalidArgumentException(sprintf('Unknown MacroStateDTO field "%s".', $field));
+            }
+        }
+
+        $arguments = [];
+        foreach (array_keys($fields) as $field) {
+            $arguments[$field] = array_key_exists($field, $overrides) ? $overrides[$field] : $this->$field;
+        }
+
+        return new self(...$arguments);
+    }
+
+    /**
+     * Returns a copy of this snapshot with the given wire-keyed fields replaced.
+     *
+     * @param array<string, mixed> $overrides Wire key => replacement value.
+     */
+    public function withWireOverrides(array $overrides): self
+    {
+        if ($overrides === []) {
+            return $this;
+        }
+
+        $fieldsByWireKey = array_flip(MacroFieldRegistry::wireKeys());
+        $propertyOverrides = [];
+        foreach ($overrides as $wireKey => $value) {
+            if (!isset($fieldsByWireKey[$wireKey])) {
+                throw new \InvalidArgumentException(sprintf('Unknown MacroStateDTO wire key "%s".', $wireKey));
+            }
+            $propertyOverrides[$fieldsByWireKey[$wireKey]] = $value;
+        }
+
+        return $this->with($propertyOverrides);
     }
 
     /**

@@ -6,7 +6,6 @@ namespace App\Service\Macro;
 
 use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\Subsystem\Aggregate\InventoryAndTiming;
-use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\Aggregate\OpenEconomy;
 use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
@@ -46,7 +45,7 @@ class MacroState
     public float $outputGap;
     public float $outputGapEma;
     // The output gap as it reaches order books 3 to 18 months behind the economy
-    // (MovingAverages::demandTransmissionLagField).
+    // (MacroFieldRegistry::demandTransmissionLagField).
     public float $outputGapLag3m;
     public float $outputGapLag6m;
     public float $outputGapLag9m;
@@ -789,10 +788,10 @@ class MacroState
         // stand, so their arrival reprices nothing: import prices have absorbed the currency, trade volumes too, and
         // the net export level is already part of the gap the payload carries.
         if (!isset($carried['importPriceLevel'])) {
-            $state->importPriceLevel = OpenEconomy::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate);
+            $state->importPriceLevel = MacroTransmission::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate);
         }
         if (!isset($carried['realExchangeRateTradeLag'])) {
-            $state->realExchangeRateTradeLag = OpenEconomy::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend);
+            $state->realExchangeRateTradeLag = MacroTransmission::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend);
         }
         if (!isset($carried['alliedDefenseDeliveryLag'])) {
             $state->alliedDefenseDeliveryLag = OpenEconomy::alliedDefenseGap($state->alliedDefenseSpendingIndexEma);

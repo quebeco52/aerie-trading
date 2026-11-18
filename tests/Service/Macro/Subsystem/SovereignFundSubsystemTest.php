@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Tests\Service\Macro\Subsystem;
 
 use App\Service\Macro\MacroState;
-use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\SovereignFundSubsystem;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\TestCase;
 
@@ -336,7 +336,7 @@ class SovereignFundSubsystemTest extends TestCase
         $this->assertEqualsWithDelta($shock, $hit->foreignEquityValuationShift, 1e-12);
         $this->assertEqualsWithDelta($shock, log($hit->foreignEquityIndex / $calm->foreignEquityIndex), 1e-9);
 
-        $halfLifeTicks = (int) round(AssetMarketSubsystem::EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS * $tpy);
+        $halfLifeTicks = (int) round(Valuation::EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS * $tpy);
         for ($tick = 0; $tick < $halfLifeTicks; ++$tick) {
             $this->step($hitFund, $hit, $dt);
             $this->step($calmFund, $calm, $dt);

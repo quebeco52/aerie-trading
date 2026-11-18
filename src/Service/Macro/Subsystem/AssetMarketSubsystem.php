@@ -18,6 +18,7 @@ use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 
 /**
  * Models asset pricing, commercial and residential real estate, equity volatility,
@@ -293,14 +294,6 @@ class AssetMarketSubsystem
     public const MAX_ALLIED_DEFENSE_INDEX = 400.0;
 
     // --- MUNDELL-FLEMING OPEN ECONOMY (IS-LM-BOP) ---
-    /**
-     * Baseline exchange rate index (neutral purchasing power parity).
-     *
-     * The NOMINAL anchor targetFx is built on, not the level the index settles at: the safe-haven bid is
-     * rectified and the sovereign risk discount is one-sided, so a run at rest sits near 97.3. A consumer
-     * wanting "is the currency strong" reads MacroState::exchangeRateTrend instead.
-     */
-    public const EXCHANGE_RATE_BASELINE = 100.0;
     /** UIP sensitivity: exchange rate response to domestic-foreign interest rate differential. */
     public const UIP_SENSITIVITY = 3.0;
     /** Mean-reversion speed of exchange rate toward purchasing power parity equilibrium. */
@@ -548,12 +541,7 @@ class AssetMarketSubsystem
      */
     public const EVENT_REPRICING_TAU_YEARS = 0.02;
 
-    // --- Equity Valuation Shift ---
-    /**
-     * Half-life (years) of the repricing the market factor puts on equity value: the discount-rate news it carries
-     * fades as valuation ratios revert (log dividend yields persist ~0.87-0.94 a year, a 5-11 year half-life).
-     */
-    public const EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS = 5.0;
+    // --- Systemic Variance Jump ---
     /**
      * Mean variance jump on a market-wide crash (Duffie, Pan & Singleton 2000 SVCJ): a crash lifts vol from the 15%
      * anchor to ~16%; at four arrivals a year the jumps fund about a fifth of the long-run variance, leaving the
@@ -841,12 +829,6 @@ class AssetMarketSubsystem
         return (MacroConstants::SYSTEMIC_JUMP_INTENSITY * $meanVarianceJump) / self::MACRO_VOL_KAPPA;
     }
 
-    /** Share of the equity valuation shift that fades each year (EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS). */
-    public static function equityValuationShiftFade(): float
-    {
-        return M_LN2 / self::EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS;
-    }
-
     /**
      * The systemic market factor and the market-wide jump: the one driver every equity price shares. Its shock loads
      * on the economy's news (economicNewsZ()), read the tick after the draws that made it, as the economy closed.
@@ -909,7 +891,7 @@ class AssetMarketSubsystem
         );
         $marketLogReturnInnovation = ($state->marketVolatility * sqrt($dt) * $state->marketZ)
             + (log($state->marketJumpMultiplier) - $expectedJumpLogReturn);
-        $state->equityValuationShift = ($state->equityValuationShift * exp(-self::equityValuationShiftFade() * $dt))
+        $state->equityValuationShift = ($state->equityValuationShift * exp(-Valuation::equityValuationShiftFade() * $dt))
             + $marketLogReturnInnovation;
 
         return ['returnInnovation' => $freshShock, 'varianceJump' => $systemicJump['var_jump']];
@@ -1115,7 +1097,7 @@ class AssetMarketSubsystem
         // Della Corte et al. (2016) sovereign credit default risk discount on currency valuation.
         $fiscalRiskDiscount = self::FX_FISCAL_RISK_SENSITIVITY * $sovereignRiskSpreadEma;
 
-        return self::EXCHANGE_RATE_BASELINE * exp(
+        return MacroConstants::EXCHANGE_RATE_BASELINE * exp(
             (self::UIP_SENSITIVITY * $rateDiff) - $termsOfTradeShift + $safeHavenBid - $fiscalRiskDiscount,
         );
     }
@@ -1205,7 +1187,7 @@ class AssetMarketSubsystem
     {
         $creditZ = ($state->macroCreditSpreadEma - self::FCI_CREDIT_MEAN) / self::FCI_CREDIT_STD;
         $erpZ = ($state->equityRiskPremium - self::FCI_ERP_MEAN) / self::FCI_ERP_STD;
-        $fxZ = OpenEconomy::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend) / self::FCI_FX_STD;
+        $fxZ = MacroTransmission::realExchangeRateGap($state->exchangeRateIndexEma, $state->exchangeRateTrend) / self::FCI_FX_STD;
         $slopeZ = - ($state->nsSlopeEma - self::FCI_SLOPE_MEAN) / self::FCI_SLOPE_STD;
         $volZ = ($state->marketVolatilityEma - self::FCI_VOL_MEAN) / self::FCI_VOL_STD;
         $sloosZ = ($state->sloosTighteningIndexEma - self::FCI_SLOOS_MEAN) / self::FCI_SLOOS_STD;

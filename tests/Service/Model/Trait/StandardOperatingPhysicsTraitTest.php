@@ -229,20 +229,20 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
         $trend = 103.0;
         $settled = new MacroStateDTO(
             exchangeRateTrend: $trend,
-            importPriceLevel: \App\Service\Macro\Subsystem\Aggregate\OpenEconomy::importPriceLevelTarget($trend),
+            importPriceLevel: \App\Service\Math\MacroTransmission::importPriceLevelTarget($trend),
         );
         $this->assertEqualsWithDelta(0.0, $this->model->resolveInputPriceDeviations($settled)['imports'], 1e-12, 'A currency at its trend is not a cost.');
 
         $weak = new MacroStateDTO(
             exchangeRateTrend: $trend,
-            importPriceLevel: \App\Service\Macro\Subsystem\Aggregate\OpenEconomy::importPriceLevelTarget(0.90 * $trend),
+            importPriceLevel: \App\Service\Math\MacroTransmission::importPriceLevelTarget(0.90 * $trend),
         );
-        $expected = -\App\Service\Macro\Subsystem\Aggregate\OpenEconomy::IMPORT_PRICE_PASS_THROUGH * log(0.90);
+        $expected = -\App\Service\Math\MacroTransmission::IMPORT_PRICE_PASS_THROUGH * log(0.90);
         $this->assertEqualsWithDelta($expected, $this->model->resolveInputPriceDeviations($weak)['imports'], 1e-12, 'A 10% fall below trend raises landed costs by the pass-through.');
 
         $tariffed = new MacroStateDTO(
             exchangeRateTrend: $trend,
-            importPriceLevel: \App\Service\Macro\Subsystem\Aggregate\OpenEconomy::importPriceLevelTarget($trend, 0.10),
+            importPriceLevel: \App\Service\Math\MacroTransmission::importPriceLevelTarget($trend, 0.10),
         );
         $this->assertEqualsWithDelta(log(1.10), $this->model->resolveInputPriceDeviations($tariffed)['imports'], 1e-12, 'A tariff is a landed cost.');
 

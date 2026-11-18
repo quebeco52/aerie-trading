@@ -64,7 +64,7 @@ final class MacroDriverAttribution
         foreach ($fields as $field) {
             $readings = self::counterfactualReadings($field, $actual, $fields);
             if ($readings !== null) {
-                $states[$field] = MacroStateDTO::fromArray(array_replace($actual, $readings));
+                $states[$field] = $macroState->withWireOverrides($readings);
             }
         }
 

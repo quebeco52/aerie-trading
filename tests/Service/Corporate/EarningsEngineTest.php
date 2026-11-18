@@ -9,6 +9,7 @@ use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\Data\Macro\CapitalGoodsPrices;
+use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\DebtHealthDTO;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
@@ -32,7 +33,6 @@ use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Corporate\Segment\SegmentEntry;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\EarningsReportedEvent;
-use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Market\Pricing\MarketConsensusEngine;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
@@ -1595,7 +1595,7 @@ class EarningsEngineTest extends TestCase
             'outputGapEma' => $gap,
             'foreignOutputGapEma' => $gap,
             'manufacturingPmiEma' => MacroConstants::PMI_BASELINE + 2.0,
-            ...array_fill_keys(array_keys(MovingAverages::DEMAND_TRANSMISSION_LAGS), $gap),
+            ...array_fill_keys(array_keys(MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS), $gap),
         ]);
 
         for ($quarter = 0; $quarter < 12; ++$quarter) {

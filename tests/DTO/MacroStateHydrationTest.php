@@ -12,6 +12,7 @@ use App\Service\Macro\Subsystem\Aggregate\OutputGap;
 use App\Service\Macro\Subsystem\AssetMarketSubsystem;
 use App\Service\Macro\Subsystem\MonetaryPolicySubsystem;
 use App\Service\Math\MacroConstants;
+use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -180,7 +181,7 @@ class MacroStateHydrationTest extends TestCase
         $payload = ['exchange_rate_index_ema' => 92.0, 'exchange_rate_trend' => 100.0, 'foreign_output_gap_ema' => 0.012];
         $state = MacroState::fromArray($payload);
 
-        $this->assertEqualsWithDelta(OpenEconomy::importPriceLevelTarget(92.0), $state->importPriceLevel, 1e-15);
+        $this->assertEqualsWithDelta(MacroTransmission::importPriceLevelTarget(92.0), $state->importPriceLevel, 1e-15);
         $this->assertEqualsWithDelta(log(0.92), $state->realExchangeRateTradeLag, 1e-15);
         $this->assertEqualsWithDelta(OpenEconomy::netExportGapAt(0.012, log(0.92), 0.0), $state->netExportGap, 1e-15);
         $this->assertGreaterThan(0.0, $state->netExportGap, 'A cheap currency and a mainland boom both sell exports.');

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Macro\Subsystem\Aggregate;
 
+use App\Data\Macro\MacroFieldRegistry;
 use App\Service\Macro\MacroState;
 use App\Service\Macro\Subsystem\CreditFiscalSubsystem;
 use App\Service\Math\MacroConstants;
@@ -77,20 +78,6 @@ final class MovingAverages
      */
     public const SUPPLY_COST_TREND_YEARS = 10.0;
 
-    // --- Demand Transmission Lags ---
-    /**
-     * The output gap as it reaches order books, one first-order lag of output_gap_ema per delay a business model can
-     * declare (DEMAND_LAG_YEARS): field => mean lag in years.
-     */
-    public const DEMAND_TRANSMISSION_LAGS = [
-        'outputGapLag3m' => 0.25,
-        'outputGapLag6m' => 0.50,
-        'outputGapLag9m' => 0.75,
-        'outputGapLag12m' => 1.00,
-        'outputGapLag15m' => 1.25,
-        'outputGapLag18m' => 1.50,
-    ];
-
     /**
      * Continuous Exponential Moving Average (EMA) Filter for Macroeconomic State Variables.
      *
@@ -106,7 +93,7 @@ final class MovingAverages
         $commodityTrendWeight = TimeSeries::smoothingWeight($dt, MacroConstants::COMMODITY_TREND_HORIZON_YEARS);
 
         $state->outputGapEma += $emaWeight * ($state->outputGap - $state->outputGapEma);
-        foreach (self::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
+        foreach (MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
             $state->$field = TimeSeries::calculateDistributedLag($state->$field, $state->outputGapEma, $dt, $lagYears);
         }
         $expectedSales = $state->domesticDemandGapEma;
@@ -248,24 +235,5 @@ final class MovingAverages
         $state->foreignPolicyRateEma += $emaWeight * ($state->foreignPolicyRate - $state->foreignPolicyRateEma);
         $state->globalDemandGapEma += $emaWeight * ($state->globalDemandGap - $state->globalDemandGapEma);
         $state->moneyMarketFundShareEma += $emaWeight * ($state->moneyMarketFundShare - $state->moneyMarketFundShareEma);
-    }
-
-    /**
-     * The field that carries the output gap at a given demand lag. The macro publishes the gap at a fixed set of lags
-     * rather than at whatever each business model asks for, so a model declaring any other lag is a configuration
-     * error.
-     *
-     * @param float $lagYears Mean demand lag in years, as a business model declares it.
-     * @return string MacroState property name.
-     * @throws \InvalidArgumentException When the lag is not one DEMAND_TRANSMISSION_LAGS publishes.
-     */
-    public static function demandTransmissionLagField(float $lagYears): string
-    {
-        $field = array_search($lagYears, self::DEMAND_TRANSMISSION_LAGS, true);
-        if (!is_string($field)) {
-            throw new \InvalidArgumentException(sprintf('The macro publishes no output gap lag of %s years; add one to DEMAND_TRANSMISSION_LAGS.', $lagYears));
-        }
-
-        return $field;
     }
 }

@@ -190,7 +190,7 @@ final class ConsumerPrices
         // of those all of the retail price but the local distribution margin reprices; the half the District makes does
         // not.
         $priorImportPriceLevel = $state->importPriceLevel;
-        $state->importPriceLevel = TimeSeries::calculateDistributedLag($priorImportPriceLevel, OpenEconomy::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
+        $state->importPriceLevel = TimeSeries::calculateDistributedLag($priorImportPriceLevel, MacroTransmission::importPriceLevelTarget($state->exchangeRateIndexEma, $state->importTariffRate), $dt, self::IMPORT_PRICE_ADJUSTMENT_YEARS);
         $importPriceInflation = self::IMPORTED_SHARE_OF_GOODS * (1.0 - self::IMPORT_DISTRIBUTION_SHARE) * ($state->importPriceLevel - $priorImportPriceLevel) / $dt;
 
         // Shapiro (2022) Sector 2: core goods. Freight sets a cost LEVEL of the landed goods (Carriere-Swallow et al.

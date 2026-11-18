@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model;
 
+use App\Data\Macro\MacroFieldRegistry;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Macro\MacroState;
-use App\Service\Macro\Subsystem\Aggregate\MovingAverages;
 use App\Service\Macro\Subsystem\MacroAggregateSubsystem;
 use App\Service\Math\MathUtility;
 use App\Service\Model\AbstractBusinessModel;
@@ -77,7 +77,7 @@ final class SpendingAdjustmentTest extends TestCase
         $state = new MacroState();
         $state->outputGap = -0.03;
         $state->outputGapEma = -0.02;
-        foreach (array_keys(MovingAverages::DEMAND_TRANSMISSION_LAGS) as $field) {
+        foreach (array_keys(MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS) as $field) {
             $state->$field = 0.01;
         }
         $before = clone $state;
@@ -85,7 +85,7 @@ final class SpendingAdjustmentTest extends TestCase
 
         MacroAggregateSubsystem::headless(new MathUtility())->updateExponentialMovingAverages($state, $dt);
 
-        foreach (MovingAverages::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
+        foreach (MacroFieldRegistry::DEMAND_TRANSMISSION_LAGS as $field => $lagYears) {
             $this->assertEqualsWithDelta(($before->outputGapEma - $before->$field) / $lagYears, ($state->$field - $before->$field) / $dt, 1e-6, $field);
         }
     }

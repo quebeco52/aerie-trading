@@ -45,6 +45,13 @@ final class Valuation
     /** Valuation multiple discount scalar penalizing stocks with high non-cash accounting accruals. */
     public const ACCRUALS_ANOMALY_PE_PENALTY_SCALE = 8.0;
 
+    // --- Equity Valuation Shift ---
+    /**
+     * Half-life (years) of the repricing the market factor puts on equity value: the discount-rate news it carries
+     * fades as valuation ratios revert (log dividend yields persist ~0.87-0.94 a year, a 5-11 year half-life).
+     */
+    public const EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS = 5.0;
+
     // --- Investor Taxes (Brennan 1970; Chetty & Saez 2005) ---
     /**
      * Share of listed equity held by the District's own taxable holders, the holders a tax on dividends reaches: 20%. A
@@ -613,5 +620,11 @@ final class Valuation
     public static function sectorHurdleShift(float $hurdleRate, float $beta, float $expectedInflation): float
     {
         return ($hurdleRate - $expectedInflation) - (self::FOUNDING_REAL_RISK_FREE_RATE + ($beta * MacroConstants::BASE_EQUITY_RISK_PREMIUM));
+    }
+
+    /** Share of the equity valuation shift that fades each year (EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS). */
+    public static function equityValuationShiftFade(): float
+    {
+        return M_LN2 / self::EQUITY_VALUATION_SHIFT_HALF_LIFE_YEARS;
     }
 }

@@ -10,6 +10,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
+use App\Service\Math\Valuation;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
@@ -29,7 +30,7 @@ final class EquityValuationShiftTest extends TestCase
         $subsystem = new AssetMarketSubsystem(MathUtility::ownStream(11));
         $state = new MacroState();
         $state->equityValuationShift = -1.0;
-        $fade = exp(-AssetMarketSubsystem::equityValuationShiftFade() * self::DT);
+        $fade = exp(-Valuation::equityValuationShiftFade() * self::DT);
         $expectedJumpLoss = -MacroConstants::SYSTEMIC_JUMP_INTENSITY * self::DT * StochasticProcesses::kouTruncatedMean(
             MacroConstants::SYSTEMIC_JUMP_PROBABILITY_UP,
             MacroConstants::SYSTEMIC_JUMP_ETA_UP,
@@ -58,7 +59,7 @@ final class EquityValuationShiftTest extends TestCase
         $math = MathUtility::ownStream(20261027);
         $subsystem = new AssetMarketSubsystem($math);
         $state = new MacroState();
-        $fade = AssetMarketSubsystem::equityValuationShiftFade();
+        $fade = Valuation::equityValuationShiftFade();
 
         $shifts = [];
         for ($tick = 1; $tick <= 400 * 360; $tick++) {

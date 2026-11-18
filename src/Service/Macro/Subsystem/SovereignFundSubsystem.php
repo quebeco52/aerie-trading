@@ -10,6 +10,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
 use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 
 /**
  * The district's sovereign reserve fund: a rule-bound investor that sits beside the central bank, not in place of it.
@@ -259,7 +260,7 @@ class SovereignFundSubsystem
         $previousIndex = $state->foreignEquityIndex;
         $state->foreignEquityIndex = $this->foreignEquityIndexStep($state, $dt);
         $state->foreignEquityIndex *= exp($state->foreignEquityValuationChange);
-        $state->foreignEquityValuationShift = ($state->foreignEquityValuationShift * exp(-AssetMarketSubsystem::equityValuationShiftFade() * $dt))
+        $state->foreignEquityValuationShift = ($state->foreignEquityValuationShift * exp(-Valuation::equityValuationShiftFade() * $dt))
             + (self::FOREIGN_EQUITY_MARKET_CORRELATION * self::FOREIGN_EQUITY_VOLATILITY * $state->marketZ * sqrt($dt));
         if ($previousIndex > 0.0) {
             $state->sovereignFundForeignEquity *= $state->foreignEquityIndex / $previousIndex;
@@ -287,7 +288,7 @@ class SovereignFundSubsystem
     {
         $idiosyncraticVolatility = self::FOREIGN_EQUITY_VOLATILITY
             * sqrt(1.0 - (self::FOREIGN_EQUITY_MARKET_CORRELATION * self::FOREIGN_EQUITY_MARKET_CORRELATION));
-        $repricingFade = $state->foreignEquityValuationShift * (exp(-AssetMarketSubsystem::equityValuationShiftFade() * $dt) - 1.0) / $dt;
+        $repricingFade = $state->foreignEquityValuationShift * (exp(-Valuation::equityValuationShiftFade() * $dt) - 1.0) / $dt;
 
         return StochasticProcesses::calculateCorrelatedGBM(
             currentPrice: $state->foreignEquityIndex,
