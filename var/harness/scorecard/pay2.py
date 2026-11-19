@@ -8,7 +8,7 @@ import sys
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from payout import load, step, at, STEPS, SPLIT  # noqa: E402
+from payout import load, step, at, STEPS, SPLIT, dps_adj  # noqa: E402
 
 TIERS = [('challenger', 5), ('contender', 10), ('champion', 25), ('king', 50)]
 RANK = {s: i for i, (s, _) in enumerate(STEPS)}
@@ -90,17 +90,43 @@ def roll(run):
                 c['payers'] += 1
                 c[tier(s)] += 1
         tiers[y] = c
-    breaks = joins = tokens = raises_listed = over_eps = crisis = crisis_firms = 0
-    over_firms, crisis_list = set(), set()
+    breaks15 = joins15 = exits = entries = 0
+    raised, paying = Counter(), Counter()
     for tk, f in run['final'].items():
         rows = f['q']
-        for a, b in zip(rows, rows[1:]):
+        adj, _ = dps_adj(rows)
+        for y in range(2, years + 1):
+            i0 = max((i for i, r in enumerate(rows) if r['t'] <= y - 1 + 1e-6), default=None)
+            i1 = max((i for i, r in enumerate(rows) if r['t'] <= y + 1e-6), default=None)
+            if i0 is None or i1 is None or i1 - i0 < 3 or adj[i0] <= 0 or adj[i1] <= 0:
+                continue
+            paying[y] += 1
+            raised[y] += adj[i1] > adj[i0] * (1 + 1e-4)
+    breaks = joins = tokens = raises_listed = over_eps = crisis = crisis_firms = 0
+    over_firms, crisis_list = set(), set()
+    ye_breaks = mid_breaks = 0
+    for tk, f in run['final'].items():
+        rows = f['q']
+        # The fiscal year-end phase: the row index mod 4 at which the year-end dividend record is rewritten.
+        phases = Counter(i % 4 for i in range(1, len(rows)) if rows[i].get('yed') is not None and rows[i]['yed'] != rows[i - 1].get('yed'))
+        phase = phases.most_common(1)[0][0] if phases else None
+        for i, (a, b) in enumerate(zip(rows, rows[1:]), start=1):
             sa, sb = a.get('streak') or 0, b.get('streak') or 0
             if sa > 0 and sb < sa:
                 breaks += 1
+                if phase is not None and i % 4 == phase:
+                    ye_breaks += 1
+                else:
+                    mid_breaks += 1
+                exits += sa >= 5
+                breaks15 += b['t'] > 15 and sa >= 5
+
             ta, tb = tier(sa), tier(sb)
             if tb != 'none' and tb != ta and sb > sa:
                 joins += 1
+                entries += ta == 'none'
+                joins15 += b['t'] > 15 and ta == 'none'
+
             ya, yb = a.get('yed'), b.get('yed')
             split = a['shares'] > 0 and b['shares'] > 0 and (b['shares'] / a['shares'] > SPLIT or a['shares'] / b['shares'] > SPLIT)
             if ya and yb and ya > 0 and yb != ya and not split and tier(sa) != 'none' and sb > sa:
@@ -122,7 +148,11 @@ def roll(run):
             if listed and ((r.get('icr') is not None and r['icr'] < 1.0) or r.get('head') is False):
                 crisis += 1
                 crisis_list.add(tk)
-    return tiers, {'breaks/y': breaks / years, 'joins/y': joins / years, 'token raises/run': tokens,
+    return tiers, {'year-end breaks/run': ye_breaks, 'mid-year breaks/run': mid_breaks, 'breaks/y': breaks / years, 'joins/y': joins / years, 'roll exits (streak>=5 broken)/y': exits / years,
+                   'roll entries (none->challenger)/y': entries / years, 'roll exits/y y15-20': breaks15 / 5,
+                   'roll entries (none->challenger)/y y15-20': joins15 / 5,
+                   'payers raising Q4 DPS y/y': sum(raised.values()) / max(1, sum(paying.values())),
+                   'payers raising Q4 DPS y/y, y15-20': sum(raised[y] for y in range(16, 21)) / max(1, sum(paying[y] for y in range(16, 21))), 'token raises/run': tokens,
                    'listed FY raises/run': raises_listed, 'div>TTM NI 4q episodes': over_eps,
                    'listed firm-quarters in crisis/covenant': crisis}, over_firms, crisis_list
 

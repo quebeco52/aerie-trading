@@ -45,7 +45,6 @@ final class PayoutHarnessTest extends BoardRun
         $s = $report->getStock();
         $row['tpr'] = (float) $s->getTargetPayoutRatio();
         $row['dspd'] = method_exists($s, 'getDividendSpeed') ? (float) $s->getDividendSpeed() : null;
-        $row['dps'] = method_exists($s, 'getDividendPerShare') ? (float) $s->getDividendPerShare() : null;
         // pay2: the reinvestment driver the annual review reads, and the year-end dividend the roll compares against.
         $st = $s->getEarningsMomentumZ() ?? [];
         foreach (['ref' => 'carry:payout_reference', 'rinv' => 'carry:payout_reinvested', 'earn' => 'carry:payout_earned', 'rq' => 'carry:payout_quarters', 'yed' => 'carry:year_end_dividend'] as $k => $key) {

@@ -438,6 +438,8 @@ abstract class BoardRun extends KernelTestCase
             'cash' => (float) $report->getTreasury(),
             'debt' => (float) $report->getTotalDebt(),
             'div' => (float) $report->getDividendPaid(),
+            // The engine's declared dividend per share at report time (div is that times the shares before buybacks).
+            'dps' => (float) $report->getStock()->getLastDividend(),
             'bb' => (float) $report->getStockBuybacks(),
             'capex' => (float) $report->getCapitalExpenditures(),
             'dep' => (float) $report->getDepreciation(),
@@ -460,8 +462,8 @@ abstract class BoardRun extends KernelTestCase
             'eps' => (float) $report->getStock()->getEarningsPerShare(),
             'apt' => (float) $report->getStock()->getAnalystPriceTarget(),
             'cvol' => (float) $report->getStock()->getCurrentVolatility(),
-            'aris' => $report->getStock()->getDividendTier()->holdsThroughLosses(),
-            'streak' => $report->getStock()->getDividendStreakYears(),
+            'aris' => method_exists($report->getStock(), 'getDividendTier') ? $report->getStock()->getDividendTier()->holdsThroughLosses() : null,
+            'streak' => method_exists($report->getStock(), 'getDividendStreakYears') ? $report->getStock()->getDividendStreakYears() : null,
         ] + $this->healthRow($report->getStock()) + $this->fvRow($report->getStock()) + [
             'tni' => (float) $report->getStock()->getTotalNetIncome(),
             'crude' => $m?->energyPriceIndexEma ?? 0.0,

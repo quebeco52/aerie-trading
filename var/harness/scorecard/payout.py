@@ -40,6 +40,23 @@ def at(q, t):
     return row
 
 
+def dps_adj(rows):
+    """Split-adjusted dividend per share per row: the engine's declared `dps` when the run recorded it, else div / shares
+    (which mixes in the quarter's buybacks and issuance). Returns (series, measure)."""
+    declared = bool(rows) and rows[0].get('dps') is not None
+    fac, out = 1.0, []
+    for i, r in enumerate(rows):
+        if i and rows[i - 1]['shares'] > 0 and r['shares'] > 0:
+            ratio = r['shares'] / rows[i - 1]['shares']
+            if ratio > SPLIT or 1 / ratio > SPLIT:
+                fac *= ratio
+        if declared:
+            out.append(r['dps'] * fac)
+        else:
+            out.append(r['div'] / r['shares'] * fac if r['shares'] > 0 else 0.0)
+    return out, 'declared' if declared else 'div/shares'
+
+
 def dividends(run):
     """Per run: median payout of payers, median yield of payers (firm-years), DPS cuts, non-payers in the last year."""
     payouts, yields, cuts, cuts10, nonpay, alive = [], [], 0, 0, 0, 0
@@ -56,13 +73,11 @@ def dividends(run):
                 payouts.append(div / ni)
             if div > 0 and cap > 0:
                 yields.append(div / cap)
-        for a, b in zip(q, q[1:]):
-            if a['shares'] <= 0 or b['shares'] <= 0 or a['div'] <= 0:
+        adj, _ = dps_adj(q)
+        for a, b in zip(adj, adj[1:]):
+            if a <= 0:
                 continue
-            ratio = b['shares'] / a['shares']
-            if ratio > SPLIT or 1 / ratio > SPLIT:
-                continue
-            fall = (b['div'] / b['shares']) / (a['div'] / a['shares']) - 1.0
+            fall = b / a - 1.0
             if fall < -0.005:
                 cuts += 1
             if fall < -0.10:

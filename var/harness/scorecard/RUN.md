@@ -158,3 +158,45 @@ token raise only when covered by quarterly EPS)
 - vs pbase: DPS falls >10% 116.5 -> 87.0 (t -4.9), >0.5% 568 -> 540 (t -3.7), payout 0.367 -> 0.354 (t -1.9).
   Opening champions' >10% falls 0.75 -> 1.25 (t 0.8). Scorecard: nothing newly out of range; vs pay3, board cap/GDP
   at end 4.04 -> 4.20 (t 7.6, inside 1-5).
+
+### pay5 (pay4 = dc0aeb41 + token raise only for Contenders and up, DividendTier::protectsRecord())
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay5`, then `python3 pay2.py pay5` (now also
+  roll exits/entries, the y15-20 window, payers raising Q4 DPS y/y), `python3 champs.py pay4 pay5`, `python3 payout.py
+  pbase pay5`, `python3 cuts.py pay5 pbase pay4 pay5`, `python3 scorecard.py pbase pay5` -> `payout_pay5_4s.out`.
+- Roll share of payers y5/10/15/20: 35.5/52.1/56.7/64.9% (pay4 35.5/62.5/65.6/73.1%; y20 -8.2pp (1.9), t -4.3; seeds
+  53-71%). All firms 33.7/48.5/54.6/62.9%. Champion+king 10.2/9.6/8.3/7.8%.
+- Flows per year, all / y15-20: roll entries 4.96/4.45, exits (streak >= 5 broken) 2.26/2.75 (pay4 4.60/3.50,
+  1.50/1.85). Net +1.7/y late, so the roll still grows. Token 13% of streak years (pay4 22%).
+- Seeded champions unbroken y5/10/20: 91/84/70% (1.7%/y). Payers raising Q4 DPS y/y: 85% (pay4 86%); 89% in y15-20.
+- vs pbase: DPS falls >10% 116.5 -> 97.3 (t -4.3), >0.5% 568 -> 525 (t -3.9), payout 0.367 -> 0.351 (t -2.5).
+  vs pay4: +10.3 (t 1.1), -15.3 (t -2.4), -0.003 (t -1.7). Scorecard: nothing newly out of range.
+
+### pay6 (pay5 + sticky dividends: smoothing payers raise only at fiscal year end by the annual Lintner step, held
+flat under MIN_ANNOUNCED_DIVIDEND_RAISE 3%; cuts any quarter)
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay6`, then `python3 pay2.py pay6`,
+  `python3 champs.py pay6`, `python3 sticky.py pbase pay5 pay6` (new: raise/flat/fall shares of payer firm-years Q4 on
+  Q4, raise sizes, roll y20, token share, cash/assets), `python3 payout.py pbase pay6`, `python3 cuts.py pay6 pbase pay5
+  pay6`, `python3 scorecard.py pbase pay6` -> `payout_pay6_4s.out`.
+- Roll % of payers y5/10/15/20: 11.7/25.0/29.7/37.3% (pay5 35.5/52.1/56.7/64.9%; y20 -27.6pp, t -4.5). Entries vs
+  exits y15-20: 4.85 vs 3.20 a year, still growing. Champion+king 9.9/8.6/8.1/7.6%. Token 21% of streak years.
+- Payer firm-years raising 78% (pay5 85%), flat 5.6%, falling 16.3%; median raise 8.0%. Cash/assets unchanged (5.1%).
+- DPS falls >0.5% 525 -> 1012 a run (t 12.5): 658 are 0.5-2% and 443 come the quarter after a raise. A year-end step
+  followed by a mid-year trim (raises wait for year end, cuts do not); each trim breaks the streak. >10% falls 102
+  (pay5 97, t 0.4). Scorecard: CCC firm-quarters 0.001 -> 0.003 (t 3.3, inside range); nothing newly out of range.
+
+### pay7 (pay6 with MIN_ANNOUNCED_DIVIDEND_RAISE 2%) and the declared-DPS measure
+- Measure fix: `lib/BoardRun.php` rows carry `dps` = Stock::getLastDividend() (the declared dividend per share; `div`
+  is that times the shares before the quarter's buybacks). `payout.dps_adj()` split-adjusts it and falls back to
+  div/shares for runs without it; pay2/sticky/cuts/payout use it. BoardRun tier getters are method_exists-guarded so
+  the dfef1d97 tree runs. Re-run on the new measure: `pbase2` (= pbase, reproduces it exactly; `PAY_BASE=<git archive
+  dfef1d97>`, arms named pbase* use the BASE tree) and `pay6r` (= pay6 via `OVR=<dir>` holding
+  CapitalAllocationEngine.php with 0.03; reproduces pay6). pay1-pay5 lack `dps`; their DPS-fall and raise/flat
+  figures above are on div/shares and are not comparable.
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay7`, then `python3 pay2.py pay7`,
+  `python3 champs.py pay6r pay7`, `python3 sticky.py pbase2 pay6r pay7`, `python3 payout.py pbase2 pay7`, `python3
+  cuts.py pay7 pbase2 pay6r pay7`, `python3 scorecard.py pbase2 pay7` -> `payout_pay7_4s.out`.
+- Roll % payers y5/10/15/20: 15.2/31.6/38.2/40.8% (pay6r 11.7/25.0/29.7/37.3%; y20 +3.3pp (4.6), t 0.7).
+  Entries vs exits y15-20: 4.40 vs 3.75 a year (pay6r 4.85 vs 3.20). Year-end breaks 207 vs mid-year 27 a run.
+- Declared DPS, payer-years raise/flat/fall: pbase2 77/18/5%, pay6r 65/30/5%, pay7 68/27/4.5%; median raise 9.3%.
+  DPS falls >0.5% a run: pbase2 260, pay6r 285, pay7 271; >10%: 117, 101, 91 (pay7-pbase2 t -2.4).
+- Scorecard vs pbase2: nothing newly out of range; cash/assets 5.0% (unchanged), cap/GDP at end 4.23.

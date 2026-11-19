@@ -53,6 +53,15 @@ enum DividendTier: string
         return $this !== self::None;
     }
 
+    /**
+     * Whether its board closes a flat year with a token raise to keep its record: a contender or above, whose decade
+     * of increases is a standing worth a token to keep; a challenger needs a real raise.
+     */
+    public function protectsRecord(): bool
+    {
+        return $this === self::Contender || $this === self::Champion || $this === self::King;
+    }
+
     /** Multiplier on the board's dividend adjustment speed: the longer the record, the smoother the dividend. */
     public function smoothing(): float
     {

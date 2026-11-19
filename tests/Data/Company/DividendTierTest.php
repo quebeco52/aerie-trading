@@ -35,4 +35,12 @@ class DividendTierTest extends TestCase
         $this->assertFalse(DividendTier::None->isListed());
         $this->assertTrue(DividendTier::Challenger->isListed());
     }
+
+    public function testOnlyAContenderOrAboveProtectsItsRecord(): void
+    {
+        $this->assertSame(
+            [DividendTier::Contender, DividendTier::Champion, DividendTier::King],
+            array_values(array_filter(DividendTier::cases(), static fn(DividendTier $t): bool => $t->protectsRecord())),
+        );
+    }
 }

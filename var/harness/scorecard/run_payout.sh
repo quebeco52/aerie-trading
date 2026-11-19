@@ -9,7 +9,7 @@ mkdir -p "$dir/runs"
 rm -f "$dir/runs/$arm-s$seed.jsonl"
 cd "$root" || exit 1
 base=""
-if [ "$arm" = "pbase" ]; then base="${PAY_BASE:?set PAY_BASE to the base tree}"; fi
+if [ "${arm#pbase}" != "$arm" ]; then base="${PAY_BASE:?set PAY_BASE to the base tree}"; fi
 BASE="$base" SEED="$seed" YEARS="${YEARS:-20}" TPY="${TPY:-360}" OUT="$dir/runs/$arm-s$seed.jsonl" \
   bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap var/harness/bootstrap.php --no-configuration \
   var/harness/scorecard/PayoutHarnessTest.php

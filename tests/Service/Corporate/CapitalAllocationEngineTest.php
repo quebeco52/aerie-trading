@@ -292,7 +292,7 @@ class CapitalAllocationEngineTest extends TestCase
 
         // With an 80% target payout ratio on trailing FFO, the target quarterly dividend is $1.80 per share.
         $annualFfoEps = 9.00;
-        $result = $this->engine->allocateCapital($stock, $annualFfoEps, 2.00, 100.00, 1000000.0, $macroState, 1_000_000.0);
+        $result = $this->engine->allocateCapital($stock, $annualFfoEps, 2.00, 100.00, 1000000.0, $macroState, 1_000_000.0, isFiscalYearEnd: true);
 
         $this->assertEqualsWithDelta(1.80, $result['dividend_paid'], 0.0001, 'REIT dividend should reflect 80% target payout on FFO');
     }
@@ -369,7 +369,7 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setPayoutPolicy(PayoutPolicy::Balanced);
         $stock->setBasePayoutPolicy(PayoutPolicy::Balanced);
         $stock->setDividendSpeed('1.00');
-        $stock->setLastDividend('0.00');
+        $stock->setLastDividend('0.70');
         $stock->setRetainedEarnings('50000000.00');
         $stock->setTotalRevenue('10000000.00');
         $stock->setOperatingMargin('0.20');
@@ -707,14 +707,19 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
-     * A firm on the roll closes a flat year with a token raise and keeps its record; one off the roll does not, and
-     * neither does one whose earnings would not cover the raise.
+     * A contender or above closes a flat year with a token raise and keeps its record; a challenger does not, nor a
+     * firm off the roll, nor one whose earnings would not cover the raise.
      */
-    public function testATokenRaiseCarriesARecordThroughAFlatYearOnlyOnTheRoll(): void
+    public function testATokenRaiseCarriesARecordThroughAFlatYearOnlyForAContenderOrAbove(): void
     {
         [$listed, $listedStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 12, lastYearEndDividend: 1.00);
         [$unlisted, $unlistedStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 3, lastYearEndDividend: 1.00);
         [$uncovered, $uncoveredStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4000000.00', streak: 12, lastYearEndDividend: 1.00);
+        [$challenger, $challengerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 7, lastYearEndDividend: 1.00);
+
+        $this->assertSame(1.00, $challenger['dividend_paid'], 'A challenger makes no token raise.');
+        $this->assertSame(0, $challengerStock->getDividendStreakYears());
+        $this->assertContains("Held its dividend flat for the year, ending 7 years of increases and its place on the exchange's dividend roll.", array_column($challenger['events'], 'description'));
 
         $this->assertLessThanOrEqual(1.00, $uncovered['dividend_paid'], 'A raise to $1.01 a quarter on $1.00 of trailing earnings is not made.');
         $this->assertSame(0, $uncoveredStock->getDividendStreakYears());
@@ -833,9 +838,9 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
-     * Lintner partial adjustment at the speed the seed gives a smoothing payer: declared quarterly, the dividend
-     * closes the share of its gap to target that Fama & Babiak (1968) measured in a year, not the 4-11% a year the
-     * old aristocrat marker speeds closed.
+     * Lintner partial adjustment at the speed the seed gives a smoothing payer: held through the year and raised at
+     * its annual review, the dividend closes the share of its gap to target that Fama & Babiak (1968) measured in a
+     * year, not the 4-11% a year the old aristocrat marker speeds closed.
      */
     public function testAPayerAtTheLintnerSpeedClosesTheCitedShareOfItsDividendGapInAYear(): void
     {
@@ -860,12 +865,41 @@ class CapitalAllocationEngineTest extends TestCase
         for ($quarter = 0; $quarter < 4; $quarter++) {
             // The trailing year holds at $4.00 a share, so the target stands still while the dividend closes on it.
             $stock->setEarningsPerShare('4.00');
-            $engine->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+            $engine->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), isFiscalYearEnd: $quarter === 3);
+            if ($quarter < 3) {
+                $this->assertSame(0.10, (float) $stock->getLastDividend(), 'A smoothing payer holds its dividend until the annual review.');
+            }
         }
 
         $target = 1.00 * $stock->getPolicyPayoutRatio();
         $closed = ((float) $stock->getLastDividend() - 0.10) / ($target - 0.10);
         $this->assertEqualsWithDelta(FinancialConstants::LINTNER_ANNUAL_ADJUSTMENT_SPEED, $closed, 0.002);
+    }
+
+    /**
+     * A smoothing board raises once a year and only by a raise worth announcing: its dividend holds mid-year with its
+     * target above it, and a year-end step short of the minimum leaves it flat. A variable payer resets every quarter.
+     */
+    public function testASmoothingPayerRaisesOnceAYearByARaiseWorthAnnouncing(): void
+    {
+        $pay = function (string $industry, string $trailingNetIncome, bool $isFiscalYearEnd): float {
+            $stock = $this->buildDistributor('STKY');
+            $stock->setIndustry($industry);
+            $stock->setTargetPayoutRatio('0.50');
+            $stock->setDividendSpeed('1.00');
+            $stock->setLastDividend('0.50');
+            $stock->setTotalNetIncome($trailingNetIncome);
+
+            return $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
+                ->allocateCapital($stock, 4.00, 2.00, 10.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), isFiscalYearEnd: $isFiscalYearEnd)['dividend_paid'];
+        };
+
+        // Trailing earnings of $1.50 a quarter put a 50% target at $0.75, half again the $0.50 paid.
+        $this->assertSame(0.50, $pay('Software - Infrastructure', '6000000.00', false), 'No raise mid-year.');
+        $this->assertGreaterThan(0.50 * (1.0 + CapitalAllocationEngine::MIN_ANNOUNCED_DIVIDEND_RAISE), $pay('Software - Infrastructure', '6000000.00', true), 'The annual review raises it.');
+        // $1.01 a quarter puts the target 1% above the dividend: not worth announcing.
+        $this->assertSame(0.50, $pay('Software - Infrastructure', '4040000.00', true), 'A raise short of the minimum is not made.');
+        $this->assertGreaterThan(0.50, $pay('Copper', '6000000.00', false), 'A variable payer resets its dividend every quarter.');
     }
 
     /**
@@ -883,7 +917,7 @@ class CapitalAllocationEngineTest extends TestCase
             $stock->setTotalNetIncome($trailingNetIncome);
 
             return $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
-                ->allocateCapital($stock, $annualizedQuarterEps, 2.00, 10.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21))['dividend_paid'];
+                ->allocateCapital($stock, $annualizedQuarterEps, 2.00, 10.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), isFiscalYearEnd: true)['dividend_paid'];
         };
 
         $steady = $pay('4000000.00', 4.00);
@@ -906,7 +940,7 @@ class CapitalAllocationEngineTest extends TestCase
             $stock->setTotalNetIncome('4000000.00');
 
             return $this->buildEngineWith($this->debtEngineReturning($this->buildHealth()))
-                ->allocateCapital($stock, 4.00, 2.00, 10.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21, dividendTaxRate: $dividendTaxRate))['dividend_paid'];
+                ->allocateCapital($stock, 4.00, 2.00, 10.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21, dividendTaxRate: $dividendTaxRate), isFiscalYearEnd: true)['dividend_paid'];
         };
 
         $founding = $pay(Valuation::FOUNDING_DIVIDEND_TAX_RATE);
@@ -1293,11 +1327,11 @@ class CapitalAllocationEngineTest extends TestCase
 
         $compliant = $build('RISE');
         $rising = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(true)))
-            ->allocateCapital($compliant, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+            ->allocateCapital($compliant, 4.00, 2.00, 10.00, 1000000.0, $macroState, isFiscalYearEnd: true);
 
         $breached = $build('FRZE');
         $frozen = $this->buildEngineWith($this->debtEngineReturning($this->buildHealth(false)))
-            ->allocateCapital($breached, 4.00, 2.00, 10.00, 1000000.0, $macroState);
+            ->allocateCapital($breached, 4.00, 2.00, 10.00, 1000000.0, $macroState, isFiscalYearEnd: true);
 
         $this->assertGreaterThan(0.20, $rising['dividend_paid'], 'Control must want to raise the dividend, or the freeze is untestable.');
         $this->assertSame(0.20, $frozen['dividend_paid'], 'A breach holds the distribution where it stands.');

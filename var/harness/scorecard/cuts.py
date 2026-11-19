@@ -6,7 +6,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'lib'))
-from payout import load, SPLIT  # noqa: E402
+from payout import load, dps_adj  # noqa: E402
 from stats import paired, fmt  # noqa: E402
 
 
@@ -14,14 +14,11 @@ def falls(run, champs):
     out = {'champ10': 0, 'other10': 0, 'champ05': 0, 'other05': 0}
     for tk, f in run['final'].items():
         g = 'champ' if tk in champs else 'other'
-        q = f['q']
-        for a, b in zip(q, q[1:]):
-            if a['div'] <= 0 or a['shares'] <= 0 or b['shares'] <= 0:
+        adj, _ = dps_adj(f['q'])
+        for a, b in zip(adj, adj[1:]):
+            if a <= 0:
                 continue
-            ratio = b['shares'] / a['shares']
-            if ratio > SPLIT or 1 / ratio > SPLIT:
-                continue
-            fall = (b['div'] / b['shares']) / (a['div'] / a['shares']) - 1.0
+            fall = b / a - 1.0
             out[g + '05'] += fall < -0.005
             out[g + '10'] += fall < -0.10
     return out
