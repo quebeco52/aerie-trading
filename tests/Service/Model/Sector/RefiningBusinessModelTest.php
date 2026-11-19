@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Model\Sector;
 
-use App\Data\Company\InitialMarket;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\MacroConstants;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use App\Tests\Support\ScriptedDraws;
@@ -208,13 +208,7 @@ final class RefiningBusinessModelTest extends TestCase
      */
     public function testCascadesSeedLeavesRoomForRefineryOpexAboveFeedstock(): void
     {
-        $casc = null;
-        foreach (InitialMarket::STOCKS as $row) {
-            if ($row['ticker'] === 'CASC') {
-                $casc = $row;
-            }
-        }
-        $this->assertNotNull($casc);
+        $casc = SeedRows::for('CASC');
 
         $margin = (float) $casc['operating_margin'];
         $turnover = (float) $casc['baseline_roic'] / ($margin * (1.0 - MacroConstants::BASE_CORPORATE_TAX_RATE));

@@ -123,12 +123,14 @@ class OpeningBoardBuilder
             $stock->setLongRunReturn((string) $roic);
         }
 
-        $stock->setCapexRatio((string) $stockData['capex_ratio']);
+        if (isset($stockData['capex_ratio'])) {
+            $stock->setCapexRatio((string) $stockData['capex_ratio']);
+        }
         $stock->setTargetPayoutRatio((string) $stockData['target_payout_ratio']);
         $stock->setDividendSpeed((string) $stockData['dividendSpeed']);
         $stock->setDividendAristocrat((bool) ($stockData['dividend_aristocrat'] ?? false));
         $stock->setFixedCostRatio((float) $stockData['fixed_cost_ratio']);
-        $stock->setDepreciationRate((string) ($stockData['depreciation_rate'] ?? Sectors::metricsFor($stockData['industry'] ?? null)['depreciation']));
+        $stock->setDepreciationRate((string) $stockData['depreciation_rate']);
 
         $stock->setCorporateTreasury((string) $stockData['corporate_treasury']);
         $stock->setFloatingDebtRatio((string) $stockData['floating_debt_ratio']);

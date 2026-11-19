@@ -149,7 +149,7 @@ class InitialMarketTest extends TestCase
         $this->assertGreaterThanOrEqual(0.0, $stock['jump_intensity'], "Jump intensity negative for {$ticker}");
         $this->assertGreaterThanOrEqual(0.0, $stock['jump_vol'], "Jump volatility negative for {$ticker}");
 
-        $this->assertGreaterThanOrEqual(0.0, $stock['capex_ratio'], "CapEx ratio negative for {$ticker}");
+        $this->assertGreaterThanOrEqual(0.0, $stock['capex_ratio'] ?? 0.0, "CapEx ratio negative for {$ticker}");
         $this->assertGreaterThanOrEqual(0.0, $stock['target_payout_ratio'], "Target payout ratio negative for {$ticker}");
         $this->assertLessThanOrEqual(1.0, $stock['target_payout_ratio'], "Target payout ratio exceeds 100% for {$ticker}");
 
@@ -187,6 +187,25 @@ class InitialMarketTest extends TestCase
             $debtToEquity,
             "Stock {$ticker} in industry {$industry} exceeds equity limit of {$equityLimit} (actual D/E: {$debtToEquity})",
         );
+    }
+
+    /**
+     * A raw row states what sets the firm apart, not a default SeedRows fills in: no share count, a depreciation rate
+     * only where it differs from its industry's, and a reinvestment rate (capex_ratio) only on a lender, the one firm
+     * that reads it.
+     */
+    public function testEveryRawRowStatesOnlyWhatSetsItApart(): void
+    {
+        foreach (InitialMarket::STOCKS as $row) {
+            $ticker = $row['ticker'];
+            $industry = (string) $row['industry'];
+            $this->assertArrayNotHasKey('shares_outstanding', $row, "{$ticker} restates the share count every firm lists with.");
+            if (isset($row['depreciation_rate'])) {
+                $this->assertNotEqualsWithDelta(Sectors::metricsFor($industry)['depreciation'], $row['depreciation_rate'], 1e-12, "{$ticker} restates its industry's depreciation rate.");
+            }
+            $isLender = Sectors::isFinancial(Sectors::businessModelFor($industry));
+            $this->assertSame($isLender, isset($row['capex_ratio']), $isLender ? "{$ticker} is a lender with no reinvestment rate." : "{$ticker} states a reinvestment rate its capital budget never reads.");
+        }
     }
 
     /**

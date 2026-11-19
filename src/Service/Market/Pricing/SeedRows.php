@@ -21,11 +21,17 @@ final class SeedRows
      */
     public const RESOLVED = 'books_resolved';
 
+    // --- Row Defaults ---
+    /** Shares every firm lists with (1bn): price levels differ by size, the share count does not. */
+    public const SHARES_OUTSTANDING = 1_000_000_000;
+
     /** @var list<array<string, mixed>>|null The rows at the opening macro, in the seed's order. */
     private static ?array $opening = null;
 
     /**
-     * One row with the books its model builds at the macro state.
+     * One row with the books its model builds at the macro state. A row states only what sets the firm apart: the
+     * share count and the industry's depreciation rate are filled in where it is silent. capex_ratio is a lender's
+     * reinvestment rate and stays absent on an operating firm, whose plant the capital budget plans.
      *
      * @param array<string, mixed> $row A row of InitialMarket::STOCKS.
      * @return array<string, mixed>
@@ -35,6 +41,11 @@ final class SeedRows
         if (!empty($row[self::RESOLVED])) {
             return $row;
         }
+
+        $row += [
+            'shares_outstanding' => self::SHARES_OUTSTANDING,
+            'depreciation_rate' => Sectors::metricsFor($row['industry'] ?? null)['depreciation'],
+        ];
 
         return [self::RESOLVED => true] + Sectors::strategyFor($row['industry'] ?? null)->resolveOpeningBooks($row, $openingMacro ?? new MacroStateDTO());
     }

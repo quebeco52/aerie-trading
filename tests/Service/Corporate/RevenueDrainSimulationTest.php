@@ -8,6 +8,7 @@ use App\Data\Company\IndustryBetas;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\CorporateEngineFactory;
 use PHPUnit\Framework\TestCase;
@@ -176,12 +177,7 @@ class RevenueDrainSimulationTest extends TestCase
 
     private function createStockFromInitialMarket(string $ticker, string $industry): Stock
     {
-        $data = [];
-        foreach (\App\Data\Company\InitialMarket::STOCKS as $s) {
-            if ($s['ticker'] === $ticker) {
-                $data = $s;
-            }
-        }
+        $data = SeedRows::for($ticker);
 
         $stock = new Stock();
         $stock->setTicker($ticker);
@@ -193,14 +189,14 @@ class RevenueDrainSimulationTest extends TestCase
         $stock->setPrice('50.00');
         $stock->setVolatility((string) ($data['volatility'] ?? 0.15));
         $stock->setCurrentVolatility((string) ($data['volatility'] ?? 0.15));
-        $stock->setBeta((string) ($data === [] ? 1.0 : IndustryBetas::seedBetaFor($data)));
+        $stock->setBeta((string) IndustryBetas::seedBetaFor($data));
         $stock->setJumpIntensity((string) ($data['jump_intensity'] ?? 1.0));
         $stock->setJumpVol((string) ($data['jump_vol'] ?? 0.10));
-        $stock->setTotalEquity((string) ($data['total_equity'] ?? 40000000000.00));
+        $stock->setTotalEquity((string) (float) ($data['total_equity'] ?? 40000000000.00));
         $stock->setWholesaleDebt((string) ($data['wholesale_debt'] ?? 10000000000.00));
         $stock->setCorporateTreasury((string) ($data['corporate_treasury'] ?? 5000000000.00));
         $stock->setCustomerDeposits((string) ($data['customer_deposits'] ?? 0.00));
-        $stock->setRetainedEarnings((string) ($data['retained_earnings'] ?? 0.00));
+        $stock->setRetainedEarnings((string) (float) ($data['retained_earnings'] ?? 0.00));
         $stock->setBaselineRoic((string) ($data['baseline_roic'] ?? 0.15));
         $stock->setBaselineRoe((string) ($data['baseline_roe'] ?? 0.15));
         $stock->setOperatingMargin((string) ($data['operating_margin'] ?? 0.18));

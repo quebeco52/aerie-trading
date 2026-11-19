@@ -100,7 +100,9 @@ final class CapitalSaturationInvariantTest extends TestCase
         $stock->setBaselineRoic((string) $row['baseline_roic']);
         $stock->setCurrentRoic((string) $row['baseline_roic']);
         $stock->setRoicTtm((string) $row['baseline_roic']);
-        $stock->setCapexRatio((string) $row['capex_ratio']);
+        if (isset($row['capex_ratio'])) {
+            $stock->setCapexRatio((string) $row['capex_ratio']);
+        }
         $stock->setTargetPayoutRatio((string) $row['target_payout_ratio']);
         $stock->setDividendSpeed((string) $row['dividendSpeed']);
         $stock->setFixedCostRatio((float) $row['fixed_cost_ratio']);
