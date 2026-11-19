@@ -375,7 +375,7 @@ final class PagesRenderTest extends KernelTestCase
 
         // A miner in default, seen signed in: the credit card under stress, the industry card with its merger review,
         // management, peers, holdings, a listed bond, an option chain and the business map.
-        $pages['stock-industrial'] = ['/stock/FNCH', 'stock/index.html.twig', array_replace($pages['stock'][2], self::minerStock())];
+        $pages['stock-industrial'] = ['/stock/FNCH', 'stock/index.html.twig', array_replace($pages['stock'][2], self::minerStock(), ['rivals' => self::rivals('own')])];
 
         $pages += self::bondPages();
         $pages += self::industryPages();
@@ -635,22 +635,29 @@ final class PagesRenderTest extends KernelTestCase
         ];
     }
 
-    /** A bank's return on equity against its sector's median: an edge that opened and is now narrowing. */
-    private static function rivals(): array
+    /**
+     * A bank's return on equity against its industry's median: an edge that opened and is now narrowing. Or a miner
+     * alone in its industry, its operating margin against its own three-year average.
+     */
+    private static function rivals(string $mode = 'rivals'): array
     {
         $own = [];
-        $median = [];
+        $benchmark = [];
         for ($q = 0; $q < 48; ++$q) {
             $t = 2.0 + $q / 4.0;
             $label = \App\Data\District\DistrictCalendar::quarter($t);
             $own[] = ['t' => $t, 'label' => $label, 'value' => 0.11 + 0.03 * sin($q / 15.0) + 0.004 * sin($q)];
-            $median[] = ['t' => $t, 'label' => $label, 'value' => 0.10 + 0.01 * sin($q / 9.0)];
+            $benchmark[] = ['t' => $t, 'label' => $label, 'value' => $mode === 'own' ? ($q < 8 ? null : 0.11 + 0.025 * sin(($q - 6) / 15.0)) : 0.10 + 0.01 * sin($q / 9.0)];
         }
 
         return [
-            'measure' => 'Return on equity', 'peerLabel' => 'sector', 'peerName' => 'Financials', 'peers' => 9,
-            'chart' => \App\Service\View\IndustryCharts::lines([['name' => 'LAKE', 'points' => $own], ['name' => 'Sector median', 'points' => $median]]),
-            'gap' => $own[47]['value'] - $median[47]['value'], 'gapThen' => $own[35]['value'] - $median[35]['value'],
+            'mode' => $mode, 'measure' => $mode === 'own' ? 'Operating margin' : 'Return on equity',
+            'peerName' => $mode === 'own' ? 'Gold' : 'Banks - Regional', 'peers' => $mode === 'own' ? 0 : 3,
+            'chart' => \App\Service\View\IndustryCharts::lines([
+                ['name' => $mode === 'own' ? 'FNCH' : 'LAKE', 'points' => $own],
+                ['name' => $mode === 'own' ? 'Three-year average' : 'Industry median', 'points' => $benchmark],
+            ]),
+            'gap' => $own[47]['value'] - $benchmark[47]['value'], 'gapThen' => $mode === 'own' ? null : $own[35]['value'] - $benchmark[35]['value'],
         ];
     }
 

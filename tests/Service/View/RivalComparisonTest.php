@@ -12,7 +12,7 @@ use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
 /**
- * A company's trailing margin against its peers' median, and the peers it is compared with.
+ * A company's trailing margin against its industry rivals' median or its own three-year average.
  */
 #[Group('unit')]
 final class RivalComparisonTest extends TestCase
@@ -50,21 +50,40 @@ final class RivalComparisonTest extends TestCase
         $this->assertEqualsWithDelta((0.05 + 0.08) / 2.0, $series['median'][1]['value'], 1e-12, 'The failed rival has stopped reporting.');
     }
 
-    /** A thin industry is compared with its sector instead. */
-    public function testAThinIndustryFallsBackToItsSector(): void
+    /** Only same-industry rivals count; a thin industry is read against the company's own record, not its sector. */
+    public function testAThinIndustryIsReadAgainstItsOwnRecord(): void
     {
         $own = $this->stock(1, 'Airlines', 'Industrials');
         $rival = $this->stock(2, 'Airlines', 'Industrials');
         $other = $this->stock(3, 'Railroads', 'Industrials');
         $elsewhere = $this->stock(4, 'Banks - Regional', 'Financial Services');
 
-        $group = PeerGroup::of($own, [$own, $rival, $other, $elsewhere]);
-        $this->assertSame('sector', $group['label']);
-        $this->assertSame([2, 3], array_map(static fn(Stock $s): ?int => $s->getId(), $group['members']));
+        $this->assertSame('own', RivalComparisonBuilder::modeFor(PeerGroup::of($own, [$own, $rival, $other, $elsewhere])));
+        $this->assertSame('own', RivalComparisonBuilder::modeFor(PeerGroup::of($own, [$own])), 'Alone in its sector.');
 
         $group = PeerGroup::of($own, [$own, $rival, $this->stock(5, 'Airlines', 'Industrials'), $other]);
-        $this->assertSame('industry', $group['label']);
-        $this->assertCount(2, $group['members']);
+        $this->assertSame('rivals', RivalComparisonBuilder::modeFor($group));
+        $this->assertSame([2, 5], array_map(static fn(Stock $s): ?int => $s->getId(), $group['members']));
+    }
+
+    /** The three-year average sums twelve quarters of profit over twelve of sales, and waits for all twelve. */
+    public function testTheThreeYearAverageSumsTwelveQuarters(): void
+    {
+        $reports = [];
+        for ($q = 0; $q < 13; ++$q) {
+            $revenue = $q === 11 ? 300.0 : 100.0;
+            $reports[] = $this->report('OWN', $q, $revenue, $q === 11 ? 90.0 : 10.0);
+        }
+        $reports[] = $this->report('PEER', 12, 100.0, 50.0);
+
+        $series = RivalComparisonBuilder::ownSeries($reports, 'OWN', false);
+
+        $this->assertCount(10, $series['own'], 'A trailing figure from the fourth quarter on.');
+        $this->assertCount(10, $series['average']);
+        $this->assertNull($series['average'][7]['value'], 'Eleven quarters are not three years.');
+        $this->assertEqualsWithDelta((11 * 10.0 + 90.0) / (11 * 100.0 + 300.0), $series['average'][8]['value'], 1e-12);
+        $this->assertEqualsWithDelta((11 * 10.0 + 90.0) / (11 * 100.0 + 300.0), $series['average'][9]['value'], 1e-12, 'Quarters 1-12, the big quarter still inside.');
+        $this->assertEqualsWithDelta((3 * 10.0 + 90.0) / (3 * 100.0 + 300.0), $series['own'][8]['value'], 1e-12);
     }
 
     private function report(string $ticker, int $quarter, float $revenue, float $ebit): CorporateReport

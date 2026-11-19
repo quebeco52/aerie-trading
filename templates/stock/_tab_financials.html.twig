@@ -158,28 +158,39 @@
 			{{ _self.chart('capitalEfficiencyChart', 'valuation', "Return on capital against its cost",
 				"Return on invested capital, the cost of capital, and the economic profit between them") }}
 
-			{# Its profitability against its rivals' median over the years (RivalComparisonBuilder), drawn on the server. #}
+			{# Its profitability against its industry rivals' median over the years, or against its own three-year average when
+			   too few listed companies share its industry (RivalComparisonBuilder), drawn on the server. #}
 			{% if rivals|default(null) %}
 				{% import 'industry/_macros.html.twig' as lines %}
+				{% set own = rivals.mode == 'own' %}
+				{% set industry_link %}<a href="{{ path('app_industry', {slug: industry_slug(rivals.peerName)}) }}" class="text-primary hover:underline">{{ rivals.peerName }}</a>{% endset %}
 				<div class="chart-card bg-surface-container-low border border-outline-variant/20 rounded-lg p-5 flex flex-col" data-financial-category="valuation" id="rival-comparison">
 					<div class="mb-3">
-						<h4 class="text-sm font-semibold text-on-surface">{{ rivals.measure }} against its rivals</h4>
-						<p class="text-xs text-on-surface-variant mt-0.5">Over the trailing four quarters, against the median of {{ rivals.peers }} other {{ rivals.peers == 1 ? 'company' : 'companies' }} in {% if rivals.peerLabel == 'industry' %}its industry, <a href="{{ path('app_industry', {slug: industry_slug(rivals.peerName)}) }}" class="text-primary hover:underline">{{ rivals.peerName }}</a>{% else %}the <a href="{{ path('app_screener', {sector: rivals.peerName}) }}" class="text-primary hover:underline">{{ rivals.peerName }}</a> sector{% endif %}, including any that have since failed.</p>
+						<h4 class="text-sm font-semibold text-on-surface">{{ rivals.measure }} against its {{ own ? 'own record' : 'rivals' }}</h4>
+						{% if own %}
+							<p class="text-xs text-on-surface-variant mt-0.5">Over the trailing four quarters, against its own average over the last three years. Too few listed companies share its industry, {{ industry_link }}, for a median of its rivals.</p>
+						{% else %}
+							<p class="text-xs text-on-surface-variant mt-0.5">Over the trailing four quarters, against the median of {{ rivals.peers }} other companies in its industry, {{ industry_link }}, including any that have since failed.</p>
+						{% endif %}
 					</div>
-					{{ lines.line_chart(rivals.chart, rivals.measure ~ ' of ' ~ asset.ticker ~ ' against the ' ~ rivals.peerLabel ~ ' median, by quarter') }}
+					{{ lines.line_chart(rivals.chart, rivals.measure ~ ' of ' ~ asset.ticker ~ ' against ' ~ (own ? 'its three-year average' : 'the industry median') ~ ', by quarter') }}
 					{% if rivals.gap is not null %}
 						{% set then = rivals.gapThen %}
 						<p class="text-xs text-on-surface-variant mt-3">
-							{{ rivals.measure }} is <span class="font-mono {{ rivals.gap|signed_class }}">{{ rivals.gap|abs|pp(1) }}</span> {{ rivals.gap >= 0 ? 'above' : 'below' }} the median{% if then is not null %}, against <span class="font-mono {{ then|signed_class }}">{{ then|abs|pp(1) }}</span> {{ then >= 0 ? 'above' : 'below' }} three years ago{% endif %}.
-							{% if then is not null %}
-								{% if (rivals.gap >= 0) != (then >= 0) %}
-									It has {{ rivals.gap >= 0 ? 'moved ahead of' : 'fallen behind' }} its rivals.
-								{% elseif rivals.gap|abs > then|abs + 0.005 %}
-									Its {{ rivals.gap >= 0 ? 'edge' : 'shortfall' }} is widening.
-								{% elseif rivals.gap|abs < then|abs - 0.005 %}
-									Its {{ rivals.gap >= 0 ? 'edge' : 'shortfall' }} is narrowing.
-								{% else %}
-									Its {{ rivals.gap >= 0 ? 'edge' : 'shortfall' }} has held.
+							{% if own %}
+								{{ rivals.measure }} is <span class="font-mono {{ rivals.gap|signed_class }}">{{ rivals.gap|abs|pp(1) }}</span> {{ rivals.gap >= 0 ? 'above' : 'below' }} its three-year average.
+							{% else %}
+								{{ rivals.measure }} is <span class="font-mono {{ rivals.gap|signed_class }}">{{ rivals.gap|abs|pp(1) }}</span> {{ rivals.gap >= 0 ? 'above' : 'below' }} the median{% if then is not null %}, against <span class="font-mono {{ then|signed_class }}">{{ then|abs|pp(1) }}</span> {{ then >= 0 ? 'above' : 'below' }} three years ago{% endif %}.
+								{% if then is not null %}
+									{% if (rivals.gap >= 0) != (then >= 0) %}
+										It has {{ rivals.gap >= 0 ? 'moved ahead of' : 'fallen behind' }} its rivals.
+									{% elseif rivals.gap|abs > then|abs + 0.005 %}
+										Its {{ rivals.gap >= 0 ? 'edge' : 'shortfall' }} is widening.
+									{% elseif rivals.gap|abs < then|abs - 0.005 %}
+										Its {{ rivals.gap >= 0 ? 'edge' : 'shortfall' }} is narrowing.
+									{% else %}
+										Its {{ rivals.gap >= 0 ? 'edge' : 'shortfall' }} has held.
+									{% endif %}
 								{% endif %}
 							{% endif %}
 						</p>
