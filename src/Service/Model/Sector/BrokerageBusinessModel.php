@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\Sectors;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Pricing\SeedRows;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -89,12 +94,36 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const REVENUE_VARIANCE_SCALAR = 0.20;
 
     // --- Structural Yield Rails ---
-    /** Minimum structural operating EBIT floor as a fraction of earning assets. */
-    public const MIN_OPERATING_EBIT_YIELD = 0.015;
+    /**
+     * Minimum structural operating EBIT floor as a fraction of earning assets (50bps): prevents degenerate
+     * zero-revenue states without clipping a high-leverage primary dealer whose net financing spread carries much of
+     * its return.
+     */
+    public const MIN_OPERATING_EBIT_YIELD = 0.005;
     /** Hard ceiling on gross asset yield to prevent reverse-engineered revenue hyperinflation. */
     public const MAX_GROSS_ASSET_YIELD    = 1.50;
     /** Persisted operating revenue (commissions and advisory) per unit of book, struck once at the opening macro. */
     public const STATE_OPERATING_YIELD    = 'state:operating_yield';
+
+    // --- Opening Books ---
+    /**
+     * What a broker or dealer's seed row states when its books are built from its character (resolveOpeningBooks()).
+     */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio',
+    ];
+
+    // --- Opening Books ---
+    /** What a broker or dealer's seed row states when its books are built from its character (resolveOpeningBooks()). */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio',
+    ];
 
     // --- Clearinghouse Liquidity Rules ---
     /** Target operating cash reserve ratio required to support clearinghouse margin and trade settlements. */
@@ -108,7 +137,99 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /** Most wholesale debt the model carries per unit of equity (8x equity). */
     public const WHOLESALE_LEVERAGE_LIMIT = 8.0;
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    /**
+     * A broker or investment bank's opening books from its character: the fee and trading revenue it earns at its
+     * margin, its moat over its cost of equity and the share of its addressable market its equity fills. Equity is set
+     * by its TargetCapitalRatio (or, with none, its manager's leverage target), the rest of the balance sheet is funded
+     * wholesale with no deposits, cash holds the clearing backing its treasury targets, and the whole is scaled until
+     * its struck operating yield earns the stated revenue. A row that states its books (no revenue key) is handed back
+     * as it is.
+     */
+    public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
+    {
+        if (!isset($seedRow['revenue'])) {
+            return $seedRow;
+        }
+
+        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
+            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
+            'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
+            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
+            'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
+        ]);
+
+        $ticker = (string) $seedRow['ticker'];
+        $revenue = (float) $seedRow['revenue'];
+        $margin = (float) $seedRow['operating_margin'];
+        $addressableShare = (float) $seedRow['addressable_share'];
+        $baselineRoe = $this->openingBaselineRoe($seedRow, $openingMacro);
+
+        $stock = $this->buildOpeningStock($seedRow, $baselineRoe)
+            ->setTotalRevenue(Decimal::format($revenue));
+
+        $assets = self::OPENING_BOOK_TRIAL_ASSETS;
+        $converged = false;
+        for ($pass = 0; $pass < self::MAX_OPENING_BOOK_PASSES; $pass++) {
+            $equity = $this->openingEquity($stock, $assets, $revenue);
+            $wholesale = max(0.0, $assets - $equity);
+            $operatingBase = max($revenue, $equity, FinancialConstants::MIN_OPERATING_BASE_CASH);
+            $cash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $wholesale);
+            $stock->setTotalEquity(Decimal::format($equity))
+                ->setCustomerDeposits('0.00')
+                ->setWholesaleDebt(Decimal::format($wholesale))
+                ->setCorporateTreasury(Decimal::format($cash))
+                ->setSamRatio((string) $this->openingSamRatio($equity, $addressableShare));
+
+            $metrics = $this->getTargetMetrics($stock, $openingMacro, new MathUtility());
+            $earned = $metrics['invested_capital'] * FirmEconomics::structuralAssetTurnover($metrics['baseline_roic'], $margin, $openingMacro->corporateTaxRate);
+            if ($earned <= 0.0) {
+                throw new \DomainException("{$ticker} earns nothing on the books its character builds.");
+            }
+            if (abs($revenue / $earned - 1.0) < self::OPENING_BOOK_TOLERANCE) {
+                $converged = true;
+                break;
+            }
+            $assets *= $revenue / $earned;
+        }
+        if (!$converged) {
+            throw new \DomainException("{$ticker}'s books do not settle on its stated revenue in " . self::MAX_OPENING_BOOK_PASSES . ' passes.');
+        }
+
+        $finalEquity = (float) $stock->getTotalEquity();
+
+        return array_merge($seedRow, [
+            'baseline_roe' => $baselineRoe,
+            'total_equity' => $finalEquity,
+            'customer_deposits' => 0.0,
+            'wholesale_debt' => (float) $stock->getWholesaleDebt(),
+            'corporate_treasury' => (float) $stock->getCorporateTreasury(),
+            'retained_earnings' => $this->openingRetainedEarnings($seedRow, $finalEquity),
+            'sam_ratio' => (float) $stock->getSamRatio(),
+        ]);
+    }
+
+    /**
+     * Opening equity on a balance sheet of equity and wholesale funding: the capital ratio the dealer steers to where
+     * tuned, or the leverage its manager targets (DebtEngine::analyzeDebtHealth()).
+     */
+    protected function openingEquity(Stock $stock, float $assets, float $revenue): float
+    {
+        $capitalRatio = $this->getTargetCapitalRatio($stock);
+        if ($capitalRatio !== null) {
+            if ($capitalRatio <= 0.0 || $capitalRatio >= 1.0) {
+                throw new \DomainException("{$stock->getTicker()} opens on a capital ratio outside (0, 1).");
+            }
+
+            return $capitalRatio * $assets;
+        }
+
+        $leverageTarget = $this->getLeverageTarget(Sectors::metricsFor($stock->getIndustry())['equity_limit'] * min(1.0, $stock->getManagementProfile()->leverageBias()));
+        $leaseLiability = CorporateMetrics::getInstance()->calculateLeaseLiability($revenue, $this->getLeaseIntensity($stock));
+
+        return ($assets + $leaseLiability) / (1.0 + $leverageTarget);
+    }
+
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $outputGap = $this->resolveLaggedOutputGap($macroState);
         $beta = $this->getOperatingCyclicality($stock);
@@ -124,7 +245,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      * Idiosyncratic shock applied to retail trading volume and institutional deal flow.
      * Capital Markets have higher top-line variance compared to sticky Asset Managers.
      */
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::TradingRevenueWeight->value  => self::TRADING_REVENUE_WEIGHT,
@@ -197,19 +318,19 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      * Trading volume against normal: the volume-volatility relation (Karpoff 1987) linearised at the sim's volatility
      * anchor, so a quiet tape thins commissions as a busy one swells them and the term averages out at the anchor.
      */
-    protected function resolveTradingVolatilityShift(\App\DTO\MacroStateDTO $macroState): float
+    protected function resolveTradingVolatilityShift(MacroStateDTO $macroState): float
     {
         return ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
     }
 
     /** Retail trading and margin borrowing against normal: M2 growth over its trend. */
-    protected function resolveRetailLiquidityShift(\App\DTO\MacroStateDTO $macroState): float
+    protected function resolveRetailLiquidityShift(MacroStateDTO $macroState): float
     {
         return MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_RETAIL_TRADING_SENSITIVITY);
     }
 
     /** Placement and advisory mandates against normal: the capital-markets deal activity index over its baseline. */
-    protected function resolveAdvisoryDealShift(\App\DTO\MacroStateDTO $macroState): float
+    protected function resolveAdvisoryDealShift(MacroStateDTO $macroState): float
     {
         $dealActivityShift = $macroState->dealActivityDeviation();
 
@@ -224,7 +345,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      *
      * @return array{invested_capital: float, baseline_roic: float}
      */
-    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
@@ -249,7 +370,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
             return (float) $momentum[self::STATE_OPERATING_YIELD];
         }
 
-        $opening = new \App\DTO\MacroStateDTO();
+        $opening = new MacroStateDTO();
         $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
         $fundingRate = DebtEngine::chargedWholesaleRate($stock, $opening, $this->getLossGivenDefault(), true);
         $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveStructuralTargetRoe($stock, $opening) / (1.0 - $opening->corporateTaxRate);
@@ -265,12 +386,12 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      * prices off the firm's live distance to default. Once a realized rate exists, the client book its borrowing funds
      * is priced off that (resolveClientBookRate()).
      */
-    protected function calculateBlendedWholesaleRate(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    protected function calculateBlendedWholesaleRate(Stock $stock, MacroStateDTO $macroState): float
     {
         return DebtEngine::chargedWholesaleRate($stock, $macroState, $this->getLossGivenDefault());
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         $policyRate = $macroState->policyRateEma;
 
@@ -312,7 +433,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      * @param float      $clientBook            The book lent to clients (resolveEarningAssets()).
      * @param float|null $realizedWholesaleRate The rate DebtEngine charges the funded book this quarter, if priced.
      */
-    protected function resolveClientBookRate(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $clientBook, ?float $realizedWholesaleRate): float
+    protected function resolveClientBookRate(Stock $stock, MacroStateDTO $macroState, float $clientBook, ?float $realizedWholesaleRate): float
     {
         $fundingRate = max(0.0, $realizedWholesaleRate ?? $this->calculateBlendedWholesaleRate($stock, $macroState));
         $refinancingRate = max(0.0, DebtEngine::chargedWholesaleRate($stock, $macroState, $this->getLossGivenDefault(), true));
@@ -326,7 +447,7 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
      * Their excess cash must remain highly liquid to satisfy clearinghouse margin requirements
      * and strict regulatory capital constraints. They earn standard risk-free money market yields.
      */
-    public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
+    public function calculateCashYield(MacroStateDTO $macroState): float
     {
         return $macroState->moneyMarketYield();
     }

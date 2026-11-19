@@ -481,13 +481,7 @@ class BrokerageBusinessModelTest extends TestCase
      */
     private function openFinch(array $overrides): Stock
     {
-        $seed = null;
-        foreach (InitialMarket::STOCKS as $row) {
-            if ($row['ticker'] === 'FINC') {
-                $seed = $row;
-            }
-        }
-        $this->assertNotNull($seed);
+        $seed = \App\Service\Market\Pricing\SeedRows::for('FINC');
         $this->opening = \App\Tests\Support\OpeningCreditAtTrend::macro();
         $builder = new OpeningBoardBuilder($this->mathUtility, new DebtEngine($this->mathUtility, CorporateMetrics::getInstance()), new MarketEngine($this->mathUtility), new AnchorStakeLedger());
         $stock = (new Stock())->setTicker('FINC');

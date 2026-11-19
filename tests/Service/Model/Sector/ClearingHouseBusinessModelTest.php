@@ -290,15 +290,8 @@ class ClearingHouseBusinessModelTest extends TestCase
 
     public function testAccIsRegisteredInInitialMarketWithLeanEquityAndExtremeFloatLeverage(): void
     {
-        $accConfig = null;
-        foreach (\App\Data\Company\InitialMarket::STOCKS as $stock) {
-            if ($stock['ticker'] === 'ACC') {
-                $accConfig = $stock;
-                break;
-            }
-        }
+        $accConfig = \App\Service\Market\Pricing\SeedRows::for('ACC');
 
-        $this->assertNotNull($accConfig, 'ACC must be registered in InitialMarket::STOCKS');
         $this->assertSame('Aerie Central Clearing', $accConfig['name']);
         $this->assertSame('Financials', $accConfig['sector']);
         $this->assertSame('Financial Clearinghouses', $accConfig['industry']);
@@ -309,14 +302,11 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertSame('clearing_house', $industryConfig['business_model']);
         $this->assertTrue(\App\Data\Company\Sectors::isFinancial($industryConfig['business_model']));
 
-        // Lean equity calibration (CME / ICE model)
-        // At the District's $12T scale.
-        $this->assertSame(25_000_000_000.00, (float) $accConfig['total_equity'], 'ACC total equity must be $25B (lean equity)');
-        $this->assertSame(650_000_000_000.00, (float) $accConfig['customer_deposits'], 'ACC customer deposits must be $650B (collateral float)');
-        $this->assertSame(657_500_000_000.00, (float) $accConfig['corporate_treasury'], 'ACC corporate treasury must cover 100% margin float + $7.5B operating buffer');
-        $this->assertSame(7_500_000_000.00, (float) $accConfig['wholesale_debt'], 'ACC wholesale debt must be $7.5B');
-        $this->assertSame(10_000_000_000.00, (float) $accConfig['retained_earnings'], 'ACC retained earnings must be $10B');
-        $this->assertSame(0.26, (float) $accConfig['baseline_roe'], 'ACC baseline ROE must be 26%');
+        // Lean equity calibration (CME / ICE model) built from ACC's character at the District's $12T scale.
+        $this->assertEqualsWithDelta(25_000_000_000.00, (float) $accConfig['total_equity'], 500_000_000.00, 'ACC opens with lean equity near $25B');
+        $this->assertSame(0.0, (float) $accConfig['wholesale_debt'], 'Per PFMI Principle 15, ACC carries no corporate debt');
+        $this->assertGreaterThan((float) $accConfig['customer_deposits'], (float) $accConfig['corporate_treasury'], 'ACC treasury covers 100% of member margin plus its operating buffer');
+        $this->assertEqualsWithDelta(0.40 * (float) $accConfig['total_equity'], (float) $accConfig['retained_earnings'], 1.0);
 
         // Extreme collateral leverage (> 25x customer deposits to equity)
         $collateralLeverage = $accConfig['customer_deposits'] / $accConfig['total_equity'];
@@ -331,11 +321,20 @@ class ClearingHouseBusinessModelTest extends TestCase
 
         $targetCash = $this->model->calculateTargetOperatingCash($operatingBase, $marginLiabilities, $debt);
         $minCash = $this->model->calculateMinOperatingCash($operatingBase, $marginLiabilities, $debt);
+        $backing = $this->model->calculateLiabilityBackingCash($marginLiabilities, $debt);
 
-        // 100% margin backing + 5% operating buffer
+        // 100% margin backing + 5% operating buffer; fortress bias scales only the buffer, not member margin.
+        $this->assertSame(1_000_000_000_000.0, $backing);
         $this->assertSame(1_000_000_000_000.0 + ($operatingBase * 0.05), $targetCash);
         $this->assertSame(1_000_000_000_000.0 + ($operatingBase * 0.02), $minCash);
         $this->assertGreaterThan($minCash, $targetCash);
+
+        $fortress = new \App\Data\Company\ManagementProfile(\App\Data\Company\ManagementStyle::Fortress);
+        $this->assertEqualsWithDelta(
+            $marginLiabilities + ($operatingBase * 0.05 * $fortress->cashTargetBias()),
+            $fortress->managedTargetCash($this->model, $operatingBase, $marginLiabilities, $debt),
+            1.0,
+        );
     }
 
     public function testCorporateDefaultRateSurgeIncreasesClearingHouseDefaultStress(): void

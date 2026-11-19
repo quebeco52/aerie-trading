@@ -312,7 +312,7 @@ class AssetManagementBusinessModelTest extends TestCase
     public function testEachListedFeeManagerClosesAtTheShareItOpensWith(): void
     {
         $managers = 0;
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (\App\Service\Market\Pricing\SeedRows::all() as $row) {
             $strategy = Sectors::strategyFor($row['industry']);
             if (!$strategy instanceof AssetManagementBusinessModel) {
                 continue;

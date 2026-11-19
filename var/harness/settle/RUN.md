@@ -106,3 +106,15 @@ dividends at `tipsBreakeven` and values the book leg on property NAV (`reit_plan
 `reit_planb_before.jsonl` at 7e4025da; all 99 non-REIT firms bit-identical). Q1 return jump gone (`10.68 -> 12.3-12.7%`
 becomes `10.1-10.8% -> 10.2-10.9%`); P/B `1.91-2.05` (q0) and `1.83-2.00` (q40) vs `1.91-2.13 -> 2.30-2.65`; P/FFO
 `12.2-13.0` (q0) and `13.5-15.6` (q40); y10 D/E within 0.02 of `de_target`. Flagged 8/103 unchanged (zero REIT flags).
+
+## Insurers and fee firms built from character (11-20)
+The last 13 non-sphere firms drop hand-set books (HONY already built from character on `StandardCorporateBusinessModel`;
+only sphere BRKW remains hand-set): SAFE/DOVE/WELL (`InsuranceBusinessModel::resolveOpeningBooks()`),
+KING/PERE/CORV/PTRL/FINC (`BrokerageBusinessModel::resolveOpeningBooks()`, with `MIN_OPERATING_EBIT_YIELD` 0.015 ->
+0.005 and PTRL `TargetCapitalRatio` 0.1111 -> 1/9 so the 9x primary dealer is not clipped above its moat return or over
+the 8x equity limit), ACC (`ClearingHouseBusinessModel::resolveOpeningBooks()`, PFMI Principle 15 zero corporate debt
+plus `calculateLiabilityBackingCash()`), and SWAN/VULT/CROW/TIER (`AssetManagementBusinessModel::resolveOpeningBooks()`,
+`HedgeFundBusinessModel` on `FundGrossLeverage`, `PrivateEquityBusinessModel` on 0.5x manager debt/equity). All 13 now
+open on cost of equity + moat (`item2_after.jsonl` vs `item2_before.jsonl` at 7635c06d; all 90 other firms bit-identical).
+Opening equity held within 0.4% of lore size on every firm. Flagged 8 -> 7 of 103 (VULT `ret` flag gone: 23.0 -> 19.1 ->
+16.9 becomes 16.5 -> 15.0 -> 15.5; zero flags on any insurer or fee financial).

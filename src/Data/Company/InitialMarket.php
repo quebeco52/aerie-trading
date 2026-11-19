@@ -5,13 +5,11 @@ declare(strict_types=1);
 namespace App\Data\Company;
 
 /**
- * The listed firms as they open. A row states its books (equity, funding, cash, margin, return) or, where its business
- * model builds them, its character instead: a lender states its revenue, wholesale funding share, addressable share
- * and retained share, and CommercialBankBusinessModel::resolveOpeningBooks() builds the balance sheet that earns them;
- * an operating firm states its revenue, operating margin and addressable share, and
- * StandardCorporateBusinessModel::resolveOpeningBooks() builds its capital, debt, cash and return.
- * Read the books through App\Service\Market\Pricing\SeedRows. A `moat` names the firm's step on the ladder
- * (App\Data\Company\Moat) where it is not its industry's (IndustryMoats).
+ * The listed firms as they open. Every operating firm, lender, insurer and fee financial states its character instead
+ * of hand-set books, and its business model's resolveOpeningBooks() builds the balance sheet, return and market share
+ * that character implies (only spheres like BRKW still state their books directly). Read the resolved books through
+ * App\Service\Market\Pricing\SeedRows. A `moat` names the firm's step on the ladder (App\Data\Company\Moat) where it
+ * is not its industry's (IndustryMoats).
  */
 class InitialMarket
 {
@@ -51,21 +49,17 @@ class InitialMarket
             'beta_tilt' => 0.25, // leveraged long/short books
             'jump_intensity' => 1.25,
             'jump_vol' => 0.13,
-            'baseline_roe' => 0.22,
             'moat' => 'wide',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.40,
             'public_float' => 0.50,
-            'sam_ratio' => 1.125,
             'floating_debt_ratio' => 0.50,
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0035,
-            'corporate_treasury' => 60_750_000_000.00,
-            'total_equity' => 453_937_500_000.00,
-            'customer_deposits' => 0.00,
-            'wholesale_debt' => 1_080_000_000_000.00,
-            'retained_earnings' => 112_500_000_000.00,
+            // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
+            'revenue' => 383_000_000_000.00,
+            'retained_share' => 0.25,
         ],
         [
             'ticker' => 'HUMM',
@@ -121,23 +115,19 @@ class InitialMarket
             'beta_tilt' => 0.25, // among the most cyclical deal franchises
             'jump_intensity' => 1.25,
             'jump_vol' => 0.14,
-            'baseline_roe' => 0.25,
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
             'payout' => 'low',
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.40,
             'public_float' => 0.95,
-            'sam_ratio' => 0.375,
+            'addressable_share' => 0.333,
             'floating_debt_ratio' => 0.65,
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0150,
-            // 15% of the wholesale book, the clearing backing its model targets; the rest of the book earns.
-            'corporate_treasury' => 45_000_000_000.00,
-            'total_equity' => 125_000_000_000.00,
-            'customer_deposits' => 0.00,
-            'wholesale_debt' => 300_000_000_000.00,
-            'retained_earnings' => 37_500_000_000.00,
+            // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
+            'revenue' => 42_800_000_000.00,
+            'retained_share' => 0.30,
         ],
         [
             'ticker' => 'PERE',
@@ -149,22 +139,18 @@ class InitialMarket
             'beta_tilt' => -0.25, // a delta-neutral market maker that earns on volatility
             'jump_intensity' => 1.25,
             'jump_vol' => 0.12,
-            'baseline_roe' => 0.25,
             'moat' => 'moderate',
             'capex_ratio' => 0.15,
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.35,
             'public_float' => 0.88,
-            'sam_ratio' => 0.375,
+            'addressable_share' => 0.267,
             'floating_debt_ratio' => 0.80,
             'historical_fixed_rate' => 0.060,
             'credit_spread' => 0.0200,
-            // 15% of the wholesale book, the prime-brokerage target cash backing.
-            'corporate_treasury' => 56_250_000_000.00,
-            'total_equity' => 100_000_000_000.00,
-            'customer_deposits' => 0.00,
-            'wholesale_debt' => 375_000_000_000.00,
-            'retained_earnings' => 22_500_000_000.00,
+            // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
+            'revenue' => 30_200_000_000.00,
+            'retained_share' => 0.225,
         ],
         [
             'ticker' => 'CORV',
@@ -176,21 +162,18 @@ class InitialMarket
             'beta_tilt' => -0.25, // restructuring fees run against the cycle
             'jump_intensity' => 1.25,
             'jump_vol' => 0.11,
-            'baseline_roe' => 0.24,
             'moat' => 'moderate',
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.45,
             'public_float' => 0.85,
-            'sam_ratio' => 0.375,
+            'addressable_share' => 0.28,
             'floating_debt_ratio' => 0.85,
             'historical_fixed_rate' => 0.045,
             'credit_spread' => 0.0150,
-            'corporate_treasury' => 51_000_000_000.00,
-            'total_equity' => 105_000_000_000.00,
-            'customer_deposits' => 0.00,
-            'wholesale_debt' => 340_000_000_000.00,
-            'retained_earnings' => 27_500_000_000.00,
+            // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
+            'revenue' => 25_500_000_000.00,
+            'retained_share' => 0.26,
         ],
         [
             'ticker' => 'RIVR',
@@ -254,9 +237,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // losses follow catastrophes, not the business cycle
             'jump_intensity' => 0.15,
             'jump_vol' => 0.06,
-            // What its earnings return at the opening: 1.5% on its premium, its fees, and above all its float, less its
-            // bond's coupon; its equity holdings' price gains go to book value, not earnings.
-            'baseline_roe' => 0.175,
             'moat' => 'wide',
             'capex_ratio' => 0.02,
             'fixed_cost_ratio' => 0.20,
@@ -265,18 +245,13 @@ class InitialMarket
             // and earning mainly on the float they invest.
             'operating_margin' => 0.015,
             'public_float' => 0.70,
-            'sam_ratio' => 0.966,
+            'addressable_share' => 0.431,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.025,
             'credit_spread' => 0.0030,
-            // The float its book holds once its reserves have settled, 2.97 times the premium it opens writing
-            // (unearned premium and Swiss Re's claim reserves on an almost all-treaty book), fully backed by liquid
-            // assets.
-            'corporate_treasury' => 1_736_000_000_000.00,
-            'total_equity' => 415_970_640_000.00,
-            'customer_deposits' => 1_736_000_000_000.00,
-            'wholesale_debt' => 226_320_000_000.00,
-            'retained_earnings' => 82_800_000_000.00,
+            // Its books are built on this character by its model (InsuranceBusinessModel::resolveOpeningBooks()).
+            'revenue' => 590_000_000_000.00,
+            'retained_share' => 0.20,
         ],
         [
             'ticker' => 'DOVE',
@@ -289,31 +264,20 @@ class InitialMarket
             'beta_tilt' => 0.00,
             'jump_intensity' => 0.50,
             'jump_vol' => 0.08,
-            // What its earnings return at the opening: 4.5% on premium less its cover's cost, the spread its float
-            // keeps after the life reserves are credited, and its equity holdings' dividends, their price gains going
-            // to book value.
-            'baseline_roe' => 0.14,
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.35,
             // 95.5% combined ratio; European composites' P&C books run about 93-95%.
             'operating_margin' => 0.045,
             'public_float' => 0.90,
-            'sam_ratio' => 0.25,
+            'addressable_share' => 0.34,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.030,
             'credit_spread' => 0.0080,
-            // Float fully backed by liquid assets, as SAFE is. A retail carrier that sheds its tail risk
-            // upward has no excuse to run its policyholder float short of cash. The float its book holds once its
-            // reserves have settled, 5.3 times premium: unearned and claim reserves on the P&C book, and ACLI's 9.9
-            // times premium of policy reserve on the life book, which credits its holders the book yield less the
-            // spread. Reserves 7.6 times equity, a composite's leverage.
-            'corporate_treasury' => 643_000_000_000.00,
-            'total_equity'      => 85_000_000_000.00,
-            'customer_deposits' => 643_000_000_000.00,
             // Its liabilities are not marked to the curve, so it elects to keep the bond mark out of its capital ratio.
-            'aoci_filtered'     => true,
-            'wholesale_debt'    => 11_000_000_000.00,
-            'retained_earnings' => 33_750_000_000.00,
+            'aoci_filtered' => true,
+            // Its books are built on this character by its model (InsuranceBusinessModel::resolveOpeningBooks()).
+            'revenue' => 121_000_000_000.00,
+            'retained_share' => 0.40,
         ],
         [
             'ticker' => 'SHRK',
@@ -909,22 +873,18 @@ class InitialMarket
             'beta_tilt' => 0.20, // retail trading and margin balances rise and fall with the market
             'jump_intensity' => 0.80,
             'jump_vol' => 0.10,
-            'baseline_roe' => 0.22,
             'moat' => 'moderate',
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.70,
             'operating_margin' => 0.45,
             'public_float' => 0.75,
-            'sam_ratio' => 0.15,
+            'addressable_share' => 0.10,
             'floating_debt_ratio' => 0.80,
             'historical_fixed_rate' => 0.040,
             'credit_spread' => 0.0120,
-            // 15% of the wholesale book, the brokerage target cash backing.
-            'corporate_treasury' => 4_500_000_000.00,
-            'total_equity'      => 15_000_000_000.00,
-            'customer_deposits' => 0.00,
-            'wholesale_debt'    => 30_000_000_000.00,
-            'retained_earnings' => 6_000_000_000.00,
+            // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
+            'revenue' => 2_160_000_000.00,
+            'retained_share' => 0.40,
         ],
         [
             'ticker' => 'PLZA',
@@ -1188,21 +1148,17 @@ class InitialMarket
             'beta_tilt' => -0.25, // deploys into distress, but is still long credit
             'jump_intensity' => 1.25,
             'jump_vol' => 0.13,
-            'baseline_roe' => 0.23,
             'moat' => 'wide',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.35,
             'operating_margin' => 0.40,
             'public_float' => 0.80,
-            'sam_ratio' => 0.125,
             'floating_debt_ratio' => 0.85,
             'historical_fixed_rate' => 0.070,
             'credit_spread' => 0.0320,
-            'corporate_treasury' => 4_000_000_000.00,
-            'total_equity' => 40_000_000_000.00,
-            'customer_deposits' => 0.00,
-            'wholesale_debt' => 17_500_000_000.00,
-            'retained_earnings' => 35_000_000_000.00,
+            // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
+            'revenue' => 20_400_000_000.00,
+            'retained_share' => 0.875,
         ],
         [
             'ticker' => 'FALC',
@@ -1329,21 +1285,17 @@ class InitialMarket
             'beta_tilt' => -0.15, // short books offset part of a market that sets its assets
             'jump_intensity' => 1.25,
             'jump_vol' => 0.11,
-            'baseline_roe' => 0.20,
             'moat' => 'wide',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.48,
             'public_float' => 0.85,
-            'sam_ratio' => 0.10,
             'floating_debt_ratio' => 0.90,
             'historical_fixed_rate' => 0.075,
             'credit_spread' => 0.0350,
-            'corporate_treasury' => 3_000_000_000.00,
-            'total_equity' => 30_000_000_000.00,
-            'customer_deposits' => 0.00,
-            'wholesale_debt' => 9_000_000_000.00,
-            'retained_earnings' => 22_500_000_000.00,
+            // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
+            'revenue' => 13_300_000_000.00,
+            'retained_share' => 0.75,
         ],
         [
             'ticker' => 'CNDR',
@@ -1447,22 +1399,19 @@ class InitialMarket
             'beta_tilt' => -0.25, // clearing volume rises in sell-offs
             'jump_intensity' => 0.40,
             'jump_vol' => 0.10,
-            'baseline_roe' => 0.26,
             'moat' => 'very_wide',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.55,
             // The closely held block is the District's (StrategicHoldings), taken off in AnchorHoldings::tradableFloat
             'public_float' => 1.00,
-            'sam_ratio' => 0.05,
+            'addressable_share' => 0.50,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0040,
-            'corporate_treasury' => 657_500_000_000.00,
-            'total_equity' => 25_000_000_000.00,
-            'customer_deposits' => 650_000_000_000.00,
-            'wholesale_debt' => 7_500_000_000.00,
-            'retained_earnings' => 10_000_000_000.00,
+            // Its books are built on this character by its model (ClearingHouseBusinessModel::resolveOpeningBooks()).
+            'revenue' => 12_500_000_000.00,
+            'retained_share' => 0.40,
         ],
         [
             'ticker' => 'ROOK',
@@ -1498,9 +1447,6 @@ class InitialMarket
             'beta_tilt' => 0.10, // savings fees ride the market and a rally in bonds squeezes the guarantees
             'jump_intensity' => 0.40,
             'jump_vol' => 0.08,
-            // What its earnings return at the opening: the spread its reserves keep over what they credit, and a thin
-            // margin on premiums and fees, which pay for the benefits and the administration.
-            'baseline_roe' => 0.12,
             'moat' => 'narrow',
             'capex_ratio' => 0.03,
             'fixed_cost_ratio' => 0.30,
@@ -1508,20 +1454,15 @@ class InitialMarket
             // the investment spread.
             'operating_margin' => 0.04,
             'public_float' => 1.00,
-            'sam_ratio' => 0.25,
+            'addressable_share' => 0.24,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0090,
             // Reserves are paid out over decades, so the bonds behind them run longer than a composite's.
             'securities_duration' => 10.0,
-            // The policy reserves its book holds once settled, 4.8 times revenue (six times premium on the 80% of
-            // revenue that is premium), fully backed by liquid assets; 7.2 times equity.
-            'corporate_treasury' => 432_000_000_000.00,
-            'total_equity' => 60_000_000_000.00,
-            'customer_deposits' => 432_000_000_000.00,
             'aoci_filtered' => true,
-            'wholesale_debt' => 15_000_000_000.00,
-            'retained_earnings' => 30_000_000_000.00,
+            // Its books are built on this character by its model (InsuranceBusinessModel::resolveOpeningBooks()).
+            'revenue' => 90_000_000_000.00,
         ],
         [
             'ticker' => 'HONY',
@@ -1931,22 +1872,17 @@ class InitialMarket
             'beta_tilt' => 0.25, // leveraged buyouts whose exits need open credit
             'jump_intensity' => 0.90,
             'jump_vol' => 0.12,
-            'baseline_roe' => 0.24,
             'moat' => 'wide',
             'capex_ratio' => 0.04,
             'fixed_cost_ratio' => 0.40,
             'operating_margin' => 0.45,
             'public_float' => 0.70,
-            'sam_ratio' => 0.70,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.042,
             'credit_spread' => 0.0060,
-            'corporate_treasury' => 2_500_000_000.00,
-            'total_equity' => 25_000_000_000.00,
-            'customer_deposits' => 0.00,
-            // A listed sponsor's leverage sits in its funds' companies, not at the manager: half its equity.
-            'wholesale_debt' => 12_500_000_000.00,
-            'retained_earnings' => 15_000_000_000.00,
+            // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
+            'revenue' => 14_000_000_000.00,
+            'retained_share' => 0.60,
         ],
         [
             'ticker' => 'BUZT',
@@ -2239,23 +2175,18 @@ class InitialMarket
             'beta_tilt' => 0.00,
             'jump_intensity' => 1.00,
             'jump_vol' => 0.14,
-            'baseline_roe' => 0.20,
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.35,
             'public_float' => 0.92,
-            'sam_ratio' => 0.30,
+            'addressable_share' => 0.267,
             'floating_debt_ratio' => 0.80, // Inventory funded overnight in repo
             'historical_fixed_rate' => 0.035,
             'credit_spread' => 0.0120,
-            // Wholesale funding at the industry's 8x equity limit, twice the other dealers' leverage. Cash is 15% of
-            // it, the clearing backing its model targets.
-            'corporate_treasury' => 96_000_000_000.00,
-            'total_equity'      => 80_000_000_000.00,
-            'customer_deposits' => 0.00,
-            'wholesale_debt'    => 640_000_000_000.00,
-            'retained_earnings' => 30_000_000_000.00,
+            // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
+            'revenue' => 26_100_000_000.00,
+            'retained_share' => 0.375,
         ],
         [
             'ticker' => 'BNTH',

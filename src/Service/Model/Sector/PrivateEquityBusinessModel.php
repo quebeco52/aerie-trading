@@ -174,6 +174,20 @@ class PrivateEquityBusinessModel extends AssetManagementBusinessModel
     // --- Credit Thresholds ---
     /** Most wholesale debt the model carries per unit of equity (2.5x equity). */
     public const WHOLESALE_LEVERAGE_LIMIT = 2.5;
+    /**
+     * Opening corporate debt per unit of equity: a listed sponsor's leverage sits in its portfolio companies, not at
+     * the management company (half its equity).
+     */
+    public const OPENING_DEBT_TO_EQUITY = 0.50;
+
+    /**
+     * A buyout sponsor's management company opens at half its equity, scaled down for conservative styles, leaving its
+     * wholesale limit for buyout headroom.
+     */
+    protected function openingDebtToEquity(Stock $stock): float
+    {
+        return self::OPENING_DEBT_TO_EQUITY * min(1.0, $stock->getManagementProfile()->leverageBias());
+    }
 
     private function calculateLeverageAggression(Stock $stock): float
     {

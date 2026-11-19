@@ -15,8 +15,11 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Event\ShockEvent;
 use App\Service\Macro\Subsystem\CommodityLogisticsSubsystem;
+use App\Service\Market\Pricing\SeedRows;
+use App\Service\Math\Decimal;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -384,6 +387,87 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
      * decades.
      */
     public const DEFAULT_FLOAT_BOND_DURATION_YEARS = 7.0;
+
+    // --- Opening Books ---
+    /** What an insurer's seed row states when its books are built from its character (resolveOpeningBooks()). */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio',
+    ];
+
+    /**
+     * An insurer's opening books from its character: the annual premium it writes, its structural underwriting margin,
+     * its moat over its cost of equity and the share of its serviceable market its surplus fills. Policyholder float is
+     * the steady reserve stock that premium carries (resolveReserveToPremiumRatio()), corporate debt sits at its
+     * manager's target share of the wholesale limit, cash backs the float in full plus its manager's operating buffer,
+     * and surplus is scaled until the model's capacity-constrained book writes the stated premium. A row that states
+     * its books (no revenue key) is handed back as it is.
+     */
+    public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
+    {
+        if (!isset($seedRow['revenue'])) {
+            return $seedRow;
+        }
+
+        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
+            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
+            'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
+            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
+            'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
+        ]);
+
+        $ticker = (string) $seedRow['ticker'];
+        $revenue = (float) $seedRow['revenue'];
+        $margin = (float) $seedRow['operating_margin'];
+        $addressableShare = (float) $seedRow['addressable_share'];
+        $baselineRoe = $this->openingBaselineRoe($seedRow, $openingMacro);
+
+        $stock = $this->buildOpeningStock($seedRow, $baselineRoe);
+        $manager = $stock->getManagementProfile();
+        $float = $revenue * $this->resolveReserveToPremiumRatio($stock);
+        $corporateLeverage = $this->getLeverageTarget($this->getWholesaleLeverageLimit() * min(1.0, $manager->leverageBias()));
+
+        $equity = $revenue / self::KENNEY_CAPACITY_RATIO;
+        $converged = false;
+        for ($pass = 0; $pass < self::MAX_OPENING_BOOK_PASSES; $pass++) {
+            $wholesale = $equity * $corporateLeverage;
+            $operatingBase = max($revenue, $equity, FinancialConstants::MIN_OPERATING_BASE_CASH);
+            $cash = $manager->managedTargetCash($this, $operatingBase, $float, $wholesale);
+            $stock->setTotalEquity(Decimal::format($equity))
+                ->setCustomerDeposits(Decimal::format($float))
+                ->setWholesaleDebt(Decimal::format($wholesale))
+                ->setCorporateTreasury(Decimal::format($cash))
+                ->setSamRatio((string) $this->openingSamRatio($equity, $addressableShare));
+
+            $metrics = $this->getTargetMetrics($stock, $openingMacro, new MathUtility());
+            $earned = $metrics['invested_capital'] * FirmEconomics::structuralAssetTurnover($metrics['baseline_roic'], $margin, $openingMacro->corporateTaxRate);
+            if ($earned <= 0.0) {
+                throw new \DomainException("{$ticker} writes no premium on the books its character builds.");
+            }
+            if (abs($revenue / $earned - 1.0) < self::OPENING_BOOK_TOLERANCE) {
+                $converged = true;
+                break;
+            }
+            $equity *= $revenue / $earned;
+        }
+        if (!$converged) {
+            throw new \DomainException("{$ticker}'s books do not settle on its stated revenue in " . self::MAX_OPENING_BOOK_PASSES . ' passes.');
+        }
+
+        $finalEquity = (float) $stock->getTotalEquity();
+
+        return array_merge($seedRow, [
+            'baseline_roe' => $baselineRoe,
+            'total_equity' => $finalEquity,
+            'customer_deposits' => (float) $stock->getCustomerDeposits(),
+            'wholesale_debt' => (float) $stock->getWholesaleDebt(),
+            'corporate_treasury' => (float) $stock->getCorporateTreasury(),
+            'retained_earnings' => $this->openingRetainedEarnings($seedRow, $finalEquity),
+            'sam_ratio' => (float) $stock->getSamRatio(),
+        ]);
+    }
 
     /**
      * Reverse engineers the required operating metrics from the premium book. The book is the capacity-constrained

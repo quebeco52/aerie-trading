@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryMoats;
+use App\Data\Company\ManagementStyle;
 use App\DTO\DebtCostDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
@@ -76,6 +79,16 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
      * Net working capital as a share of revenue: none, a balance sheet holds loans and securities, not a trade cycle.
      */
     public const WORKING_CAPITAL_INTENSITY = 0.0;
+
+    // --- Opening Books ---
+    /** Relative gap between the revenue the books earn and the stated revenue below which the opening solve stops. */
+    public const OPENING_BOOK_TOLERANCE = 1.0e-9;
+    /** Most passes of the opening balance-sheet solve; insurers contract ~5x per pass so 24 suffices with headroom. */
+    public const MAX_OPENING_BOOK_PASSES = 24;
+    /** Starting balance-sheet scale for the opening solve; scaled to match the stated revenue. */
+    public const OPENING_BOOK_TRIAL_ASSETS = 1_000_000_000.0;
+    /** Share of opening equity carried in retained earnings when a character row is silent (half). */
+    public const OPENING_RETAINED_SHARE = 0.50;
 
     // --- Credit Thresholds ---
     /** Minimum interest coverage the firm is held to (1.05x): debt is a financial's raw material, not its financing. */
@@ -176,6 +189,59 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
         return Valuation::calculateCAPM($openingMacro->equityRiskFreeRate, IndustryBetas::seedBetaFor($seedRow), MacroConstants::BASE_EQUITY_RISK_PREMIUM);
     }
 
+    /**
+     * The structural return on equity a financial opens on: its cost of equity at the opening macro plus its step on
+     * the moat ladder.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function openingBaselineRoe(array $seedRow, MacroStateDTO $openingMacro): float
+    {
+        return $this->openingCostOfEquity($seedRow, $openingMacro) + IndustryMoats::forRow($seedRow)->spread();
+    }
+
+    /** The serviceable-market ratio at which opening equity fills the stated share of the firm's addressable market. */
+    protected function openingSamRatio(float $equity, float $addressableShare): float
+    {
+        return $equity / (CorporateMetrics::BASELINE_SECTOR_TAM * $addressableShare);
+    }
+
+    /**
+     * Opening retained earnings from a character row: the stated share of equity, or half where the row is silent.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function openingRetainedEarnings(array $seedRow, float $equity): float
+    {
+        return (float) ($seedRow['retained_share'] ?? self::OPENING_RETAINED_SHARE) * $equity;
+    }
+
+    /**
+     * A trial stock populated with a character row's funding, style and margin terms for solving its opening books.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function buildOpeningStock(array $seedRow, float $baselineRoe): Stock
+    {
+        $stock = (new Stock())
+            ->setTicker((string) $seedRow['ticker'])
+            ->setIndustry($seedRow['industry'] ?? null)
+            ->setManagementStyle(ManagementStyle::tryFromNullable($seedRow['management_style'] ?? null))
+            ->setSystemicImportance($seedRow['systemic_importance'] ?? 'none')
+            ->setFloatingDebtRatio((string) $seedRow['floating_debt_ratio'])
+            ->setHistoricalFixedRate((string) $seedRow['historical_fixed_rate'])
+            ->setCreditSpread((string) $seedRow['credit_spread'])
+            ->setFixedCostRatio((float) ($seedRow['fixed_cost_ratio'] ?? 0.0))
+            ->setBaselineRoe((string) $baselineRoe)
+            ->setRoeTtm((string) $baselineRoe);
+
+        if (isset($seedRow['operating_margin'])) {
+            $stock->setOperatingMargin((string) $seedRow['operating_margin']);
+        }
+
+        return $stock;
+    }
+
     /** A balance-sheet firm is measured on equity; its baselineRoic column is a seed placeholder nothing fills. */
     public function getBaselineReturn(Stock $stock): float
     {
@@ -189,7 +255,7 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
      */
     protected function resolveStructuralTargetRoe(Stock $stock, MacroStateDTO $macroState): float
     {
-        $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
+        $saturationPenalty = CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
 
         return max($this->idleEquityReturn($macroState), max(0.01, (float) $stock->getBaselineRoe()) - $saturationPenalty);
     }

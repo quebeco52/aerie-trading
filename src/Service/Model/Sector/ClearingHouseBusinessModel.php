@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\DTO\InterestExpenseDTO;
-
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Pricing\SeedRows;
+use App\Service\Math\Decimal;
 use App\Service\Math\Distributions;
+use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
@@ -148,7 +152,90 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     // --- Monopoly Valuation Moat ---
     /** Operating margin mean reversion speed: slower speed reflects toll-booth monopoly pricing power. */
     public const MARGIN_REVERSION_SPEED = 2.0;
-    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
+
+    // --- Opening Books ---
+    /** What a clearinghouse's seed row states when its books are built from its character (resolveOpeningBooks()). */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio',
+    ];
+
+    /**
+     * A clearinghouse's opening books from its character: the clearing, custody and data revenue it earns at its
+     * margin, its moat over its cost of equity and the share of its addressable market its equity fills. Per PFMI
+     * Principle 15 it carries no corporate debt (WHOLESALE_LEVERAGE_LIMIT = 0); its member initial margin pool is sized
+     * by its TargetCapitalRatio and backed in full in liquid reserves beside its manager's operating buffer. A row that
+     * states its books (no revenue key) is handed back as it is.
+     */
+    public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
+    {
+        if (!isset($seedRow['revenue'])) {
+            return $seedRow;
+        }
+
+        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
+            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
+            'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
+            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
+            'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
+        ]);
+
+        $ticker = (string) $seedRow['ticker'];
+        $revenue = (float) $seedRow['revenue'];
+        $margin = (float) $seedRow['operating_margin'];
+        $addressableShare = (float) $seedRow['addressable_share'];
+        $baselineRoe = $this->openingBaselineRoe($seedRow, $openingMacro);
+
+        $stock = $this->buildOpeningStock($seedRow, $baselineRoe);
+        $manager = $stock->getManagementProfile();
+        $capitalRatio = $this->getTargetCapitalRatio($stock);
+        if ($capitalRatio !== null && ($capitalRatio <= 0.0 || $capitalRatio >= 1.0)) {
+            throw new \DomainException("{$ticker} opens on a capital ratio outside (0, 1).");
+        }
+
+        $equity = $revenue * $margin * (1.0 - $openingMacro->corporateTaxRate) / max(0.01, $baselineRoe);
+        $converged = false;
+        for ($pass = 0; $pass < self::MAX_OPENING_BOOK_PASSES; $pass++) {
+            $deposits = $capitalRatio !== null ? $equity * (1.0 - $capitalRatio) / $capitalRatio : 0.0;
+            $operatingBase = max($revenue, $equity, FinancialConstants::MIN_OPERATING_BASE_CASH);
+            $cash = $manager->managedTargetCash($this, $operatingBase, $deposits, 0.0);
+            $stock->setTotalEquity(Decimal::format($equity))
+                ->setCustomerDeposits(Decimal::format($deposits))
+                ->setWholesaleDebt('0.00')
+                ->setCorporateTreasury(Decimal::format($cash))
+                ->setSamRatio((string) $this->openingSamRatio($equity, $addressableShare));
+
+            $metrics = $this->getTargetMetrics($stock, $openingMacro, new MathUtility());
+            $earned = $metrics['invested_capital'] * FirmEconomics::structuralAssetTurnover($metrics['baseline_roic'], $margin, $openingMacro->corporateTaxRate);
+            if ($earned <= 0.0) {
+                throw new \DomainException("{$ticker} earns nothing on the books its character builds.");
+            }
+            if (abs($revenue / $earned - 1.0) < self::OPENING_BOOK_TOLERANCE) {
+                $converged = true;
+                break;
+            }
+            $equity *= $revenue / $earned;
+        }
+        if (!$converged) {
+            throw new \DomainException("{$ticker}'s books do not settle on its stated revenue in " . self::MAX_OPENING_BOOK_PASSES . ' passes.');
+        }
+
+        $finalEquity = (float) $stock->getTotalEquity();
+
+        return array_merge($seedRow, [
+            'baseline_roe' => $baselineRoe,
+            'total_equity' => $finalEquity,
+            'customer_deposits' => (float) $stock->getCustomerDeposits(),
+            'wholesale_debt' => 0.0,
+            'corporate_treasury' => (float) $stock->getCorporateTreasury(),
+            'retained_earnings' => $this->openingRetainedEarnings($seedRow, $finalEquity),
+            'sam_ratio' => (float) $stock->getSamRatio(),
+        ]);
+    }
+
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         // Clearing capacity is the house's own loss-absorbing capital, its skin in the game; the members'
         // margin pool is a pass-through liability. Goodwill absorbs no member default and is not a liquid
@@ -179,7 +266,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams  = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
@@ -263,7 +350,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
      * Volatility moves clearing volume, not custody float or data licences, so it enters through the clearing
      * stream in calculateSectorPhysics() and the root demand shift carries nothing.
      */
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         return [
             'macro_demand_shift' => 0.0,
@@ -272,7 +359,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     }
 
     /** The activity the cost base is staffed to: the clearing stream's volume shift at its target weight. */
-    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $weights = $this->resolveTargetStreamWeights($stock);
         $totalWeight = array_sum($weights);
@@ -288,7 +375,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
      * linearised at the sim's volatility anchor, both ways. The curve's slope is not rates volatility, which the
      * macro state does not carry, so it moves no volume.
      */
-    private function resolveClearingVolumeShift(\App\DTO\MacroStateDTO $macroState): float
+    private function resolveClearingVolumeShift(MacroStateDTO $macroState): float
     {
         return ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
     }
@@ -309,7 +396,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         ];
     }
 
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         // Non-operating interest income is earned ONLY on surplus corporate cash ($ownCash).
         // Margin pool custody spread is an operating revenue stream included in calculateSectorPhysics.
@@ -322,7 +409,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return $ownCash * $cashYield;
     }
 
-    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $fundedDebt, ?\App\DTO\MacroStateDTO $macroState = null): InterestExpenseDTO
+    public function calculateInterestExpenseAndWholesaleRate(Stock $stock, float $blendedFixedRate, float $floatingInterestRate, float $currentMarketFixedRate, float $policyRate, float $fundedDebt, ?MacroStateDTO $macroState = null): InterestExpenseDTO
     {
         $corporateDebt = (float) $stock->getWholesaleDebt();
         $corporateInterest = FixedIncome::fixedFloatingInterest($corporateDebt, (float) $stock->getFloatingDebtRatio(), $blendedFixedRate, $floatingInterestRate);
@@ -334,7 +421,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return new InterestExpenseDTO(interestExpense: $corporateInterest, wholesaleRate: $wholesaleRate);
     }
 
-    public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
+    public function calculateCashYield(MacroStateDTO $macroState): float
     {
         // Clearinghouses park member margin and operating reserves in overnight Central Bank deposit accounts
         // (IORB / Fed RRP) due to daily margin liquidity requirements, earning the overnight policy rate.
@@ -362,7 +449,12 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     {
         // A Clearing House MUST hold 100% of its margin pool in liquid reserves.
         // It cannot use customer margin deposits to execute M&A or pay dividends!
-        return ($currentLiability * self::LIABILITY_CASH_BACKING) + ($operatingBase * self::TARGET_OPERATING_BUFFER);
+        return $this->calculateLiabilityBackingCash($currentLiability, $wholesaleDebt) + ($operatingBase * self::TARGET_OPERATING_BUFFER);
+    }
+
+    public function calculateLiabilityBackingCash(float $currentLiability, float $wholesaleDebt): float
+    {
+        return $currentLiability * self::LIABILITY_CASH_BACKING;
     }
 
     public function calculateMinOperatingCash(float $operatingBase, float $currentLiability, float $wholesaleDebt): float
@@ -371,7 +463,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return ($currentLiability * self::LIABILITY_CASH_BACKING) + ($operatingBase * self::MIN_OPERATING_BUFFER);
     }
 
-    public function processPassiveLiabilityGrowth(Stock $stock, \App\DTO\MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
+    public function processPassiveLiabilityGrowth(Stock $stock, MacroStateDTO $macroState, array &$state, MathUtility $mathUtility): void
     {
         $currentLiabilities = $state['customerDeposits'];
         if ($currentLiabilities <= 0.0) {
@@ -382,7 +474,7 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         // a bank's deposit base follows; the rate moves with the change in the volatility it is struck on, which
         // sector physics carried here. A volatility LEVEL moves the pool's level, never its growth rate: read as a
         // rate, a quiet market bled the pool away every quarter it stayed quiet.
-        $trendGrowthQuarterly = ($macroState->inflationEma + MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE) * \App\Service\Math\FinancialConstants::QUARTER_YEARS;
+        $trendGrowthQuarterly = ($macroState->inflationEma + MacroConstants::TFP_DRIFT + MacroConstants::STRUCTURAL_LABOR_GROWTH_RATE) * FinancialConstants::QUARTER_YEARS;
         $marginRateChange = (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_MARGIN_RATE_CHANGE] ?? 0.0);
         $noise = $mathUtility->generateStandardNormal() * self::POOL_GROWTH_NOISE_STD;
 

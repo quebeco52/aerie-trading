@@ -206,6 +206,17 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     /** Most wholesale debt the model carries per unit of equity (3x equity). */
     public const WHOLESALE_LEVERAGE_LIMIT = 3.0;
 
+    /**
+     * A hedge fund opens at its funds' gross leverage (ModelParam::FundGrossLeverage), the prime-brokerage book its
+     * investors' capital carries.
+     */
+    protected function openingDebtToEquity(Stock $stock): float
+    {
+        return max(0.0, $this->resolveModelParameters($stock, [
+            ModelParam::FundGrossLeverage->value => self::FUND_GROSS_LEVERAGE,
+        ])[ModelParam::FundGrossLeverage]);
+    }
+
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         // Provide analyst-visible macro shift for consensus; neutralized in calculateSectorPhysics before stream

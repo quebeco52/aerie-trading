@@ -4,15 +4,18 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\Sectors;
 use App\DTO\DebtExpansionAppetiteDTO;
-
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
-
 use App\Entity\Stock;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Event\ShockEvent;
 use App\Service\Market\Bond\RatingMethodology;
+use App\Service\Market\Pricing\SeedRows;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
@@ -223,6 +226,96 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     /** Minimum fraction of newly issued debt that must be deployed into organic capex or fund seeding. */
     public const DEBT_CAPEX_DEPLOYMENT    = 0.90;
 
+    // --- Opening Books ---
+    /** What a fee manager's seed row states when its books are built from its character (resolveOpeningBooks()). */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin'];
+    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio', 'addressable_share',
+    ];
+
+    /**
+     * A fee manager's opening books from its character: the fee revenue it earns at its margin and its moat over its
+     * cost of equity. Its market share is its capacity share (getCapacityShare()), so the open is its closed-fund
+     * steady state; its wholesale leverage is openingDebtToEquity() (its manager's share of the leverage limit by
+     * default, overridden by hedge funds and buyout sponsors); cash holds its treasury target, and equity is scaled
+     * until its struck operating yield earns the stated revenue. A row that states its books (no revenue key) is handed
+     * back as it is.
+     */
+    public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
+    {
+        if (!isset($seedRow['revenue'])) {
+            return $seedRow;
+        }
+
+        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
+            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
+            'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
+            'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
+        ]);
+
+        $ticker = (string) $seedRow['ticker'];
+        $revenue = (float) $seedRow['revenue'];
+        $margin = (float) $seedRow['operating_margin'];
+        $baselineRoe = $this->openingBaselineRoe($seedRow, $openingMacro);
+
+        $stock = $this->buildOpeningStock($seedRow, $baselineRoe)
+            ->setTotalRevenue(Decimal::format($revenue));
+        $capacityShare = $this->getCapacityShare($stock) ?? self::DEFAULT_CAPACITY_SHARE;
+        $debtToEquity = $this->openingDebtToEquity($stock);
+
+        $equity = self::OPENING_BOOK_TRIAL_ASSETS;
+        $converged = false;
+        for ($pass = 0; $pass < self::MAX_OPENING_BOOK_PASSES; $pass++) {
+            $wholesale = $equity * $debtToEquity;
+            $operatingBase = max($revenue, $equity, FinancialConstants::MIN_OPERATING_BASE_CASH);
+            $cash = $this->calculateTargetOperatingCash($operatingBase, 0.0, $wholesale);
+            $stock->setTotalEquity(Decimal::format($equity))
+                ->setCustomerDeposits('0.00')
+                ->setWholesaleDebt(Decimal::format($wholesale))
+                ->setCorporateTreasury(Decimal::format($cash))
+                ->setSamRatio((string) $this->openingSamRatio($equity, $capacityShare));
+
+            $metrics = $this->getTargetMetrics($stock, $openingMacro, new MathUtility());
+            $earned = $metrics['invested_capital'] * FirmEconomics::structuralAssetTurnover($metrics['baseline_roic'], $margin, $openingMacro->corporateTaxRate);
+            if ($earned <= 0.0) {
+                throw new \DomainException("{$ticker} earns nothing on the books its character builds.");
+            }
+            if (abs($revenue / $earned - 1.0) < self::OPENING_BOOK_TOLERANCE) {
+                $converged = true;
+                break;
+            }
+            $equity *= $revenue / $earned;
+        }
+        if (!$converged) {
+            throw new \DomainException("{$ticker}'s books do not settle on its stated revenue in " . self::MAX_OPENING_BOOK_PASSES . ' passes.');
+        }
+
+        $finalEquity = (float) $stock->getTotalEquity();
+
+        return array_merge($seedRow, [
+            'baseline_roe' => $baselineRoe,
+            'total_equity' => $finalEquity,
+            'customer_deposits' => 0.0,
+            'wholesale_debt' => (float) $stock->getWholesaleDebt(),
+            'corporate_treasury' => (float) $stock->getCorporateTreasury(),
+            'retained_earnings' => $this->openingRetainedEarnings($seedRow, $finalEquity),
+            'sam_ratio' => (float) $stock->getSamRatio(),
+        ]);
+    }
+
+    /**
+     * Wholesale debt per unit of equity a fee manager opens with: its manager's leverage target under the tighter of
+     * the industry equity limit and its wholesale leverage limit.
+     */
+    protected function openingDebtToEquity(Stock $stock): float
+    {
+        $limit = min(Sectors::metricsFor($stock->getIndustry())['equity_limit'], $this->getWholesaleLeverageLimit());
+
+        return $this->getLeverageTarget($limit * min(1.0, $stock->getManagementProfile()->leverageBias()));
+    }
+
     /**
      * Fees are a yield on the book struck once, at the opening macro (resolveOperatingYield()). Fees are charged on
      * client assets, not on the manager's own borrowing, so a dearer funding market reaches profit through the interest
@@ -230,7 +323,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      *
      * @return array{invested_capital: float, baseline_roic: float}
      */
-    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $stableMargin = max(0.01, (float) $stock->getOperatingMargin());
 
@@ -254,7 +347,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
             return (float) $momentum[self::STATE_OPERATING_YIELD];
         }
 
-        $opening = new \App\DTO\MacroStateDTO();
+        $opening = new MacroStateDTO();
         $earningAssets = max(1.0, $this->resolveEarningAssets($stock));
         $targetEbt = max(1.0, $stock->getTangibleEquity()) * $this->resolveStructuralTargetRoe($stock, $opening) / (1.0 - $opening->corporateTaxRate);
         $interestExpense = (float) $stock->getTotalDebt() * DebtEngine::chargedWholesaleRate($stock, $opening, $this->getLossGivenDefault(), true);
@@ -268,7 +361,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      *
      * @param array<string, float> $momentum Previous quarter stream map ($stock->getEarningsMomentumZ()).
      */
-    protected function createStreamContext(array $momentum, MathUtility $mathUtility, ?\App\DTO\MacroStateDTO $macroState = null, ?Stock $stock = null): StreamContext
+    protected function createStreamContext(array $momentum, MathUtility $mathUtility, ?MacroStateDTO $macroState = null, ?Stock $stock = null): StreamContext
     {
         $streams = parent::createStreamContext($momentum, $mathUtility, $macroState, $stock);
         if ($stock !== null) {
@@ -278,7 +371,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return $streams;
     }
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         // Nullify generic demand shift to handle AUM market beta discretely per stream in calculateSectorPhysics.
         return [
@@ -292,7 +385,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      * book (the cycle, M2 and money-fund migration) at its target weight. The equity-market mark moves the
      * fee base with no client doing anything, and performance fees carry no macro term, so neither counts.
      */
-    public function resolveSectorActivityShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $params = $this->resolveFeeParameters($stock);
         $baseWeight = $params[ModelParam::BaseFeeWeight];
@@ -319,7 +412,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      * Net client flows into the base-fee book: the cycle's net-flow half of AUM, broad-money liquidity, and
      * cash migrating from bank deposits into the manager's money funds while it migrates.
      */
-    private function resolveClientFlowShift(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $aumBetaScalar): float
+    private function resolveClientFlowShift(Stock $stock, MacroStateDTO $macroState, float $aumBetaScalar): float
     {
         $aumMarketBeta = $this->resolveAumCycleFlow($stock, $macroState, $aumBetaScalar);
         $m2InflowBoost = MacroTransmission::calculateBroadMoneyLiquidityShift($macroState->moneySupplyGrowthEma, $macroState->moneySupplyGrowthTrend, sensitivity: self::M2_AUM_INFLOW_SENSITIVITY);
@@ -329,7 +422,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     }
 
     /** The net-flow half of AUM: clients add money in expansions and redeem in slumps. */
-    private function resolveAumCycleFlow(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $aumBetaScalar): float
+    private function resolveAumCycleFlow(Stock $stock, MacroStateDTO $macroState, float $aumBetaScalar): float
     {
         return $macroState->outputGapEma * $this->getOperatingCyclicality($stock) * $aumBetaScalar;
     }
@@ -339,7 +432,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      * asymmetric performance fee / carried interest surges during strong fund alpha quarters,
      * institutional redemption shocks during severe market drawdowns, and structural efficiency floors.
      */
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         // Resolve company-specific tuned asset management parameters
         $params = $this->resolveFeeParameters($stock);
@@ -430,13 +523,13 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      * expected return of the mix (calculateCashYield()). The equity sleeve's realised return replaces its expectation
      * in the books (resolveEquitySleeve()).
      */
-    public function calculateInterestIncome(Stock $stock, \App\DTO\MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
+    public function calculateInterestIncome(Stock $stock, MacroStateDTO $macroState, ?float $realizedWholesaleRate = null): float
     {
         return $this->resolveInvestedTreasury($stock) * $this->calculateCashYield($macroState);
     }
 
     /** @return array{value: float, expected_return: float} */
-    public function resolveEquitySleeve(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    public function resolveEquitySleeve(Stock $stock, MacroStateDTO $macroState): array
     {
         return [
             'value' => $this->resolveInvestedTreasury($stock) * $this->resolveTreasuryEquityWeight(),
@@ -474,7 +567,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
         return $operatingBase * self::MIN_OPERATING_BUFFER;
     }
 
-    public function calculateCashYield(\App\DTO\MacroStateDTO $macroState): float
+    public function calculateCashYield(MacroStateDTO $macroState): float
     {
         $bondReturn = $macroState->yield10yEma;
         $equityReturn = $this->resolveEquitySleeveReturn($macroState, self::EQUITY_RETURN_GAP_MULT);
@@ -488,7 +581,7 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
      * The equity tranche's expected return: the market cost of equity (the ten-year plus the equity risk premium),
      * so it moves with rates as every other return in the book does, plus the cycle term.
      */
-    protected function resolveEquitySleeveReturn(\App\DTO\MacroStateDTO $macroState, float $gapMultiplier): float
+    protected function resolveEquitySleeveReturn(MacroStateDTO $macroState, float $gapMultiplier): float
     {
         return $macroState->marketCostOfEquity() + ($macroState->outputGapEma * $gapMultiplier);
     }

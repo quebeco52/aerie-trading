@@ -36,7 +36,7 @@ class StockModelTuning
             ModelParam::TradingRevenueWeight->value        => 0.40,
             ModelParam::OptionsPremiumIncomeWeight->value => 0.60,
             ModelParam::VixArbitrageScalar->value          => 1.80,
-            ModelParam::TargetCapitalRatio->value          => 0.2105, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value          => 0.2105, // Its opening equity is built on it
         ],
 
         // --- Storm Petrel Securities (PTRL) ---
@@ -45,7 +45,7 @@ class StockModelTuning
             ModelParam::AdvisoryRevenueWeight->value => 0.15,
             ModelParam::TradingRevenueWeight->value  => 0.85,
             ModelParam::FiccTradingShare->value      => 0.85,
-            ModelParam::TargetCapitalRatio->value    => 0.1111, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value    => 1.0 / 9.0, // Its opening equity is built on it (8x debt/equity)
         ],
 
         // --- Kingfisher Capital (KING) ---
@@ -55,7 +55,7 @@ class StockModelTuning
             ModelParam::AdvisoryRevenueWeight->value => 0.75,
             ModelParam::TradingRevenueWeight->value  => 0.25,
             ModelParam::VixArbitrageScalar->value    => 1.20,
-            ModelParam::TargetCapitalRatio->value    => 0.2941, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value    => 0.2941, // Its opening equity is built on it
         ],
 
         // --- Finch Securities (FINC) ---
@@ -63,7 +63,7 @@ class StockModelTuning
         'FINC' => [
             ModelParam::AdvisoryRevenueWeight->value => 0.25,
             ModelParam::TradingRevenueWeight->value  => 0.75,
-            ModelParam::TargetCapitalRatio->value    => 0.3333, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value    => 0.3333, // Its opening equity is built on it
         ],
 
         // --- Corvid Strategic Arbitrage (CORV) ---
@@ -73,7 +73,7 @@ class StockModelTuning
             ModelParam::AdvisoryRevenueWeight->value => 0.25,
             ModelParam::TradingRevenueWeight->value  => 0.75,
             ModelParam::VixArbitrageScalar->value    => 2.00,
-            ModelParam::TargetCapitalRatio->value    => 0.2360, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value    => 0.2360, // Its opening equity is built on it
         ],
 
         // =====================================================================
@@ -247,7 +247,8 @@ class StockModelTuning
             ModelParam::ClearingFeeWeight->value      => 0.50,
             ModelParam::CustodyFloatWeight->value     => 0.30,
             ModelParam::DataSubscriptionWeight->value => 0.20,
-            ModelParam::TargetCapitalRatio->value     => 0.037, // Its seeded book equity/assets, member margin included
+            // Its opening equity is built on it, member margin included
+            ModelParam::TargetCapitalRatio->value     => 0.037,
         ],
 
         // =====================================================================
