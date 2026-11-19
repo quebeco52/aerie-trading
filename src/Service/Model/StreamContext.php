@@ -74,6 +74,11 @@ class StreamContext
         private readonly float $sectorFactorLoading = 0.0,
         /** The firm's ticker, which says which of its lines sell into which of its markets (Segments). */
         private readonly ?string $ticker = null,
+        /**
+         * Reads every stream's last draw as zero: the quarter as it runs with none of the firm's own news on record,
+         * so it moves only with what is published.
+         */
+        private readonly bool $withoutFirmHistory = false,
     ) {}
 
     /**
@@ -91,7 +96,7 @@ class StreamContext
     public function generateZ(string $key, float $phi, ?float $commonLoading = null): float
     {
         $firmLoading = max(0.0, min(1.0, $commonLoading ?? $this->firmFactorLoading));
-        $prevZ = $this->previousMomentum[$key] ?? 0.0;
+        $prevZ = $this->withoutFirmHistory ? 0.0 : ($this->previousMomentum[$key] ?? 0.0);
 
         // The sector factor applies only to streams that load on firm demand at all (exogenous draws pass a zero
         // loading), and only when the macro state carries a level for this firm's sector.
@@ -104,7 +109,7 @@ class StreamContext
             // only the firm's own part X runs the AR(1) (on the firm factor at the loading that keeps its share of
             // Z's variance at rho_f^2). Fed in as an innovation, the level was compounded by phi a second time.
             $ownScale = sqrt(1.0 - ($sectorLoading * $sectorLoading));
-            $previousSector = $this->getPersistedState(self::SECTOR_DEMAND_LEVEL_STATE, 0.0);
+            $previousSector = $this->withoutFirmHistory ? 0.0 : $this->getPersistedState(self::SECTOR_DEMAND_LEVEL_STATE, 0.0);
             $previousOwn = ($prevZ - ($sectorLoading * $previousSector)) / $ownScale;
             $ownLoading = min(1.0, $firmLoading / $ownScale);
             $own = $this->mathUtility->generatePersistentZ($previousOwn, $phi, $this->getFirmInnovation(), $ownLoading);

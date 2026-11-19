@@ -50,6 +50,12 @@ interface OperatingStrategyInterface
      * fixes the scenarios, which come from a stream of their own.
      */
     public function measurePublicFinancials(Stock $stock, float $expectedRevenue, float $expectedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, ?int $calendarQuarter = null, int $seed = 0): ActualFinancialsDTO;
+
+    /**
+     * The public quarter's revenue with none of the firm's own news on record, so it moves between reports only with
+     * what is published: the base the analyst anchor is carried forward on.
+     */
+    public function measureMarketQuarterRevenue(Stock $stock, float $expectedRevenue, float $expectedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, ?int $calendarQuarter = null, int $seed = 0): float;
     public function getCoverageProfile(Stock $stock): SectorCoverageProfile;
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
     /**

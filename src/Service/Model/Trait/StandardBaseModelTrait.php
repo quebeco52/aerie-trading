@@ -18,6 +18,9 @@ use App\Service\Model\StreamContext;
 
 trait StandardBaseModelTrait
 {
+    /** Whether the physics call in progress runs without the firm's own news on record (StreamContext). */
+    private bool $withoutFirmHistory = false;
+
     public function isFinancial(): bool
     {
         return false;
@@ -48,7 +51,7 @@ trait StandardBaseModelTrait
             $sectorDemandLevel = isset($macroState->sectorDemandZ[$sector]) ? (float) $macroState->sectorDemandZ[$sector] : null;
         }
 
-        return new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorDemandLevel, $this->getSectorFactorLoading(), $stock?->getTicker());
+        return new StreamContext($momentum, $mathUtility, $this->getFirmFactorLoading(), $sectorDemandLevel, $this->getSectorFactorLoading(), $stock?->getTicker(), $this->withoutFirmHistory);
     }
 
     /**

@@ -103,6 +103,7 @@ class MarketConsensusEngine
      * the firm's own news, the gap between the quarter it had and the public one, at their coverage visibility:
      *   dynamicVisibility   = clamp(baseVisibility + N(0,1) * errorStdDev, minVisibility, 1.0)
      *   freshEstimate       = publicRevenue * (1 + dynamicVisibility * (actualRevenue / publicRevenue - 1))
+     *   priorAnchor         = lastPosterior * marketRevenue / lastMarketRevenue
      *   analystExpectedRev  = BayesianUpdate(priorAnchor, freshEstimate) * (1 - walkdownBias)
      *   expectedCostRatio   = publicCostRatio - (1 - ANALYST_COST_BASE_VISIBILITY) * inputCostDragChange
      *                         + dynamicVisibility * (actualCostRatio - publicCostRatio)
@@ -121,6 +122,10 @@ class MarketConsensusEngine
      * @param float                 $seasonalRatio               Seasonality adjustment ratio (Factor_t / Factor_{t-1}).
      * @param float                 $priorExpectedRevenue        Pre-shock expected revenue the anchor was formed
      *                                                           against; 0 when unknown.
+     * @param float                 $marketRevenue               The public quarter's revenue with none of the firm's
+     *                                                           own news on record; 0 when unknown.
+     * @param float                 $priorMarketRevenue          The same at the last report, the anchor's base when
+     *                                                           known; 0 when unknown.
      */
     public function generateConsensus(
         ActualFinancialsDTO $actuals,
@@ -133,6 +138,8 @@ class MarketConsensusEngine
         float $inputCostDragChange = 0.0,
         float $seasonalRatio = 1.0,
         float $priorExpectedRevenue = 0.0,
+        float $marketRevenue = 0.0,
+        float $priorMarketRevenue = 0.0,
     ): ConsensusDTO {
         $analystError = $mathUtility->generateStandardNormal() * $coverage->errorStdDev;
 
@@ -162,13 +169,18 @@ class MarketConsensusEngine
 
         $signalVariance = max(0.0001, pow($coverage->errorStdDev, 2));
 
-        // Roll prior analyst revenue estimate forward with growth in structural capacity: the pre-shock base on both
-        // quarters, so the roll carries no more of this quarter's shock than the fresh signal does.
+        // Roll the last estimate forward with everything published since it was made: the public quarter without the
+        // firm's own news, on both reports, so a benchmark price the sector physics reads (crude, a crack spread,
+        // freight) moves the prior as it moves the fresh signal. The firm's own news stays out of the roll: the last
+        // estimate already holds what analysts heard of it, and rolled with the full public quarter that news counted
+        // twice. Before the first such quarter is on record, the pre-shock structural base stands in, which carries
+        // capacity, the cycle and the season but not those prices.
         $anchor = (float) $stock->getLastAnalystRevenue();
-        if ($anchor > 0.0 && $priorExpectedRevenue > 0.0) {
+        $rollBase = $marketRevenue > 0.0 && $priorMarketRevenue > 0.0 ? [$marketRevenue, $priorMarketRevenue] : [$baseExpectedRevenue, $priorExpectedRevenue];
+        if ($anchor > 0.0 && $rollBase[1] > 0.0) {
             $rollForward = max(
                 1.0 / self::ANALYST_ANCHOR_MAX_ROLL_FORWARD,
-                min(self::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $baseExpectedRevenue / $priorExpectedRevenue),
+                min(self::ANALYST_ANCHOR_MAX_ROLL_FORWARD, $rollBase[0] / $rollBase[1]),
             );
             $priorEstimate = $anchor * $rollForward;
         } elseif ($anchor > 0.0) {

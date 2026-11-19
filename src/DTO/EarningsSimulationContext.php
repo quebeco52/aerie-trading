@@ -165,6 +165,11 @@ class EarningsSimulationContext
     public float $publicVariableMargin = 0.0;
     /** The quarter as the public saw it before the report (OperatingStrategyInterface::measurePublicFinancials). */
     public ?ActualFinancialsDTO $publicActuals = null;
+    /**
+     * The public quarter's revenue with none of the firm's own news on record
+     * (OperatingStrategyInterface::measureMarketQuarterRevenue): the base the analyst anchor rolls on.
+     */
+    public float $marketQuarterRevenue = 0.0;
 
     // Analyst
     public float $analystExpectedRevenue = 0.0;

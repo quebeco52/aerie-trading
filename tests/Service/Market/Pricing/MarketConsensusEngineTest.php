@@ -38,9 +38,9 @@ class MarketConsensusEngineTest extends TestCase
         );
     }
 
-    private function consensus(ActualFinancialsDTO $actuals, ActualFinancialsDTO $public, SectorCoverageProfile $coverage, ?Stock $stock = null, float $base = 1000.0, float $priorBase = 0.0): ConsensusDTO
+    private function consensus(ActualFinancialsDTO $actuals, ActualFinancialsDTO $public, SectorCoverageProfile $coverage, ?Stock $stock = null, float $base = 1000.0, float $priorBase = 0.0, float $market = 0.0, float $priorMarket = 0.0): ConsensusDTO
     {
-        return $this->engine->generateConsensus($actuals, $public, $coverage, $this->mathUtilityMock, $stock ?? new Stock(), 0.15, $base, 0.0, 1.0, $priorBase);
+        return $this->engine->generateConsensus($actuals, $public, $coverage, $this->mathUtilityMock, $stock ?? new Stock(), 0.15, $base, 0.0, 1.0, $priorBase, $market, $priorMarket);
     }
 
     public function testThePrivateNewsIsHeardAtVisibility(): void
@@ -134,6 +134,54 @@ class MarketConsensusEngineTest extends TestCase
 
         // Prior 1200 (rolled) and fresh 1200 agree, so only the walkdown separates the estimate from the base.
         $this->assertEqualsWithDelta(1200.0 * (1.0 - MarketConsensusEngine::ANALYST_WALKDOWN_BIAS), $rolled->analystExpectedRevenue, 1e-6);
+    }
+
+    /**
+     * A benchmark price the structural base does not carry (crude for a producer) moves the public quarter 40% on flat
+     * capacity. The anchor rolls with what was published, so with no private news the estimate is the public quarter:
+     * rolled on the structural base alone, it kept over half of last quarter's price and missed for quarters on end.
+     */
+    public function testTheAnchorIsCarriedForwardWithWhatWasPublished(): void
+    {
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10, minVisibility: 0.20);
+        $stock = new Stock();
+        $stock->setLastAnalystRevenue('1000.0');
+
+        $consensus = $this->consensus(self::quarter(600.0), self::quarter(600.0), $coverage, $stock, 1000.0, 1000.0, 600.0, 1000.0);
+
+        $this->assertEqualsWithDelta(600.0, $consensus->analystUnbiasedRevenue, 1e-6);
+    }
+
+    /** The firm's own news is still anchored: heard at visibility, then shrunk toward the rolled prior. */
+    public function testThePrivateNewsIsStillAnchoredAfterAPublicMove(): void
+    {
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10, minVisibility: 0.20);
+        $stock = new Stock();
+        $stock->setLastAnalystRevenue('1000.0');
+
+        // Public 600 (rolled prior 600), actual 660: half the private 10% heard, a fresh 630.
+        $estimate = $this->consensus(self::quarter(660.0), self::quarter(600.0), $coverage, $stock, 1000.0, 1000.0, 600.0, 1000.0)->analystUnbiasedRevenue;
+
+        $this->assertGreaterThan(600.0, $estimate);
+        $this->assertLessThan(630.0, $estimate);
+    }
+
+    /**
+     * Last quarter's good news lifts this quarter's public quarter by its persistence (1100), and the last estimate
+     * already holds what analysts heard of it (1050). Nothing was published, so the anchor stays at 1050 and the
+     * estimate lands short of the public quarter: analysts under-react to the firm's news. Rolled with the full public
+     * quarter the news counted twice (1050 x 1.1) and the estimate overshot it.
+     */
+    public function testTheFirmsOwnNewsIsNotRolledTwice(): void
+    {
+        $coverage = new SectorCoverageProfile(baseVisibility: 0.50, errorStdDev: 0.10, minVisibility: 0.20);
+        $stock = new Stock();
+        $stock->setLastAnalystRevenue('1050.0');
+
+        $estimate = $this->consensus(self::quarter(1100.0), self::quarter(1100.0), $coverage, $stock, 1000.0, 1000.0, 1000.0, 1000.0)->analystUnbiasedRevenue;
+
+        $this->assertGreaterThan(1050.0, $estimate);
+        $this->assertLessThan(1100.0, $estimate);
     }
 
     public function testWithoutAKnownPriorBaseTheAnchorStaysSticky(): void

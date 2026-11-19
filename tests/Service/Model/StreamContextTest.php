@@ -187,6 +187,22 @@ class StreamContextTest extends TestCase
         $this->assertEqualsWithDelta(0.30, $context->generateZ('niche', 0.0, 0.30), 1e-9);
     }
 
+    /**
+     * Without the firm's history on record every stream starts from zero, its own past draw and the sector level
+     * alike, so the quarter carries none of the firm's earlier news; the plain context carries it at phi.
+     */
+    public function testWithoutFirmHistoryEveryStreamStartsFromZero(): void
+    {
+        $history = ['sales' => 2.0, 'event' => -3.0, StreamContext::SECTOR_DEMAND_LEVEL_STATE => 1.5];
+
+        $plain = new StreamContext($history, new ScriptedDraws(generateStandardNormal: 0.0), 0.0);
+        $this->assertEqualsWithDelta(1.0, $plain->generateZ('sales', 0.5), 1e-9);
+
+        $forgetful = new StreamContext($history, new ScriptedDraws(generateStandardNormal: 0.0), 0.60, 0.0, 0.40, null, true);
+        $this->assertEqualsWithDelta(0.0, $forgetful->generateZ('sales', 0.5), 1e-9);
+        $this->assertEqualsWithDelta(0.0, $forgetful->generateExogenousZ('event', 0.5), 1e-9);
+    }
+
     public function testRecognizeBacklogSeedsAtSteadyStateAndDampsOrderShocks(): void
     {
         $math = new MathUtility();

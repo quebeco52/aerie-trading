@@ -336,6 +336,11 @@ trait StandardOperatingPhysicsTrait
      * pair, so the sampling error left is the non-linear terms', well inside analysts' own coverage error.
      */
     public const PUBLIC_QUARTER_SCENARIO_PAIRS = 16;
+    /**
+     * Antithetic scenario pairs the market quarter averages over (4 runs): it only sets the ratio the analyst anchor
+     * rolls by between reports, and linear terms cancel within a pair.
+     */
+    public const MARKET_QUARTER_SCENARIO_PAIRS = 2;
 
     // --- Input Cost Basket ---
     /**
@@ -889,6 +894,14 @@ trait StandardOperatingPhysicsTrait
      */
     public function measurePublicFinancials(Stock $stock, float $expectedRevenue, float $expectedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, ?int $calendarQuarter = null, int $seed = 0): ActualFinancialsDTO
     {
+        return $this->averagePublicScenarios($stock, $expectedRevenue, $expectedVariableMargin, $fixedCosts, $baselineVol, $macroState, $calendarQuarter, $seed, self::PUBLIC_QUARTER_SCENARIO_PAIRS);
+    }
+
+    /**
+     * The public quarter averaged over $pairs antithetic pairs of the firm's private draws (measurePublicFinancials()).
+     */
+    private function averagePublicScenarios(Stock $stock, float $expectedRevenue, float $expectedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, ?int $calendarQuarter, int $seed, int $pairs): ActualFinancialsDTO
+    {
         $sector = (string) $stock->getSector();
         $state = isset($macroState->sectorDemandZ[$sector])
             ? $macroState->with(['sectorDemandZ' => [$sector => 0.0] + $macroState->sectorDemandZ])
@@ -897,11 +910,11 @@ trait StandardOperatingPhysicsTrait
 
         $sums = ['revenue' => 0.0, 'price' => 0.0, 'costs' => 0.0, 'provision' => 0.0, 'chargeOffs' => 0.0];
         $runs = 0;
-        for ($pair = 0; $pair < self::PUBLIC_QUARTER_SCENARIO_PAIRS; ++$pair) {
+        for ($pair = 0; $pair < $pairs; ++$pair) {
             $draws = MathUtility::ownStream($seed + $pair);
             $draws->beginDrawLog();
             foreach ([$draws, null] as $source) {
-                $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $expectedVariableMargin, $fixedCosts, $baselineVol, $state, $source ?? MathUtility::mirroring($draws->endDrawLog(), $seed + self::PUBLIC_QUARTER_SCENARIO_PAIRS + $pair));
+                $physics = $this->calculateSectorPhysics(clone $stock, $expectedRevenue, $expectedVariableMargin, $fixedCosts, $baselineVol, $state, $source ?? MathUtility::mirroring($draws->endDrawLog(), $seed + $pairs + $pair));
                 $scenario = $this->assembleActualFinancials($physics, $fixedCosts);
                 $sums['revenue'] += $scenario->actualRevenue;
                 $sums['price'] += $scenario->priceRevenue;
@@ -924,6 +937,21 @@ trait StandardOperatingPhysicsTrait
             netChargeOffs: $sums['chargeOffs'] / $runs,
             priceRevenue: $sums['price'] / $runs,
         );
+    }
+
+    /**
+     * The public quarter's revenue with none of the firm's own news on record: every stream's last draw read as zero,
+     * so it moves from one report to the next only with what is published (the macro terms, benchmark prices,
+     * disclosed books and announced regimes).
+     */
+    public function measureMarketQuarterRevenue(Stock $stock, float $expectedRevenue, float $expectedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, ?int $calendarQuarter = null, int $seed = 0): float
+    {
+        $this->withoutFirmHistory = true;
+        try {
+            return $this->averagePublicScenarios($stock, $expectedRevenue, $expectedVariableMargin, $fixedCosts, $baselineVol, $macroState, $calendarQuarter, $seed, self::MARKET_QUARTER_SCENARIO_PAIRS)->actualRevenue;
+        } finally {
+            $this->withoutFirmHistory = false;
+        }
     }
 
     /** The template method's books on one run of the sector physics. */

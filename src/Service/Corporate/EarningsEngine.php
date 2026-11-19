@@ -84,6 +84,12 @@ class EarningsEngine
      */
     public const STATE_LAST_EXPECTED_REVENUE = 'state:last_expected_revenue';
     /**
+     * Stream-state key: the public quarter's revenue without the firm's own news at the last report, so the analyst
+     * anchor is carried forward with everything published since, benchmark prices included, and only the firm's news
+     * is anchored.
+     */
+    public const STATE_LAST_MARKET_REVENUE = 'state:last_market_revenue';
+    /**
      * Carried stream-state key: the firm's surprise record, its weighted sum of squared EPS surprises on revenue
      * (MarketConsensusEngine::recordSurprise()).
      */
@@ -709,7 +715,9 @@ class EarningsEngine
                 : null;
             // The same quarter as analysts could expect it before the report: averaged over the firm's private draws,
             // on the revenue and margin it was expected to run at, with the industry's announced regimes still in view.
-            $ctx->publicActuals = $ctx->strategy->measurePublicFinancials($streamBasis, $ctx->expectedRevenueBeforeShocks, $ctx->publicVariableMargin, $ctx->fixedCosts, $ctx->baselineVol, $ctx->macroState, $ctx->calendarQuarter, crc32($ctx->stock->getTicker() . ':' . $ctx->tickCount));
+            $publicSeed = crc32($ctx->stock->getTicker() . ':' . $ctx->tickCount);
+            $ctx->publicActuals = $ctx->strategy->measurePublicFinancials($streamBasis, $ctx->expectedRevenueBeforeShocks, $ctx->publicVariableMargin, $ctx->fixedCosts, $ctx->baselineVol, $ctx->macroState, $ctx->calendarQuarter, $publicSeed);
+            $ctx->marketQuarterRevenue = $ctx->strategy->measureMarketQuarterRevenue($streamBasis, $ctx->expectedRevenueBeforeShocks, $ctx->publicVariableMargin, $ctx->fixedCosts, $ctx->baselineVol, $ctx->macroState, $ctx->calendarQuarter, $publicSeed);
         } finally {
             $ctx->strategy->useIndustryRegimes(null);
         }
@@ -753,7 +761,9 @@ class EarningsEngine
         $seasonalRatio = $ctx->seasonalFactor / max(0.01, $ctx->priorSeasonalFactor);
         // The base the LAST consensus was struck against, still the opening state here: the stream map on
         // the stock is only replaced once the report is booked below.
-        $priorExpectedRevenue = (float) (($ctx->stock->getEarningsMomentumZ() ?? [])[self::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
+        $momentum = $ctx->stock->getEarningsMomentumZ() ?? [];
+        $priorExpectedRevenue = (float) ($momentum[self::STATE_LAST_EXPECTED_REVENUE] ?? 0.0);
+        $priorMarketRevenue = (float) ($momentum[self::STATE_LAST_MARKET_REVENUE] ?? 0.0);
         $consensus = $this->marketConsensusEngine->generateConsensus(
             $actuals,
             $ctx->publicActuals ?? $actuals,
@@ -765,6 +775,8 @@ class EarningsEngine
             $ctx->strategy->projectInputCostDragChange($ctx->stock, $ctx->macroState) ?? 0.0,
             $seasonalRatio,
             $priorExpectedRevenue,
+            $ctx->marketQuarterRevenue,
+            $priorMarketRevenue,
         );
         $ctx->analystExpectedRevenue = $consensus->analystExpectedRevenue;
         $ctx->analystExpectedVariableCosts = $consensus->analystExpectedVariableCosts;
@@ -797,6 +809,7 @@ class EarningsEngine
         // The base this quarter's consensus was struck against, so the next one can roll its anchor
         // forward with the firm's growth instead of freezing it at today's dollar size.
         $streamState[self::STATE_LAST_EXPECTED_REVENUE] = $ctx->expectedRevenueBeforeShocks;
+        $streamState[self::STATE_LAST_MARKET_REVENUE] = $ctx->marketQuarterRevenue;
         // The price level the plant capacity was last struck against, and the surprise it carries.
         $streamState[OperatingCapacityEngine::STATE_LAST_DEFLATOR] = max(0.01, $ctx->macroState->gdpDeflator);
         $streamState[OperatingCapacityEngine::STATE_PRICE_LEVEL_SURPRISE] = $ctx->priceLevelSurprise;
