@@ -708,21 +708,25 @@ class CapitalAllocationEngineTest extends TestCase
 
     /**
      * A contender or above closes a flat year with a token raise and keeps its record; a challenger does not, nor a
-     * firm off the roll, nor one whose earnings would not cover the raise.
+     * firm off the roll, nor one whose raise would take the dividend past the share of earnings its policy pays.
      */
     public function testATokenRaiseCarriesARecordThroughAFlatYearOnlyForAContenderOrAbove(): void
     {
-        [$listed, $listedStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 12, lastYearEndDividend: 1.00);
-        [$unlisted, $unlistedStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 3, lastYearEndDividend: 1.00);
-        [$uncovered, $uncoveredStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4000000.00', streak: 12, lastYearEndDividend: 1.00);
-        [$challenger, $challengerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 7, lastYearEndDividend: 1.00);
+        // $13.8m a year is $3.45 a quarter a share: a 30% policy pays $1.035, so the year's step from $1.00 is under
+        // the minimum raise and the dividend would close flat, with room under the policy for a $1.01 token.
+        [$listed, $listedStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '13800000.00', streak: 12, lastYearEndDividend: 1.00);
+        [$unlisted, $unlistedStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '13800000.00', streak: 3, lastYearEndDividend: 1.00);
+        // $4.4m covers a $1.01 dividend ($1.10 a quarter) but its 30% policy pays $0.33: the board holds, it does not
+        // raise.
+        [$pastPolicy, $pastPolicyStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 12, lastYearEndDividend: 1.00);
+        [$challenger, $challengerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '13800000.00', streak: 7, lastYearEndDividend: 1.00);
 
         $this->assertSame(1.00, $challenger['dividend_paid'], 'A challenger makes no token raise.');
         $this->assertSame(0, $challengerStock->getDividendStreakYears());
         $this->assertContains("Held its dividend flat for the year, ending 7 years of increases and its place on the exchange's dividend roll.", array_column($challenger['events'], 'description'));
 
-        $this->assertLessThanOrEqual(1.00, $uncovered['dividend_paid'], 'A raise to $1.01 a quarter on $1.00 of trailing earnings is not made.');
-        $this->assertSame(0, $uncoveredStock->getDividendStreakYears());
+        $this->assertSame(1.00, $pastPolicy['dividend_paid'], 'A dividend past its policy is held, not raised.');
+        $this->assertSame(0, $pastPolicyStock->getDividendStreakYears());
 
         $this->assertEqualsWithDelta(1.00 * (1.0 + CapitalAllocationEngine::STREAK_TOKEN_RAISE), $listed['dividend_paid'], 1e-9);
         $this->assertSame(13, $listedStock->getDividendStreakYears());

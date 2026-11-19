@@ -604,4 +604,29 @@ class ValuationTest extends TestCase
         $this->assertLessThan(0.01, Valuation::franchiseValueElasticity(0.4, 1.5, 0.20, -6.0), 'a margin worn away has little value left to move');
         $this->assertSame(0.0, Valuation::franchiseValueElasticity(0.4, 1.5, 0.0, 1.0), 'no margin, nothing to shift');
     }
+
+    /** Four quarterly declarations at the cited quarterly speed close the cited share of the gap in a year. */
+    public function testTheQuarterlyLintnerSpeedCompoundsToTheAnnualOne(): void
+    {
+        $this->assertEqualsWithDelta(FinancialConstants::LINTNER_ANNUAL_ADJUSTMENT_SPEED, Valuation::lintnerAnnualSpeed(FinancialConstants::LINTNER_QUARTERLY_ADJUSTMENT_SPEED), 1e-12);
+        $this->assertSame(1.0, Valuation::lintnerAnnualSpeed(1.0));
+        $this->assertSame(0.0, Valuation::lintnerAnnualSpeed(0.0));
+    }
+
+    /**
+     * A board closing a share of its gap each year against a target growing at a steady rate settles at the share of
+     * the target the formula gives, whatever it started at; with no growth it reaches the target.
+     */
+    public function testASmoothedDividendSettlesAStepBelowAGrowingTarget(): void
+    {
+        foreach ([[0.32, 0.045], [0.187, 0.045], [0.32, 0.0], [0.94, 0.06]] as [$speed, $growth]) {
+            $target = 1.0;
+            $dividend = 0.2;
+            for ($year = 0; $year < 400; $year++) {
+                $target *= 1.0 + $growth;
+                $dividend += $speed * ($target - $dividend);
+            }
+            $this->assertEqualsWithDelta(Valuation::lintnerSteadyDividendShare($speed, $growth), $dividend / $target, 1e-6, "speed {$speed}, growth {$growth}");
+        }
+    }
 }

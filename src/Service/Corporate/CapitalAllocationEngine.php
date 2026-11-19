@@ -267,17 +267,18 @@ class CapitalAllocationEngine
         // announcing (Lintner 1956; Leary & Michaely 2011): the year's step toward the target, its quarterly speed
         // compounded over the year, or nothing. A cut is not held for the review; it comes in the quarter it is due.
         if ($ctx->newDividend > $lastDividend && $ctx->strategy->holdsDividendThroughDownturns()) {
-            $annualSpeed = 1.0 - ((1.0 - min(1.0, $speed)) ** FinancialConstants::QUARTERS_PER_YEAR);
+            $annualSpeed = Valuation::lintnerAnnualSpeed($speed);
             $raised = $lastDividend + ($annualSpeed * ($targetDividend - $lastDividend));
             $ctx->newDividend = $ctx->isFiscalYearEnd && $raised >= $lastDividend * (1.0 + self::MIN_ANNOUNCED_DIVIDEND_RAISE) ? $raised : $lastDividend;
         }
         // A contender or above protects its record (Brav, Graham, Harvey & Michaely 2005): a year that would close no
         // higher than the last is closed with a token raise, unless a crisis, a regulator or a covenant forbids one, or
-        // the year's earnings would not cover it: boards raise only a dividend they expect to sustain. The caps below
-        // still bind, so a firm that cannot afford it loses its record. A challenger needs a real raise.
+        // the raise would take the dividend past the share of the year's earnings its policy pays: a board holds a
+        // dividend through a bad year but does not raise one its own policy no longer supports, so records end in bad
+        // years. The caps below still bind. A challenger needs a real raise.
         $lastYearEndDividend = (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_YEAR_END_DIVIDEND] ?? 0.0);
         $tokenDividend = $lastYearEndDividend * (1.0 + self::STREAK_TOKEN_RAISE);
-        if ($ctx->isFiscalYearEnd && $tier->protectsRecord() && $lastYearEndDividend > 0.0 && $tokenDividend <= $ctx->trailingQuarterlyEps && !$isLiquidityCrisis && !$isRegulatoryDividendHalt && $ctx->health->hasLeverageHeadroom) {
+        if ($ctx->isFiscalYearEnd && $tier->protectsRecord() && $lastYearEndDividend > 0.0 && $tokenDividend <= $calculatedTarget && !$isLiquidityCrisis && !$isRegulatoryDividendHalt && $ctx->health->hasLeverageHeadroom) {
             $ctx->newDividend = max($ctx->newDividend, $tokenDividend);
         }
         // The tier caps what is paid, not only what the board aims at: smoothed from a dividend above it, the payment

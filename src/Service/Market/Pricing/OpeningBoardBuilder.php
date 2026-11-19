@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Pricing;
 
 use App\Data\Company\AnchorHoldings;
+use App\Data\Company\DividendTier;
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\IndustryPayoutPolicies;
 use App\Data\Company\ManagementProfile;
@@ -22,7 +23,9 @@ use App\Service\Corporate\ManagementSuccessionEngine;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
 
 /**
  * Opens listed companies on their seed rows (App\Data\Company\InitialMarket): the balance sheet, the ledgers the first
@@ -44,6 +47,9 @@ class OpeningBoardBuilder
      * important lenders and leaves the mid-tier the election.
      */
     public const AOCI_FILTER_SIZE_THRESHOLD = 750_000_000_000.0;
+
+    /** @var array<string, float>|null Each seed payer's quantile in the board's distribution of opening records. */
+    private static ?array $recordQuantiles = null;
 
     public function __construct(
         private readonly MathUtility $mathUtility,
@@ -133,7 +139,6 @@ class OpeningBoardBuilder
         $stock->setBasePayoutPolicy($payoutPolicy);
         $stock->setPayoutPolicy($payoutPolicy);
         $stock->setDividendSpeed((string) Sectors::strategyFor($stockData['industry'] ?? null)->getDividendAdjustmentSpeed());
-        $stock->setDividendStreakYears((int) ($stockData['dividend_streak'] ?? 0));
         $stock->setFixedCostRatio((float) $stockData['fixed_cost_ratio']);
         $stock->setDepreciationRate((string) $stockData['depreciation_rate']);
 
@@ -206,9 +211,19 @@ class OpeningBoardBuilder
         $stock->setTotalNetIncome((string) $netIncome);
         $stock->setEarningsPerShare((string) round($annualEps, 2));
 
-        // A board that has been paying opens where its policy has already brought it (Lintner 1956): the target
-        // payout, carrying the manager's payout fixed effect, and never below a distribution the law requires.
-        $startingDividend = max(0.0, $annualEps / 4.0) * max($stock->getPolicyPayoutRatio(), $strategy->getMinimumDistributionRatio());
+        // A payer opens on a record of increases: the one its row names, or one from the board's long-run distribution
+        // at its rank by payout, so the roll opens at the size it keeps rather than filling from empty.
+        $isPayer = $annualEps > 0.0 && $stock->getPolicyPayoutRatio() > 0.0;
+        $openingStreak = $isPayer ? DividendTier::openingStreak(self::openingRecordQuantile($stock->getTicker())) : 0;
+        $stock->setDividendStreakYears((int) ($stockData['dividend_streak'] ?? $openingStreak));
+
+        // A board that has been paying opens where its policy has already brought it (Lintner 1956): closing part of
+        // the gap each year while earnings grow with the economy, it runs a steady step below its target payout, so its
+        // first annual review has a raise to make. A trust's legal minimum is left to its first report: it is struck on
+        // taxable income, and the opening estimate of earnings does not separate the depreciation a trust adds back.
+        $annualSpeed = Valuation::lintnerAnnualSpeed((float) $stock->getDividendSpeed() * $stock->getDividendTier()->smoothing());
+        $trendGrowth = MacroConstants::TREND_REAL_GROWTH + max(0.0, $openingMacro->inflationEma);
+        $startingDividend = max(0.0, $annualEps / 4.0) * $stock->getPolicyPayoutRatio() * Valuation::lintnerSteadyDividendShare($annualSpeed, $trendGrowth);
         $stock->setLastDividend((string) $startingDividend);
         // The opening dividend is the bar the first year's must clear to extend the firm's record.
         $stock->setEarningsMomentumZ([CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND => round($startingDividend, 4)] + ($stock->getEarningsMomentumZ() ?? []));
@@ -331,5 +346,32 @@ class OpeningBoardBuilder
             // Struck again now its net asset value exists: the stakes marked, the subsidiaries carved out of them.
             $this->strikeOpeningPrice($stock, $openingMacro);
         }
+    }
+
+    /**
+     * Where a payer stands in the board's distribution of records. The seed's payers are ranked by the share of
+     * earnings they open paying, highest first, since the mature firm that pays most has been paying longest (Fama &
+     * French 2001), with ties ordered by a hash of the ticker; a firm outside the seed takes its quantile from the hash
+     * alone.
+     */
+    private static function openingRecordQuantile(string $ticker): float
+    {
+        $hash = static fn(string $symbol): float => crc32('dividend-record:' . $symbol) / 0x100000000;
+        if (self::$recordQuantiles === null) {
+            $payers = [];
+            foreach (SeedRows::all() as $row) {
+                $payout = IndustryPayoutPolicies::forRow($row)->ratio();
+                if ($payout > 0.0) {
+                    $payers[(string) $row['ticker']] = $payout;
+                }
+            }
+            uksort($payers, static fn(string $a, string $b): int => [$payers[$b], $hash($a)] <=> [$payers[$a], $hash($b)]);
+            self::$recordQuantiles = [];
+            foreach (array_keys($payers) as $rank => $symbol) {
+                self::$recordQuantiles[$symbol] = ($rank + 0.5) / count($payers);
+            }
+        }
+
+        return self::$recordQuantiles[$ticker] ?? $hash($ticker);
     }
 }

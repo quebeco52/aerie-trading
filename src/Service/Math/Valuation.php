@@ -555,6 +555,30 @@ final class Valuation
     }
 
     /**
+     * The share of its dividend gap a board closes in a year, from the share it closes each quarter (Lintner partial
+     * adjustment compounded over the four declarations).
+     */
+    public static function lintnerAnnualSpeed(float $quarterlySpeed): float
+    {
+        return 1.0 - ((1.0 - max(0.0, min(1.0, $quarterlySpeed))) ** FinancialConstants::QUARTERS_PER_YEAR);
+    }
+
+    /**
+     * Where a smoothing board's dividend settles against its target while earnings grow: closing a share s of the gap
+     * to the year's target at each annual review, the dividend grows with the target only once it runs at s(1+g)/(s+g)
+     * of it (Lintner 1956), about 92% at the cited speed and 4.5% growth. With no growth it reaches the target.
+     *
+     * @param float $annualSpeed  The share of the gap closed in a year.
+     * @param float $annualGrowth The growth of the target a year.
+     */
+    public static function lintnerSteadyDividendShare(float $annualSpeed, float $annualGrowth): float
+    {
+        $growth = max(0.0, $annualGrowth);
+
+        return $annualSpeed > 0.0 ? $annualSpeed * (1.0 + $growth) / ($annualSpeed + $growth) : 1.0;
+    }
+
+    /**
      * Updates analyst consensus using a Bayesian Inference Model.
      *
      * @param float $priorEstimate  The previous analyst consensus estimate.

@@ -30,6 +30,22 @@ enum DividendTier: string
     /** A champion or king moves its dividend at a little over half the usual speed (0.55x). */
     public const CHAMPION_SMOOTHING = 0.55;
 
+    // --- Opening Records (the board's long-run distribution of streaks) ---
+    /** Share of payers with a record of at least one year of increases (68%). */
+    public const OPENING_RECORD_SHARE = 0.68;
+    /**
+     * Chance a record of one to four years survives another year (74%): a young record ends in about one year in four.
+     */
+    public const YOUNG_RECORD_SURVIVAL = 0.74;
+    /** A challenger's record survives a year 79% of the time. */
+    public const CHALLENGER_RECORD_SURVIVAL = 0.79;
+    /** A contender's 91%: its token raise carries it through a flat year its policy still supports. */
+    public const CONTENDER_RECORD_SURVIVAL = 0.91;
+    /** A champion's or king's 97%: about one in thirty ends each year. */
+    public const CHAMPION_RECORD_SURVIVAL = 0.97;
+    /** Longest record a board opens on (70 years), about the longest any real exchange lists. */
+    public const LONGEST_OPENING_RECORD = 70;
+
     case None = 'none';
     case Challenger = 'challenger';
     case Contender = 'contender';
@@ -44,6 +60,45 @@ enum DividendTier: string
             $years >= self::CONTENDER_YEARS => self::Contender,
             $years >= self::CHALLENGER_YEARS => self::Challenger,
             default => self::None,
+        };
+    }
+
+    /**
+     * The record a payer opens on, at a quantile of the board's long-run distribution: with records starting at a
+     * steady rate and each surviving a year at its tier's rate, the number at m years is the product of the survivals
+     * below m, so the share at m years or more is the tail of those products. A quantile under the share with no record
+     * opens at zero.
+     */
+    public static function openingStreak(float $quantile): int
+    {
+        $counts = [];
+        $count = 1.0;
+        for ($years = 1; $years <= self::LONGEST_OPENING_RECORD; $years++) {
+            $counts[$years] = $count;
+            $count *= self::recordSurvival($years);
+        }
+        $remaining = array_sum($counts);
+        $total = $remaining;
+        $streak = 0;
+        foreach ($counts as $years => $atYears) {
+            if ($quantile >= self::OPENING_RECORD_SHARE * $remaining / $total) {
+                break;
+            }
+            $streak = $years;
+            $remaining -= $atYears;
+        }
+
+        return $streak;
+    }
+
+    /** The chance a record of this many years survives another year, by the tier it stands in. */
+    private static function recordSurvival(int $years): float
+    {
+        return match (self::fromStreak($years)) {
+            self::None => self::YOUNG_RECORD_SURVIVAL,
+            self::Challenger => self::CHALLENGER_RECORD_SURVIVAL,
+            self::Contender => self::CONTENDER_RECORD_SURVIVAL,
+            self::Champion, self::King => self::CHAMPION_RECORD_SURVIVAL,
         };
     }
 

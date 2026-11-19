@@ -200,3 +200,57 @@ flat under MIN_ANNOUNCED_DIVIDEND_RAISE 3%; cuts any quarter)
 - Declared DPS, payer-years raise/flat/fall: pbase2 77/18/5%, pay6r 65/30/5%, pay7 68/27/4.5%; median raise 9.3%.
   DPS falls >0.5% a run: pbase2 260, pay6r 285, pay7 271; >10%: 117, 101, 91 (pay7-pbase2 t -2.4).
 - Scorecard vs pbase2: nothing newly out of range; cash/assets 5.0% (unchanged), cap/GDP at end 4.23.
+
+### pay8 (8f3dd4a5 + token raise only if last year-end x 1.01 <= policy target dividend; 60 years)
+- Run: `YEARS=60 HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay8` (400 s wall), then
+  `python3 longrun.py pay8 10` (survival by streak band at fiscal year ends, implied stationary shares, actual shares,
+  10+ breaks against the year), `python3 sticky.py pay8`, `python3 scorecard.py pay8` -> `payout_pay8_60y.out`.
+- P(continue) years 10-60: 1 .751, 2 .747, 3 .725, 4 .734, 5-9 .793, 10-24 .913, 25-49 .972, 50+ .977 (n 173-2733);
+  P(streak >= 1 | payer) .683. Implied stationary share of payers >=5/10/25/50: 34.3/21.9/11.9/6.4%; actual y60
+  34.9/18.1/10.4/4.3% (y40 34.7/16.7/7.4/0.3%). pay7 (20y, same script) had 10-24 at .987, implying 36% >=25.
+- 10+ breaks 1.12 a seed-year; worst output-gap fifth holds 24.9% of them (corr -0.16), worst nominal-growth fifth
+  16.4%: barely cyclical.
+- 60y board: payer-years raise/flat/fall 68/27/4.6%, median raise 10%, DPS falls >10% 284 a run (4.7/y), median
+  payout .347. No deaths. Out of the 20y-calibrated ranges: deals, 5+ deal firms, share x3 7.2, drawdown >80% 14.5,
+  LAKE and CASC above 15% of GDP in all seeds.
+
+### pay9 (opening streaks from DividendTier::openingStreak, ranked by opening payout; 20 years)
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay9`, then `python3 pay2.py pay9`,
+  `python3 champs.py pay9`, `python3 longrun.py pay9 1`, `python3 sticky.py pbase2 pay7 pay9`, `python3 payout.py
+  pbase2 pay9`, `python3 scorecard.py pbase2 pay9` -> `payout_pay9_4s.out`.
+- Roll % payers y0/5/10/15/20: 31.1/8.0/24.1/26.4/34.1% (champion+king 7.8/1.6/1.0/1.3/1.0%). The opening roll
+  collapses: of 128 opening records >= 5y (4 seeds), 87 break, 38 of them in years 1-2; 82 of the 87 are flat years with
+  the dividend covered by EPS (high-payout firms at their policy target: Lintner step under 2%, token blocked by the
+  policy-target test). Opening champions unbroken y5/10/20: 9/6/6%.
+- Entries vs exits (streak >= 5 broken) a year: 4.38 vs 3.60; y15-20 5.70 vs 4.15. Token 4.4% of streak years.
+- vs pbase2: DPS falls >10% 117 -> 99 (t -10.1), >0.5% 260 -> 288 (t 1.6), payout .367 -> .362; raise/flat/fall
+  64.6/30.9/4.6%. Scorecard: nothing newly out of range (drawdown >80% 10.2 vs limit 10, t 0.3).
+
+### pay10 (pay9 + opening dividend at Valuation::lintnerSteadyDividendShare x policy target)
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay10`, then `python3 pay2.py pay10`,
+  `python3 champs.py pay9 pay10`, `python3 longrun.py pay10 1`, `python3 opening.py pbase2 pay9 pay10` (new: raising
+  y1-3, opening yield/cap), `python3 sticky.py pbase2 pay9 pay10`, `python3 payout.py pbase2 pay10`, `python3
+  scorecard.py pbase2 pay10` -> `payout_pay10_4s.out`.
+- Roll % payers y0/1/2/5/10/15/20: 31.1/28.5/24.6/24.5/32.9/30.8/33.8% (pay9 31.1/17.6/11.0/8.0/24.1/26.4/34.1%).
+  Champion+king 7.8/4.5/3.5/4.1/3.6/4.7/3.6%; kings 2 -> 0 in quarter 1. Entries vs exits 4.15 vs 3.92 a year.
+- 30 of 128 opening records >= 5y are lost in the first quarter (pay9 68): 14 REIT (SHOR, PLZA, ELDE, KITE), 5
+  consulting. The first allocation pays less than the opening dividend, so the record ends at once.
+- Opening champions unbroken y5/10/20: 25/16/9% (pay9 9/6/6%). Survival 10-24 .915 (n 789), 25-49 .919 (n 307).
+- Raising y1/y2/y3: 4/66/62% (pbase2 73/68/63%); y1 is low by design (raises at year end). Median raise 5/6/7%.
+- vs pbase2: DPS falls >10% 117 -> 95 (t -5.6), >0.5% 260 -> 276 (t 1.6), payout .367 -> .351 (t -5.5); raise/flat/
+  fall 68.8/26.3/4.9%. Opening yield 2.2 -> 2.1% (t -10.3), opening cap/GDP 3.77 -> 3.76 (t -0.5). Scorecard: nothing
+  newly out of range.
+
+### pay11 (pay10, opening dividend = policy x steady Lintner share with no legal floor; ranking by policy payout)
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay11`, then `python3 pay2.py pay11`,
+  `python3 early.py pay10 pay11` (new: opening records lost by the first report / year 1 by model; REIT floor, rises
+  and falls in y0-2), `python3 champs.py pay10 pay11`, `python3 opening.py pbase2 pay10 pay11`, `python3 sticky.py
+  pbase2 pay10 pay11`, `python3 payout.py pbase2 pay11`, `python3 scorecard.py pbase2 pay11` -> `payout_pay11_4s.out`.
+- Roll % payers y0/1/2/5/10/15/20: 31.1/30.8/25.9/23.0/28.8/29.9/33.6%; champion+king 7.8/6.7/4.0/3.3/2.6/3.9/4.1%.
+- Opening records >= 5y lost by the first report 30 -> 17 (REIT 14 -> 1; consulting 5, restaurant, port, broker,
+  life 2 each unchanged), by end of year 1 30 -> 21 (REIT 5). REIT quarters on the 0.9 x NI floor in y0-2: none.
+- Opening champions (all on 0.75 policy: SHOR, PLZA, ELDE, KITE, LOON, WALL, CLAW, PHIL) unbroken y5/10/20: 16/12/6%;
+  of 30 first breaks 24 are flat fiscal years in years 1-2 with the dividend at 0.6-0.9 of EPS/4, 5 cuts (ELDE at
+  y0.6, 0.65 -> 0.43 in every seed), 1 in quarter 1. Survival 10-24 .910, 25-49 .898.
+- vs pbase2: DPS falls >10% 117 -> 89 (t -3.1), >0.5% 260 -> 265 (t 0.2), payout .367 -> .358; opening yield 2.1%
+  (t -10.3), cap/GDP at open 3.76 (t -0.6). Scorecard: drawdown >80% 11.0 (limit 10, pbase2 9.8, t 0.7).

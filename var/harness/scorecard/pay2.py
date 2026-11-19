@@ -75,7 +75,7 @@ def shares(run):
 def roll(run):
     years = run['years']
     tiers = {}
-    for y in (0, 1, 5, 10, 15, 20):
+    for y in (0, 1, 2, 5, 10, 15, 20):
         c = Counter()
         for tk, f in run['final'].items():
             if y == 0:
@@ -208,7 +208,7 @@ def main():
     print('\nC. Dividend roll: tier counts among payers (mean per run), share of payers in the three upper tiers')
     rl = {s: roll(runs[s]) for s in seeds}
     print(f'  {"year":>5}{"payers":>8}' + ''.join(f'{n:>11}' for n, _ in TIERS) + f'{"listed%":>9}{"champ+%":>9}{"3tier%":>8}{"all:list%":>10}{"3tier%":>8}{"champ+%":>8}')
-    for y in (0, 1, 5, 10, 15, 20):
+    for y in (0, 1, 2, 5, 10, 15, 20):
         c = {k: st.mean(rl[s][0][y][k] for s in seeds) for k in ['payers', 'firms'] + [n for n, _ in TIERS]}
         listed = sum(c[n] for n, _ in TIERS)
         three = listed - c['challenger']

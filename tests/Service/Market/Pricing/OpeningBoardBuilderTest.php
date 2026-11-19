@@ -6,7 +6,7 @@ namespace App\Tests\Service\Market\Pricing;
 
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\DividendTier;
-use App\Data\Company\IndustryPayoutPolicies;
+use App\Data\Company\PayoutPolicy;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
@@ -17,7 +17,9 @@ use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Market\Pricing\SeedRows;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
@@ -80,22 +82,27 @@ class OpeningBoardBuilderTest extends TestCase
     }
 
     /**
-     * A market that has been trading opens where each board's dividend policy has already brought it (Lintner
-     * 1956): the target payout with the manager's fixed effect, and never under a distribution the law requires.
-     * Opening at half the target left every payer to grow into the rest, a drift nothing in the business caused.
+     * A market that has been trading opens where each board's dividend policy has already brought it (Lintner 1956): a
+     * board closing part of its gap each year runs a steady step below its target payout while earnings grow with the
+     * economy, so it opens there, with the manager's fixed effect. A trust's legal minimum binds from its first report,
+     * on the taxable income the engine books: applied to the opening estimate of earnings, which carries the
+     * depreciation a trust adds back, it opened trusts above their own policy and their records broke in the first
+     * year. Opening at the target left the first review nothing to raise toward, and every record of increases broke in
+     * its first year or two; opening at half of it left every payer to grow into the rest.
      */
-    public function testEveryFirmOpensPayingItsTargetPayout(): void
+    public function testEveryFirmOpensPayingWhereItsPolicyHasBroughtIt(): void
     {
+        $macro = new MacroStateDTO();
+        $trendGrowth = MacroConstants::TREND_REAL_GROWTH + $macro->inflationEma;
         $payers = 0;
-        foreach ($this->openBoard(new MacroStateDTO()) as $ticker => $stock) {
-            $strategy = Sectors::strategyFor((string) $stock->getIndustry());
+        foreach ($this->openBoard($macro) as $ticker => $stock) {
             $quarterlyEps = max(0.0, (float) $stock->getTotalNetIncome() / (float) $stock->getSharesOutstanding() / 4.0);
-            $payout = max($stock->getManagementProfile()->appliedPayoutRatio((float) $stock->getTargetPayoutRatio()), $strategy->getMinimumDistributionRatio());
-            $expected = $quarterlyEps * $payout;
+            $annualSpeed = Valuation::lintnerAnnualSpeed((float) $stock->getDividendSpeed() * $stock->getDividendTier()->smoothing());
+            $expected = $quarterlyEps * $stock->getManagementProfile()->appliedPayoutRatio((float) $stock->getTargetPayoutRatio()) * Valuation::lintnerSteadyDividendShare($annualSpeed, $trendGrowth);
 
             // Within 2%: the opening price loop and the anchor-stake pass re-strike earnings after the dividend is set,
-            // and half the target, the old opening, is 50% away.
-            $this->assertEqualsWithDelta($expected, (float) $stock->getLastDividend(), max(1e-4, 0.02 * $expected), "{$ticker} opens off its target payout.");
+            // and the target itself, the old opening, is 8-16% away.
+            $this->assertEqualsWithDelta($expected, (float) $stock->getLastDividend(), max(1e-4, 0.02 * $expected), "{$ticker} opens off where its policy has brought it.");
             $payers += $expected > 0.0 ? 1 : 0;
         }
 
@@ -103,28 +110,42 @@ class OpeningBoardBuilderTest extends TestCase
     }
 
     /**
-     * A place on the dividend roll is a record of increases, not an adjustment speed. The seed names champions in about
-     * the share of payers the S&P 500 Dividend Aristocrats are of that index (about 13%), and the board opens with
-     * exactly the streaks the seed names.
+     * A place on the dividend roll is a record of increases, not an adjustment speed. Every payer opens on a record
+     * from the board's long-run distribution, so the roll opens at about the size it keeps (a third of payers, one in
+     * thirteen a champion) instead of filling from empty, the longest records with the firms paying most, and a firm
+     * paying nothing opens with no record.
      */
-    public function testTheBoardOpensWithTheStreaksTheSeedNames(): void
+    public function testTheBoardOpensOnTheRollsLongRunShape(): void
     {
         $board = $this->openBoard(new MacroStateDTO());
         $payers = 0;
+        $listed = 0;
         $champions = 0;
+        $byPolicy = [];
 
-        foreach (SeedRows::all() as $row) {
-            $isPayer = IndustryPayoutPolicies::forRow($row)->ratio() > 0.0;
-            $streak = (int) ($row['dividend_streak'] ?? 0);
-            $named = $streak >= DividendTier::CHAMPION_YEARS;
+        foreach ($board as $ticker => $stock) {
+            $streak = $stock->getDividendStreakYears();
+            if ((float) $stock->getLastDividend() <= 0.0) {
+                $this->assertSame(0, $streak, "{$ticker} pays nothing but opens with a record of increases.");
 
-            $this->assertSame($streak, $board[$row['ticker']]->getDividendStreakYears(), "{$row['ticker']} opens with the wrong record of increases.");
-            $this->assertTrue($isPayer || !$named, "{$row['ticker']} is named a champion without paying a dividend.");
-            $payers += $isPayer ? 1 : 0;
-            $champions += $named ? 1 : 0;
+                continue;
+            }
+            $payers++;
+            $listed += $stock->getDividendTier()->isListed() ? 1 : 0;
+            $champions += $streak >= DividendTier::CHAMPION_YEARS ? 1 : 0;
+            $byPolicy[$stock->getPayoutPolicy()->value][] = $streak;
+            $this->assertLessThanOrEqual(DividendTier::LONGEST_OPENING_RECORD, $streak);
         }
 
-        $this->assertEqualsWithDelta(0.13, $champions / $payers, 0.03);
+        // The mature firm paying most has been paying longest: a harvest payer opens on a longer record than a low one.
+        $mean = static fn(array $streaks): float => array_sum($streaks) / count($streaks);
+        $this->assertArrayHasKey(PayoutPolicy::Low->value, $byPolicy, 'The board opens with low payers.');
+        $this->assertArrayHasKey(PayoutPolicy::Harvest->value, $byPolicy, 'The board opens with harvest payers.');
+        $this->assertGreaterThan($mean($byPolicy[PayoutPolicy::Low->value]), $mean($byPolicy[PayoutPolicy::Harvest->value]));
+
+        // Ninety-odd payers draw their records, so a share sits within about two binomial standard errors of its own.
+        $this->assertEqualsWithDelta(0.32, $listed / $payers, 0.10);
+        $this->assertEqualsWithDelta(0.08, $champions / $payers, 0.06);
     }
 
     /**

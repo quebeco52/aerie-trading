@@ -43,4 +43,31 @@ class DividendTierTest extends TestCase
             array_values(array_filter(DividendTier::cases(), static fn(DividendTier $t): bool => $t->protectsRecord())),
         );
     }
+
+    /**
+     * The opening records follow the long-run distribution their survival rates imply: two thirds of payers have a
+     * record, a third are on the roll, about one in thirteen is a champion, and a higher quantile never opens on a
+     * longer record.
+     */
+    public function testOpeningRecordsFollowTheLongRunDistribution(): void
+    {
+        $steps = 20000;
+        $atLeast = [1 => 0, 5 => 0, 10 => 0, 25 => 0, 50 => 0];
+        $previous = PHP_INT_MAX;
+        for ($i = 0; $i < $steps; $i++) {
+            $streak = DividendTier::openingStreak(($i + 0.5) / $steps);
+            $this->assertLessThanOrEqual($previous, $streak);
+            $this->assertLessThanOrEqual(DividendTier::LONGEST_OPENING_RECORD, $streak);
+            $previous = $streak;
+            foreach (array_keys($atLeast) as $years) {
+                $atLeast[$years] += $streak >= $years ? 1 : 0;
+            }
+        }
+
+        $this->assertEqualsWithDelta(DividendTier::OPENING_RECORD_SHARE, $atLeast[1] / $steps, 1e-3);
+        $this->assertEqualsWithDelta(0.315, $atLeast[5] / $steps, 2e-3);
+        $this->assertEqualsWithDelta(0.181, $atLeast[10] / $steps, 2e-3);
+        $this->assertEqualsWithDelta(0.076, $atLeast[25] / $steps, 2e-3);
+        $this->assertEqualsWithDelta(0.022, $atLeast[50] / $steps, 2e-3);
+    }
 }
