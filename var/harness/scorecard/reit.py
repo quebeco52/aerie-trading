@@ -54,8 +54,10 @@ def reit(run):
                 continue
             w = ttm(q, r)
             k = 4.0 / max(1, len(w))
-            ni4 = sum(x['ni'] for x in w) * k
-            ffo4 = sum(x['ni'] + x['dep'] for x in w) * k
+            # A REIT's reported net income is already FFO (EarningsEngine adds depreciation back), so net income
+            # proper is the report less depreciation.
+            ni4 = sum(x['ni'] - x['dep'] for x in w) * k
+            ffo4 = sum(x['ni'] for x in w) * k
             div4 = sum(x['div'] for x in w) * k
             g = gdp(run, r['t'])
             eq = r['eq']
