@@ -1,0 +1,41 @@
+# Opening settle
+
+Does each firm, opened on its seed row, stay where it opened? `SettleHarnessTest` opens the board as the seed does,
+then steps every firm's own EarningsEngine in time order on one industry ledger, in an economy held at the opening,
+with the market pricing each report at fair value. There are no deals, no outlook changes, no order flow, no failure
+sweep and no shocks. What still moves is each model pulling its seed toward where the model wants it. It is
+deterministic and the whole board takes ~9 s.
+
+    bin/php-slot php -d memory_limit=3G vendor/bin/phpunit --bootstrap tests/bootstrap.php --no-configuration \
+      var/harness/settle/SettleHarnessTest.php            # OUT=var/harness/settle/runs/settle.jsonl
+    python3 var/harness/settle/settle.py var/harness/settle/runs/settle.jsonl [more runs] [--csv out.csv]
+
+Env: `YEARS` (10), `TPY` (360), `SEED` (1), `TICKERS` (comma list), `OUT`.
+- `MACRO=frozen` (default): the opening DTO, with potential and nominal GDP, the deflator and the CPI grown at trend.
+  `MACRO=path`: the macro engine's own noiseless path. It runs a little hot (gap +0.5-0.8%, policy rate 3.4% -> 4.5%
+  in two years), which lifts bank margins and every P/E (ops 19.6 -> 25.8 by year 10, against 20.1 frozen).
+- `DRAWS=none` (default): ScriptedDraws, medians for uniforms, zero normals, no events. `DRAWS=seeded`: the shared
+  stream from `SEED`. The mean of 4 seeded runs matches the noiseless run to <0.5pp on returns and <1% on size, so
+  the noiseless run stands for the mean path.
+
+`settle.py` flags a firm when, by year 5, its return state moved >3pp, revenue/GDP or equity/GDP >25%, margin >5pp,
+or net D/E >50% (and >0.1).
+
+## Not covered
+- Fee financials (investment banks, brokers, shadow bank, hedge fund, asset manager): here their nominal revenue is
+  flat (revenue/GDP 0.64 at year 10), but on the whole board (scorecard sfc0, 8 seeds) KING/PERE/CORV/PTRL grow
+  17-53%. They need the market the board provides; read them on a BoardRun.
+- Spheres (BRKW): holdings stay at their opening marks.
+
+## Results 11-19 at e1b30b23 (frozen, 10y)
+59/103 flagged. Medians, operating firms (n=82):
+- cash/assets 8.6% -> 7.1% (y1) -> 5.2% (y5), then flat. The live board shows the same fall (7.2% -> 4.6%): seed
+  treasuries sit ~3pp of assets above what the model holds, and the surplus goes out as buybacks (shares -8% by y5).
+- return state 16.0% -> 15.0% (y1) -> 14.6%, then flat: a firm closes ~25% (IQR 15-36%) of its seed gap over
+  required + moat in 1-2 years and holds there. The step scales with the seed return: JDAW 35 -> 25, LYRE 30 -> 22,
+  PENG 29 -> 22, BREW 23 -> 18.
+- net D/E 0.60 -> 0.74 = the model's target (gross 0.54 -> 0.62); live gross holds ~0.6, so part of this is the calm.
+- equity/GDP 0.87 by y5, P/B 3.54 -> 4.44 (ROE up on the leverage), revenue/GDP 0.97, margin 20.0 -> 20.2.
+Financials: banks hold ROE (15.0 -> 15.4) but their reported margin opens far from the seed's (38 -> 49%); insurers
+and card lenders ROE 17.5 -> 12.3 (SAFE 17.5 -> 12.3); REITs' leverage doubles (1.0-1.2 -> 2.1-2.3) and margins fall
+6-10pp.
