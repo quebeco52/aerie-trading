@@ -59,8 +59,6 @@ class ExchangeOperatorBusinessModel extends StandardCorporateBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
     public const ROIC_REVERSION_SPEED = 0.1;
-    /** Excess return over the required return the licence sustains (4pp). */
-    public const MOAT_SPREAD = 0.04;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (0.3): matching engines are refreshed on a schedule. */

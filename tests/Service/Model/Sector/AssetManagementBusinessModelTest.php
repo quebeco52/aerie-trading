@@ -98,7 +98,6 @@ class AssetManagementBusinessModelTest extends TestCase
         $stock->setTicker('SHRK');
 
         $this->assertEquals(0.12, $model->getReversionSpeed());
-        $this->assertEquals(0.012, $model->getMoatSpread());
         // Trend growth plus securities and investments value added sliding from 1.41% to 1.30% of GDP over 1997-2019.
         $this->assertEqualsWithDelta(MacroConstants::TREND_REAL_GROWTH - 0.0037, $model->getSecularGrowthRate($stock), 1e-4);
 

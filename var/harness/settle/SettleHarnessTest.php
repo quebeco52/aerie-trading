@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Data\Company\InitialMarket;
+use App\Service\Market\Pricing\SeedRows;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
@@ -61,7 +61,7 @@ final class SettleHarnessTest extends TestCase
 
         $board = [];
         $spheres = [];
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             $stock = (new Stock())->setTicker($row['ticker']);
             $sphere = $builder->open($stock, $row, $openingMacro);
             if ($sphere !== null) {
@@ -193,7 +193,7 @@ final class SettleHarnessTest extends TestCase
         $netIncome = (float) $s->getTotalNetIncome();
         $assets = (float) $s->getTotalAssets();
         $required = $fin ? $health->costOfEquity : $health->wacc;
-        $moat = method_exists($strategy, 'getMoatSpread') ? $strategy->getMoatSpread() : null;
+        $moat = method_exists($strategy, 'getMoatSpread') ? $strategy->getMoatSpread($s) : null;
 
         return [
             'ticker' => $s->getTicker(),

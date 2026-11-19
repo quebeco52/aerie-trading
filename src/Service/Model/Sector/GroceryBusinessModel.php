@@ -114,8 +114,6 @@ class GroceryBusinessModel extends StandardCorporateBusinessModel
     public const FUEL_VARIANCE_SCALAR = 0.10;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (1pp): the best store sites. */
-    public const MOAT_SPREAD = 0.010;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (0.5): store refits and openings. */

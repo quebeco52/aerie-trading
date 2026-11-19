@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
+use App\Data\Company\IndustryMoats;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -65,7 +66,7 @@ class IndustryPositionBuilder
      *         tracked: bool,
      *         pricesCapacity: bool,
      *         addressableShare: float,
-     *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, trailingReturn: ?float, marginalReturn: float, moatFactor: float},
+     *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, trailingReturn: ?float, marginalReturn: float, sizeShelter: float, moat: array{label: string, spread: float}},
      *         rosterShare: float|null,
      *         peerShares: array<string, float>,
      *         rosterSize: int,
@@ -156,7 +157,8 @@ class IndustryPositionBuilder
                     'trueReturn' => $trueReturn,
                     'trailingReturn' => $filedReturns === [] ? null : array_sum($filedReturns) / count($filedReturns),
                     'marginalReturn' => $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $evaluationCapital, $macroState),
-                    'moatFactor' => FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()] ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'],
+                    'sizeShelter' => FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS[$stock->getSystemicImportance()] ?? FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS['default'],
+                    'moat' => ['label' => IndustryMoats::forStock($stock)->label(), 'spread' => IndustryMoats::forStock($stock)->spread()],
                 ],
                 // Only a share of something when there is someone else in the roster to share it with, selling
                 // the same thing: a listing label (conglomerates) groups firms that sell nothing the others buy.

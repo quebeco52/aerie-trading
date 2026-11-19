@@ -552,7 +552,6 @@ class BiotechBusinessModelTest extends TestCase
         $stock = $this->makeStock();
 
         $this->assertEquals(0.15, $model->getReversionSpeed());
-        $this->assertEquals(0.015, $model->getMoatSpread());
         $this->assertEquals(0.125, $model->getCapExCompletionRate($stock));
 
         // Default branded book (85% protected): generic + (patented - generic) * 0.85.

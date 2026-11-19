@@ -89,7 +89,7 @@ class StockModelTuning
             ModelParam::ResidentialMortgageShare->value  => 0.30, // The District's main mortgage lender
             ModelParam::ConsumerLoanShare->value         => 0.15,
             ModelParam::CommercialRealEstateShare->value => 0.15, // Leads the syndicated corporate book instead
-            // Its seeded book equity/assets (JPMorgan 8.6% at end-2024)
+            // Its capital ratio, which its opening equity is built on (JPMorgan 8.6% at end-2024)
             ModelParam::TargetCapitalRatio->value        => 0.084,
             // US international banks, 2019: 2.45% of assets, 87.9% earning (FDIC QBP)
             ModelParam::OperatingCostToEarningAssets->value => 0.0279,
@@ -105,7 +105,7 @@ class StockModelTuning
             ModelParam::ResidentialMortgageShare->value  => 0.00, // Business lender: no household book
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.45, // Commercial mortgages for contractors and developers
-            ModelParam::TargetCapitalRatio->value        => 0.1031, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value        => 0.1031, // Its opening equity is built on it
             // US commercial lenders, 2019: 2.56% of assets, 90.7% earning (FDIC QBP)
             ModelParam::OperatingCostToEarningAssets->value => 0.0282,
             // US commercial lenders, 2019: 1.06% of assets (FDIC QBP)
@@ -122,7 +122,7 @@ class StockModelTuning
             ModelParam::ResidentialMortgageShare->value  => 0.65,
             ModelParam::ConsumerLoanShare->value         => 0.10,
             ModelParam::CommercialRealEstateShare->value => 0.10, // Small landlords; business loans take the last 15%
-            ModelParam::TargetCapitalRatio->value        => 0.084, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value        => 0.084, // Its opening equity is built on it
             // US mortgage lenders, 2019: 2.54% of assets, 95.1% earning (FDIC QBP)
             ModelParam::OperatingCostToEarningAssets->value => 0.0267,
             // US mortgage lenders, 2019: 1.40% of assets (FDIC QBP)
@@ -429,7 +429,7 @@ class StockModelTuning
             ModelParam::ResidentialMortgageShare->value  => 0.18, // Julius Baer 2019: CHF 8.9B of CHF 48.4B of loans
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.00, // Lombard loans take the other 82%
-            ModelParam::TargetCapitalRatio->value        => 0.0667, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value        => 0.0667, // Its opening equity is built on it
         ],
 
         // --- Egret Trust (EGRT) --- Custodian of the Sovereign Reserve Fund. Its loans are lines to funds secured on
@@ -440,7 +440,7 @@ class StockModelTuning
             ModelParam::ResidentialMortgageShare->value  => 0.15, // Private-client mortgages
             ModelParam::ConsumerLoanShare->value         => 0.00,
             ModelParam::CommercialRealEstateShare->value => 0.05, // Business lending to funds takes the last 80%
-            ModelParam::TargetCapitalRatio->value        => 0.1143, // Its seeded book equity/assets
+            ModelParam::TargetCapitalRatio->value        => 0.1143, // Its opening equity is built on it
         ],
 
         // --- Bowerbird Homes (BOWR) ---

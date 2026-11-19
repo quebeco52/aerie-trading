@@ -9,6 +9,7 @@ use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Market\Index\MarketIndex;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -20,7 +21,7 @@ class InitialMarketTest extends TestCase
     public static function stockProvider(): array
     {
         $stocks = [];
-        foreach (InitialMarket::STOCKS as $stock) {
+        foreach (SeedRows::all() as $stock) {
             $ticker = $stock['ticker'] ?? 'UNKNOWN';
             $stocks[$ticker] = [$stock];
         }
@@ -189,12 +190,34 @@ class InitialMarketTest extends TestCase
     }
 
     /**
+     * Each raw row states its books, or a character its own model builds books from: a character on a model that
+     * builds none would open a firm with no balance sheet.
+     */
+    public function testEveryRawRowStatesItsBooksOrACharacterItsModelBuilds(): void
+    {
+        $bookKeys = ['total_equity', 'wholesale_debt', 'corporate_treasury', 'operating_margin', 'sam_ratio'];
+        foreach (InitialMarket::STOCKS as $row) {
+            $ticker = $row['ticker'];
+            if (isset($row['revenue'])) {
+                $this->assertArrayNotHasKey('total_equity', $row, "{$ticker} states a character and a book at once.");
+                $this->assertArrayHasKey('total_equity', SeedRows::resolve($row), "{$ticker} states a character its model builds no books from.");
+
+                continue;
+            }
+            foreach ($bookKeys as $key) {
+                $this->assertArrayHasKey($key, $row, "{$ticker} states neither its {$key} nor a character.");
+            }
+            $this->assertTrue(isset($row['baseline_roe']) || isset($row['baseline_roic']), "{$ticker} states no return.");
+        }
+    }
+
+    /**
      * A financial's scale is its equity, and past half its market every unit of it earns less: no lender, insurer or
      * fund opens past that share, or its profile return could never be earned from the first report.
      */
     public function testNoFinancialOpensPastTheShareItsReturnsHoldTo(): void
     {
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             if (!Sectors::strategyFor($row['industry'])->isFinancial()) {
                 continue;
             }
@@ -207,7 +230,7 @@ class InitialMarketTest extends TestCase
     public function testACardLenderOpensInsideItsSectorsLeverageTarget(): void
     {
         $lenders = 0;
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             if ($row['industry'] !== 'Credit Services') {
                 continue;
             }

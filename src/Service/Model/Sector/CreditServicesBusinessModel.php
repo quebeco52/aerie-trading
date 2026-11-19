@@ -127,8 +127,6 @@ class CreditServicesBusinessModel extends CommercialBankBusinessModel
     public const NON_INTEREST_INCOME_TO_EARNING_ASSETS = 0.0468;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (0.5pp). */
-    public const MOAT_SPREAD = 0.005;
 
     /**
      * A card issuer's receivables revolve and reprice at will, so the book carries almost no duration; what

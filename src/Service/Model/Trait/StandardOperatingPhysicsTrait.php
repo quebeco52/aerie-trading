@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Trait;
 
+use App\Data\Company\IndustryMoats;
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
@@ -1036,9 +1037,9 @@ trait StandardOperatingPhysicsTrait
         return static::ROIC_REVERSION_SPEED;
     }
 
-    public function getMoatSpread(): float
+    public function getMoatSpread(Stock $stock): float
     {
-        return static::MOAT_SPREAD;
+        return IndustryMoats::forStock($stock)->spread();
     }
 
     public function getPhysicalCapital(Stock $stock): float

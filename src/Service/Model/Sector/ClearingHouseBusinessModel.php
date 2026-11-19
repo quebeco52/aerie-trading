@@ -45,8 +45,6 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.1 a year). */
     public const ROIC_REVERSION_SPEED = 0.1;
-    /** Excess return over the required return the moat sustains (3pp). */
-    public const MOAT_SPREAD = 0.03;
 
     // --- Capital Cycle ---
     /** Share of construction in progress completed into plant each quarter (100%). */

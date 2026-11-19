@@ -28,7 +28,7 @@ class ReturnReversionTest extends TestCase
 {
     private function lender(float $trailingRoe): Stock
     {
-        $stock = new Stock();
+        $stock = (new Stock())->setTicker('TEST');
         $stock->setTotalEquity('10000000000');
         $stock->setRoeTtm((string) $trailingRoe);
 
@@ -78,7 +78,7 @@ class ReturnReversionTest extends TestCase
         $model->updateDynamicRoic($stock, 750_000_000.0, 0.0, 0.0, 0.21, 0.08, $costOfEquity);
 
         $blended = (0.30 * FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT) + (0.10 * (1.0 - FinancialConstants::TTM_SMOOTHING_NEW_WEIGHT));
-        $expected = $blended + TimeSeries::calculateReversionPull($blended, $costOfEquity, $model->getReversionSpeed() / $model::TTM_ROE_WEIGHT, $model->getMoatSpread());
+        $expected = $blended + TimeSeries::calculateReversionPull($blended, $costOfEquity, $model->getReversionSpeed() / $model::TTM_ROE_WEIGHT, $model->getMoatSpread($stock));
 
         $this->assertEqualsWithDelta($expected, (float) $stock->getRoeTtm(), 1e-9);
         $this->assertLessThan($blended, (float) $stock->getRoeTtm());

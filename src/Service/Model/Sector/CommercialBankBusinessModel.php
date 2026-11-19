@@ -4,16 +4,20 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\IndustryMoats;
+use App\Data\Company\Moat;
 use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\InterestExpenseDTO;
 
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 
 use App\Service\Event\ShockEvent;
 use App\Service\Math\CreditRisk;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
@@ -83,8 +87,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     public const BUYBACK_MIN_ICR = 1.15;
     /** Speed at which ROE reverts to the mean. */
     public const ROIC_REVERSION_SPEED = 0.18;
-    /** Spread indicating an economic moat. */
-    public const MOAT_SPREAD = 0.010;
     /** Net Working Capital (NWC) intensity factor. */
     public const WORKING_CAPITAL_INTENSITY = 0.0;
     /** Rate at which planned capital expenditure is completed. */
@@ -439,6 +441,134 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     public const SECURITIES_SHARE_OF_EARNING_ASSETS = 0.22;
 
+    // --- Opening Books ---
+    /** Balance sheet the opening solve first sizes a lender at ($1tn of equity and funding), before scaling it. */
+    public const OPENING_BOOK_TRIAL_ASSETS = 1.0e12;
+    /** Relative gap between the revenue the books earn and the stated revenue below which the solve stops. */
+    public const OPENING_BOOK_TOLERANCE = 1.0e-9;
+    /** Most passes of the opening solve; the books are near scale-free, so two or three suffice. */
+    public const MAX_OPENING_BOOK_PASSES = 8;
+    /** What a lender's seed row states when its books are built from its character (resolveOpeningBooks()). */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'wholesale_funding_share', 'addressable_share', 'retained_share'];
+    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio', 'operating_margin',
+    ];
+
+    /**
+     * A lender's opening books from its character: the revenue it earns, its capital ratio (its TargetCapitalRatio),
+     * the share of its funding that is wholesale, its moat (IndustryMoats) over the cost of equity, the share of its
+     * addressable market its equity fills and the share of it that is retained earnings. The balance sheet is built on
+     * those ratios, holding the cash its treasury targets; its loan spread is struck on it as the model strikes it, and
+     * the whole is scaled until it earns the stated revenue. Its operating margin is the one its cost base and
+     * through-the-cycle losses leave on that revenue. A row that states its books (no revenue key) is handed back as it
+     * is.
+     */
+    public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
+    {
+        if (!isset($seedRow['revenue'])) {
+            return $seedRow;
+        }
+
+        $ticker = (string) $seedRow['ticker'];
+        self::assertOpeningCharacter($ticker, $seedRow);
+        $capitalRatio = $this->getTargetCapitalRatio((new Stock())->setTicker($ticker));
+        if ($capitalRatio === null || $capitalRatio <= 0.0 || $capitalRatio >= 1.0) {
+            throw new \DomainException("{$ticker} builds its books on its capital ratio: set TargetCapitalRatio in StockModelTuning.");
+        }
+
+        $revenue = (float) $seedRow['revenue'];
+        $wholesaleShare = (float) $seedRow['wholesale_funding_share'];
+        $addressableShare = (float) $seedRow['addressable_share'];
+        $books = [
+            'baseline_roe' => $this->openingCostOfEquity($seedRow, $openingMacro) + IndustryMoats::forRow($seedRow)->spread(),
+        ];
+
+        $stock = (new Stock())
+            ->setTicker($ticker)
+            ->setIndustry($seedRow['industry'] ?? null)
+            ->setSystemicImportance($seedRow['systemic_importance'] ?? 'none')
+            ->setFloatingDebtRatio((string) $seedRow['floating_debt_ratio'])
+            ->setHistoricalFixedRate((string) $seedRow['historical_fixed_rate'])
+            ->setCreditSpread((string) $seedRow['credit_spread'])
+            ->setBaselineRoe((string) $books['baseline_roe']);
+
+        $assets = self::OPENING_BOOK_TRIAL_ASSETS;
+        $converged = false;
+        for ($pass = 0; $pass < self::MAX_OPENING_BOOK_PASSES; $pass++) {
+            $equity = $capitalRatio * $assets;
+            $deposits = (1.0 - $capitalRatio) * (1.0 - $wholesaleShare) * $assets;
+            $wholesale = (1.0 - $capitalRatio) * $wholesaleShare * $assets;
+            $stock->setTotalEquity(Decimal::format($equity))
+                ->setCustomerDeposits(Decimal::format($deposits))
+                ->setWholesaleDebt(Decimal::format($wholesale))
+                ->setSamRatio((string) ($equity / (CorporateMetrics::BASELINE_SECTOR_TAM * $addressableShare)));
+            // The treasury's own target on the operating base it reads (getOperatingBase()), at the stated revenue.
+            $operatingBase = max($revenue, $equity, FinancialConstants::MIN_OPERATING_BASE_CASH);
+            $stock->setCorporateTreasury(Decimal::format($this->calculateTargetOperatingCash($operatingBase, $deposits, $wholesale)));
+
+            // What the book earns as the opening strikes it (OpeningBoardBuilder: invested capital at its turnover).
+            $earned = $this->resolveEarningAssets($stock) * max(0.0, $this->resolveInterestYield($stock, $openingMacro) + $this->resolveFranchisePricing($stock)['fee_yield']);
+            if ($earned <= 0.0) {
+                throw new \DomainException("{$ticker} earns nothing on the books its character builds.");
+            }
+            if (abs($revenue / $earned - 1.0) < self::OPENING_BOOK_TOLERANCE) {
+                $converged = true;
+                break;
+            }
+            $assets *= $revenue / $earned;
+        }
+        if (!$converged) {
+            throw new \DomainException("{$ticker}'s books do not settle on its stated revenue in " . self::MAX_OPENING_BOOK_PASSES . ' passes.');
+        }
+
+        $earningAssets = $this->resolveEarningAssets($stock);
+        $operatingCost = ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock)) + $this->resolveThroughTheCycleCreditProvision($stock, $earningAssets);
+
+        return array_merge($seedRow, $books, [
+            'total_equity' => (float) $stock->getTotalEquity(),
+            'customer_deposits' => (float) $stock->getCustomerDeposits(),
+            'wholesale_debt' => (float) $stock->getWholesaleDebt(),
+            'corporate_treasury' => (float) $stock->getCorporateTreasury(),
+            'retained_earnings' => (float) $seedRow['retained_share'] * (float) $stock->getTotalEquity(),
+            'sam_ratio' => (float) $stock->getSamRatio(),
+            'operating_margin' => 1.0 - ($operatingCost / $revenue),
+        ]);
+    }
+
+    /**
+     * A character row states every input and none of the books built from them, each inside its range: a book stated
+     * beside the character would be overwritten without a word.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    private static function assertOpeningCharacter(string $ticker, array $seedRow): void
+    {
+        $missing = array_diff(self::OPENING_CHARACTER_KEYS, array_keys($seedRow));
+        $stated = array_intersect(self::OPENING_BOOK_KEYS, array_keys($seedRow));
+        $ranges = [
+            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
+            'wholesale_funding_share' => (float) ($seedRow['wholesale_funding_share'] ?? -1.0) >= 0.0 && (float) $seedRow['wholesale_funding_share'] < 1.0,
+            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
+            'retained_share' => (float) ($seedRow['retained_share'] ?? -1.0) >= 0.0 && (float) $seedRow['retained_share'] <= 1.0,
+        ];
+        if (isset($seedRow['moat']) && Moat::tryFrom((string) $seedRow['moat']) === null) {
+            $ranges['moat'] = false;
+        }
+        $outOfRange = array_keys(array_filter($ranges, static fn(bool $inRange): bool => !$inRange));
+
+        if ($missing !== [] || $stated !== [] || $outOfRange !== []) {
+            throw new \DomainException(sprintf(
+                '%s states its character with %s missing, %s stated beside it, %s out of range.',
+                $ticker,
+                implode(', ', $missing) ?: 'nothing',
+                implode(', ', $stated) ?: 'no book',
+                implode(', ', $outOfRange) ?: 'nothing',
+            ));
+        }
+    }
+
     /**
      * The book's gross yield: interest earned on loans and securities as they have repriced, plus fee income. The
      * return on equity is what that yield leaves after funding, operating cost and credit losses, so it moves with the
@@ -767,7 +897,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      */
     private function resolveSaturationYield(Stock $stock, MacroStateDTO $macroState): float
     {
-        $penalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
+        $penalty = CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, max(1.0, (float) $stock->getTotalEquity()), $macroState);
         $headroom = max(0.0, max(0.01, (float) $stock->getBaselineRoe()) - $this->idleEquityReturn($macroState));
 
         return min($penalty, $headroom) * max(1.0, $stock->getTangibleEquity())

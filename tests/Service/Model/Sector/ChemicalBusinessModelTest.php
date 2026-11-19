@@ -34,7 +34,6 @@ class ChemicalBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('CHEM');
 
-        $this->assertEquals(0.010, $this->model->getMoatSpread());
         $this->assertEquals(0.12, $this->model->getReversionSpeed());
         $this->assertEquals(0.30, $this->model->getCapExCompletionRate($stock));
 

@@ -268,7 +268,8 @@ interface OperatingStrategyInterface
      */
     public function getVariableCostNoiseShare(): float;
     public function getReversionSpeed(): float;
-    public function getMoatSpread(): float;
+    /** The excess return over its cost of capital the firm's moat sustains, which its return reverts to. */
+    public function getMoatSpread(Stock $stock): float;
     public function getPhysicalCapital(Stock $stock): float;
     /**
      * The asset account depreciation is charged against. Physical businesses depreciate net PP&E only:

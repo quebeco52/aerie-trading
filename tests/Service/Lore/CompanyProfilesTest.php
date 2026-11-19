@@ -11,6 +11,7 @@ use App\Data\Company\StockModelTuning;
 use App\Service\Lore\Almanac;
 use App\Service\Lore\CompanyProfile;
 use App\Service\Lore\CompanyProfiles;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\DefenseContractorBusinessModel;
 use App\Tests\Data\Company\StockInfoTest;
@@ -74,7 +75,7 @@ class CompanyProfilesTest extends TestCase
     /** @return array<string, mixed> */
     private static function seed(string $ticker): array
     {
-        foreach (InitialMarket::STOCKS as $stock) {
+        foreach (SeedRows::all() as $stock) {
             if ($stock['ticker'] === $ticker) {
                 return $stock;
             }

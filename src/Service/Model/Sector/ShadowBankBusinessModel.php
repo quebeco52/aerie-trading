@@ -131,8 +131,6 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     public const MORTGAGE_RATE_ORIGINATION_SENSITIVITY = 4.0;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (0.5pp). */
-    public const MOAT_SPREAD = 0.005;
 
     // --- Credit Thresholds ---
     /** Most wholesale debt the model carries per unit of equity (8x equity). */

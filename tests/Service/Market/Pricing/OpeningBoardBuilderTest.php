@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Pricing;
 
 use App\Data\Company\AnchorHoldings;
-use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
@@ -15,6 +14,7 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\MathUtility;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -47,7 +47,7 @@ class OpeningBoardBuilderTest extends TestCase
     {
         $board = [];
         $spheres = [];
-        foreach (InitialMarket::STOCKS as $stockData) {
+        foreach (SeedRows::all() as $stockData) {
             $stock = (new Stock())->setTicker($stockData['ticker']);
             $sphere = $this->builder->open($stock, $stockData, $openingMacro);
             if ($sphere !== null) {
@@ -111,7 +111,7 @@ class OpeningBoardBuilderTest extends TestCase
         $payers = 0;
         $aristocrats = 0;
 
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             $isPayer = (float) $row['target_payout_ratio'] > 0.0;
             $named = (bool) ($row['dividend_aristocrat'] ?? false);
 
@@ -181,7 +181,7 @@ class OpeningBoardBuilderTest extends TestCase
         $openingMacro = new MacroStateDTO();
         $checked = 0;
 
-        foreach (InitialMarket::STOCKS as $stockData) {
+        foreach (SeedRows::all() as $stockData) {
             $strategy = Sectors::strategyFor($stockData['industry']);
             $debt = (float) ($stockData['wholesale_debt'] ?? 0.0);
             if ($strategy->isFinancial() || AnchorHoldings::forHolder($stockData['ticker']) !== [] || $debt < 0.25 * (float) $stockData['total_equity']) {

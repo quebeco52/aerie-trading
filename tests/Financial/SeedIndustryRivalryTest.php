@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Financial;
 
-use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Data\Company\StockModelTuning;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\FinancialConstants;
 use PHPUnit\Framework\TestCase;
 
@@ -46,7 +46,7 @@ final class SeedIndustryRivalryTest extends TestCase
         $threshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         $checked = 0;
 
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             $model = Sectors::INDUSTRY_METRICS[$row['industry']]['business_model'] ?? 'none';
 
             // A lender's balance sheet IS its earning assets; it has no plant competing for a product
@@ -83,7 +83,7 @@ final class SeedIndustryRivalryTest extends TestCase
     public function testFirmsSharingAnIndustryAreTunedApart(): void
     {
         $byIndustry = [];
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             $byIndustry[$row['industry']][] = $row['ticker'];
         }
 

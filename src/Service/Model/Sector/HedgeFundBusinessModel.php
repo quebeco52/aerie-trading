@@ -201,8 +201,6 @@ class HedgeFundBusinessModel extends AssetManagementBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.2 a year). */
     public const ROIC_REVERSION_SPEED = 0.2;
-    /** Excess return over the required return the moat sustains (0.8pp). */
-    public const MOAT_SPREAD = 0.008;
 
     // --- Credit Thresholds ---
     /** Most wholesale debt the model carries per unit of equity (3x equity). */

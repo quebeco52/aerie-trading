@@ -183,8 +183,6 @@ class ApparelManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
     public const ROIC_REVERSION_SPEED = 0.15;
-    /** Excess return over the required return the moat sustains (0.8pp). */
-    public const MOAT_SPREAD = 0.008;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (1). */

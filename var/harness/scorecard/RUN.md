@@ -73,3 +73,21 @@ that real economies span, so a change is judged on the board, not on one firm.
   unlevered scale (rnoise2u) cut y/y sd to 0.063 for little more persistence; not taken. BoardRun rows carry `cgap` and
   `spare` from here; spare plant above 10% stays at 0 in every arm.
 
+## Moat ladder 11-19 (4 seeds x 20y, TPY 360)
+- Question: does the board stay sensible with the five-step moat ladder (Moat, IndustryMoats; banks' opening books from
+  a character row at cost of equity + step), and what moved? Arms: `base` = e1b30b23 as a BASE tree (git archive in
+  the session scratchpad, vendor symlinked; src identical to d02ec453), `moat` = working tree. Run:
+  `MOAT_BASE=<tree> bin/harness-batch var/harness/scorecard/run_moat.sh 1-4 base moat` (165 s wall), then
+  `python3 scorecard.py base moat; python3 moat_extras.py base moat; python3 moat_firms.py base moat` ->
+  `moat_ladder_4s.out`. ROIC in the extras is a proxy (4 x EBIT x 0.75 / (equity + debt - cash)).
+- Out of range in both arms, unchanged: largest revenue/GDP 0.16 -> 0.15 (CASC), margin sd >10pp 5.5 -> 5.8,
+  acquisitions 181 -> 184, 5+ deals 13.5 -> 11.8. Nothing newly out of range.
+- Moved (t): opening cap/GDP 3.91 -> 3.82 (-7.0); LAKE P/B open 3.18 -> 2.66, run median 2.79 -> 2.31 (-5.5), LAKE
+  run ROE 18.0% -> 14.9% (-8.1); RIVR P/B median 2.10 -> 1.66 (-4.6); BNTH open 2.36 -> 2.50 (+4.9); PLVR, EGRT
+  open -0.17, -0.13 (median within noise); peak goodwill/equity p90 0.18 -> 0.14 (-2.9).
+- Not moved: median firm ROIC proxy 14.5% both (y20 14.2 -> 14.5, t +0.6), ops ROE 21.5 -> 21.7, fin ROE 18.4 both,
+  P/B median 3.50, P/E median 17.8 -> 17.9. The settle harness's +2pp at y10 does not show on the market board; per
+  firm the move is -2..+2pp (p10..p90) with median -0.1pp.
+- Noise: >80% drawdowns 7.0 -> 9.8 (+1.8; SKUA -0.42 -> -0.72, the largest return fall -3.7pp, SHOR, PTRL), defaulters
+  0.2 -> 0.5, deaths 0.2 -> 0. An 8-16 seed stage would settle the drawdown count.
+

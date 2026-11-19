@@ -65,7 +65,7 @@ class BusinessModelThresholdsAndPolymorphismTest extends TestCase
             $this->assertGreaterThan(0.0, $strategy->getDividendCrisisIcr());
             $this->assertGreaterThan(0.0, $strategy->getBuybackMinIcr());
             $this->assertGreaterThan(0.0, $strategy->getReversionSpeed());
-            $this->assertGreaterThanOrEqual(0.0, $strategy->getMoatSpread());
+            $this->assertGreaterThanOrEqual(0.0, $strategy->getMoatSpread($stock));
             $this->assertIsFloat($strategy->getWorkingCapitalIntensity($stock));
             $this->assertGreaterThan(0.0, $strategy->getCapExCompletionRate($stock));
             // Credit-book hooks: a loss rate is a rate, and the allowance horizon is at least a year.

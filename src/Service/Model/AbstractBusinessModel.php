@@ -157,8 +157,6 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.20 a year). */
     public const ROIC_REVERSION_SPEED = 0.20;
-    /** Excess return over the required return the moat sustains: none. */
-    public const MOAT_SPREAD = 0.000;
     /**
      * Share of the gap between a firm's filed return and its own long-run level still there a year on: 0.62, as
      * profitability closes about 38% of it a year (Fama & French 2000), which the engine's operating firms show too.
@@ -256,5 +254,11 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
         $interestExpense = FixedIncome::fixedFloatingInterest($fundedDebt, (float) $stock->getFloatingDebtRatio(), $blendedFixedRate, $floatingInterestRate);
 
         return new InterestExpenseDTO(interestExpense: $interestExpense, wholesaleRate: $fundedDebt > 0 ? ($interestExpense / $fundedDebt) : $currentMarketFixedRate);
+    }
+
+    /** A model that builds no books of its own opens a firm on the books its seed row states. */
+    public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
+    {
+        return $seedRow;
     }
 }

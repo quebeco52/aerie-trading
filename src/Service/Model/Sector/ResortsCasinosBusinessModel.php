@@ -156,8 +156,6 @@ class ResortsCasinosBusinessModel extends StandardCorporateBusinessModel
     // --- Structural Rates ---
     /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
     public const ROIC_REVERSION_SPEED = 0.15;
-    /** Return spread over WACC a destination resort's location and licence defend. */
-    public const MOAT_SPREAD = 0.015;
     /** Working capital per unit of revenue: cage cash and receivables net of payables and advance deposits. */
     public const WORKING_CAPITAL_INTENSITY = 0.02;
     /** Share of construction in progress completed per quarter (multi-year resort builds). */

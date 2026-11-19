@@ -72,7 +72,6 @@ class ConsumerStaplesBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.20 * -0.05 + 0.65 * 0.05 + 0.15 * 0.25, $this->model->getWorkingCapitalIntensity(self::stock('CROP')), 0.0001);
 
         $this->assertEquals(0.15, $this->model->getReversionSpeed());
-        $this->assertEquals(0.015, $this->model->getMoatSpread());
     }
 
     /**

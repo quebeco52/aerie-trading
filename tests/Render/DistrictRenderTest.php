@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Tests\Render;
 
-use App\Data\Company\InitialMarket;
 use App\Data\District\DistrictMap;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -13,6 +12,7 @@ use App\Service\District\DistrictMapBuilder;
 use App\Service\District\DistrictStressEvaluator;
 use App\Service\District\DistrictWardComposer;
 use App\Service\Market\Bond\CreditRatingAgency;
+use App\Service\Market\Pricing\SeedRows;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
@@ -34,7 +34,7 @@ final class DistrictRenderTest extends KernelTestCase
         mt_srand(7);
 
         $stocks = [];
-        foreach (InitialMarket::STOCKS as $s) {
+        foreach (SeedRows::all() as $s) {
             $shares = (float) $s['shares_outstanding'];
             $baselineRoe = (float) ($s['baseline_roe'] ?? 0.12);
             $baselineRoic = (float) ($s['baseline_roic'] ?? 0.10);
@@ -63,7 +63,11 @@ final class DistrictRenderTest extends KernelTestCase
         // The roster is taken while every house is solvent; one then fails, and keeps its plot as a shell until the
         // next reconstitution, which is the only way a defunct house stands on the street.
         $roster = $composer->rosterOrder($stocks);
-        $failed = $stocks[array_search($roster[7], array_map(static fn(Stock $s) => $s->getTicker(), $stocks), true)];
+        $byTicker = [];
+        foreach ($stocks as $stock) {
+            $byTicker[$stock->getTicker()] = $stock;
+        }
+        $failed = $byTicker[$roster[7]];
         $failed->setIsBankrupt(true);
         $failed->setPrice('0');
         $failed->setCreditRating('D');

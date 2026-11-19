@@ -54,8 +54,6 @@ class InsuranceBrokerBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_ERROR = 0.04;
 
     // --- Return Reversion ---
-    /** Excess return over the required return that client relationships sustain (3pp): renewals run above 90%. */
-    public const MOAT_SPREAD = 0.03;
 
     // --- Revenue Streams ---
     /** Commissions and fees on the property, casualty and reinsurance premium placed (70%). */

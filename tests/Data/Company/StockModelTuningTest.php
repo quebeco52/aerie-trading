@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Data\Company;
 
-use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Data\Company\StockModelTuning;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Model\ModelParam;
 use App\Service\Model\ModelParameters;
 use PHPUnit\Framework\Attributes\Group;
@@ -85,7 +85,7 @@ class StockModelTuningTest extends TestCase
         ]);
 
         $modelByTicker = [];
-        foreach (InitialMarket::STOCKS as $stock) {
+        foreach (SeedRows::all() as $stock) {
             $industry = $stock['industry'] ?? 'General';
             $modelByTicker[$stock['ticker']] = Sectors::INDUSTRY_METRICS[$industry]['business_model'] ?? 'none';
         }
@@ -166,7 +166,7 @@ class StockModelTuningTest extends TestCase
     public function testEveryBankTargetsTheCapitalRatioItWasSeededAt(): void
     {
         $checked = 0;
-        foreach (InitialMarket::STOCKS as $stock) {
+        foreach (SeedRows::all() as $stock) {
             $model = Sectors::INDUSTRY_METRICS[$stock['industry'] ?? 'General']['business_model'] ?? 'none';
             if (!in_array($model, ['commercial_bank', 'clearing_house', 'investment_bank', 'brokerage', 'custody_bank', 'private_bank'], true)) {
                 continue;
@@ -432,7 +432,7 @@ class StockModelTuningTest extends TestCase
     {
         $registry = new \App\Service\Model\BusinessModelRegistry();
 
-        foreach (InitialMarket::STOCKS as $stockData) {
+        foreach (SeedRows::all() as $stockData) {
             $ticker = $stockData['ticker'];
             $industry = $stockData['industry'];
 

@@ -87,8 +87,6 @@ class RestaurantBusinessModel extends StandardCorporateBusinessModel
     public const FRANCHISE_LEASES_WORKING_CAPITAL = ['receivables' => 0.03, 'inventory' => 0.0, 'payables' => 0.01];
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (1.5pp). */
-    public const MOAT_SPREAD = 0.015;
 
     // --- Seasonality ---
     /**

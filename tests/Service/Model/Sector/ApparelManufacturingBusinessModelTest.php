@@ -36,7 +36,6 @@ class ApparelManufacturingBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('SHER');
 
-        $this->assertEquals(0.008, $this->model->getMoatSpread());
         $this->assertEquals(0.15, $this->model->getReversionSpeed());
         $this->assertEquals(0.25, $this->model->getCapExCompletionRate($stock));
         $this->assertEquals(1.0, $this->model->getCapexCyclicality());

@@ -167,15 +167,15 @@ class CorporateMetrics
 
     private function saturationPenaltyAt(Stock $stock, float $marketShare): float
     {
-        $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
-            ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
+        $dampener = FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS[$stock->getSystemicImportance()]
+            ?? FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS['default'];
 
         // Penrose Effect / Hayashi Quadratic Adjustment Costs: C(I) ∝ I^2
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         $excessRatio = max(0.0, ($marketShare - $optimalThreshold) / max(0.01, 1.0 - $optimalThreshold));
         $convexBloat = ($excessRatio * $excessRatio) * self::DISECONOMY_FRICTION_COEFF;
 
-        $saturationPenalty = $convexBloat * $moatFactor;
+        $saturationPenalty = $convexBloat * $dampener;
 
         return $saturationPenalty;
     }
@@ -241,11 +241,11 @@ class CorporateMetrics
             return 0.0;
         }
 
-        $moatFactor = FinancialConstants::SYSTEMIC_MOAT_FACTORS[$stock->getSystemicImportance()]
-            ?? FinancialConstants::SYSTEMIC_MOAT_FACTORS['default'];
+        $dampener = FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS[$stock->getSystemicImportance()]
+            ?? FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS['default'];
         $span = max(0.01, 1.0 - $optimalThreshold);
 
-        return 2.0 * self::DISECONOMY_FRICTION_COEFF * $moatFactor * $marketShare * ($marketShare - $optimalThreshold) / ($span * $span);
+        return 2.0 * self::DISECONOMY_FRICTION_COEFF * $dampener * $marketShare * ($marketShare - $optimalThreshold) / ($span * $span);
     }
 
     /**

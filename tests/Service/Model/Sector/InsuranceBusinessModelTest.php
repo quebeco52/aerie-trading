@@ -169,7 +169,7 @@ class InsuranceBusinessModelTest extends TestCase
     public function testUpdateDynamicRoicStandardCalculation(): void
     {
         $model = new InsuranceBusinessModel();
-        $stock = new Stock();
+        $stock = (new Stock())->setTicker('TEST');
         $stock->setTotalEquity('1000000000.0'); // $1B Equity
         $stock->setRoeTtm('0.10');
 

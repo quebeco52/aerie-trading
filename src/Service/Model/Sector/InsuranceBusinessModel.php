@@ -88,8 +88,6 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     public const WARNING_EQUITY_THRESHOLD  = 4.0;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (1pp). */
-    public const MOAT_SPREAD = 0.01;
     /** Divisor on the trailing ROE's reversion speed: it reverts toward cost of equity plus moat at kappa / this. */
     public const TTM_ROE_WEIGHT = 0.50;
 

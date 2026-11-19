@@ -140,10 +140,6 @@ class NuclearVendorBusinessModel extends StandardCorporateBusinessModel
     public const SERVICES_VARIANCE_SCALAR = 0.10;
 
     // --- Return Reversion ---
-    /**
-     * Excess return over the required return the moat sustains (3pp): licensed designs and a fleet that needs its fuel.
-     */
-    public const MOAT_SPREAD = 0.03;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (0.5): fuel plants and workshops. */

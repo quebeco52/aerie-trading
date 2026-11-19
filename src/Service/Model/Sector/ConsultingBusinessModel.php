@@ -140,8 +140,6 @@ class ConsultingBusinessModel extends StandardCorporateBusinessModel
     public const SECULAR_SHARE_2019 = 0.064;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (2pp): client relationships and reputation. */
-    public const MOAT_SPREAD = 0.020;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (0.3): laptops, offices and delivery centres. */

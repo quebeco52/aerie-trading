@@ -147,8 +147,6 @@ class AirlineBusinessModel extends StandardCorporateBusinessModel
     public const SECULAR_SHARE_2019 = 0.0065;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (1pp): the hub's slots and gates. */
-    public const MOAT_SPREAD = 0.010;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (1.0): aircraft are ordered in booms. */

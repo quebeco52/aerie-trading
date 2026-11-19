@@ -131,8 +131,6 @@ class BroadcastingBusinessModel extends StandardCorporateBusinessModel
     public const POLITICAL_VARIANCE_SCALAR = 0.40;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (2.5pp): a news brand and long sports rights. */
-    public const MOAT_SPREAD = 0.025;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (0.3): studios, transmitters and production trucks. */

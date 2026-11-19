@@ -5,12 +5,12 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Data\Company\IndustryBetas;
-use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\CorporateEngineFactory;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -123,7 +123,7 @@ final class CapitalSaturationInvariantTest extends TestCase
     public static function seedRowProvider(): array
     {
         $rows = [];
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             if (in_array($row['ticker'], self::TICKERS, true)) {
                 $rows[$row['ticker']] = [$row];
             }

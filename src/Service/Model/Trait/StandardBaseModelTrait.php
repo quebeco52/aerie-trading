@@ -102,7 +102,7 @@ trait StandardBaseModelTrait
             ? CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $saturationBase, $macroState)
             : 0.0;
         // Saturation erodes the excess return above the required one, never the required return itself.
-        $effectiveMoat = max(0.0, $this->getMoatSpread() - $saturationPenalty);
+        $effectiveMoat = max(0.0, $this->getMoatSpread($stock) - $saturationPenalty);
         // The margin the firm's own news has given it is earned on the same capital, so the return reverts to it too;
         // it fades on its own clock (MarketEngine::FRANCHISE_FADE_SPEED), not the moat's.
         $structuralMargin = (float) $stock->getOperatingMargin();

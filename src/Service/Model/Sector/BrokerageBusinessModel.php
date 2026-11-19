@@ -103,8 +103,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     public const MIN_CASH_BACKING_RATIO    = 0.10;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (0.5pp). */
-    public const MOAT_SPREAD = 0.005;
 
     // --- Credit Thresholds ---
     /** Most wholesale debt the model carries per unit of equity (8x equity). */

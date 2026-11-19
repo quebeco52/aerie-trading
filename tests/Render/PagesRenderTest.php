@@ -538,7 +538,7 @@ final class PagesRenderTest extends KernelTestCase
             ],
             'industry' => [
                 'tracked' => true, 'pricesCapacity' => true, 'addressableShare' => 0.31,
-                'saturation' => ['threshold' => 0.25, 'penalty' => 0.0021, 'severity' => 0.12, 'trueReturn' => 0.11, 'trailingReturn' => 0.094, 'marginalReturn' => 0.072, 'moatFactor' => 1.0],
+                'saturation' => ['threshold' => 0.25, 'penalty' => 0.0021, 'severity' => 0.12, 'trueReturn' => 0.11, 'trailingReturn' => 0.094, 'marginalReturn' => 0.072, 'sizeShelter' => 1.0, 'moat' => ['label' => 'Wide', 'spread' => 0.10]],
                 'rosterShare' => 0.38, 'peerShares' => ['SINK' => 0.41, 'FNCH' => 0.38, 'DRLL' => 0.21], 'rosterSize' => 3,
                 'capacityRatio' => 1.08, 'installedCapacity' => 4.2e10, 'trendCapacity' => 3.9e10, 'balance' => 'overbuilt', 'balanceTone' => 'warn',
                 'priceMove' => 0.93 - 1.0, 'rivalShareDrain' => 0.0042, 'ownPriceVolumeShift' => -0.0011, 'idlePlant' => 0.064,

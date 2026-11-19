@@ -5,13 +5,13 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Data\Company\IndustryBetas;
-use App\Data\Company\InitialMarket;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\TradeOrderRepository;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\FailureSweep;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
 use Doctrine\DBAL\Connection;
@@ -98,7 +98,7 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $operator = $this->buildOperator();
         $macro = new MacroStateDTO();
 
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             $stock = $this->seedFromRow($row);
 
             // The worst liquidity position the engine can express: not a cent of cash, principal missed, and

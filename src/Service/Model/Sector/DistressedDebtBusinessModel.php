@@ -90,8 +90,6 @@ class DistressedDebtBusinessModel extends AssetManagementBusinessModel
     public const MEGA_HOARDER_THRESHOLD = 0.70;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (0.5pp). */
-    public const MOAT_SPREAD = 0.005;
 
     /**
      * The situations the workout desks are staffed to: the distress opportunity set (spreads and defaults against

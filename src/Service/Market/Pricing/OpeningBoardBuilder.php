@@ -74,6 +74,9 @@ class OpeningBoardBuilder
      */
     public function open(Stock $stock, array $stockData, MacroStateDTO $openingMacro): ?array
     {
+        // A row that states the firm's character has its books built by its model first (SeedRows).
+        $stockData = SeedRows::resolve($stockData, $openingMacro);
+
         // The whole seed row goes on before any engine reads the firm: its industry decides which model's physics
         // price it, and its spread and legacy coupon decide what its debt costs.
         $this->applyListing($stock, $stockData);

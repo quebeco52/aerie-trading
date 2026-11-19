@@ -70,8 +70,6 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.12 a year). */
     public const ROIC_REVERSION_SPEED = 0.12;
-    /** Excess return over the required return the moat sustains (1.2pp). */
-    public const MOAT_SPREAD = 0.012;
 
     // --- Credit Thresholds ---
     /** Most wholesale debt the model carries per unit of equity (0.5x equity). */

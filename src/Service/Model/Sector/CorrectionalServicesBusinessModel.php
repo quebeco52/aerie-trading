@@ -63,8 +63,6 @@ class CorrectionalServicesBusinessModel extends StandardCorporateBusinessModel
     public const BASE_COVERAGE_ERROR = 0.03;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (1.5pp): prisons are slow to build and to permit. */
-    public const MOAT_SPREAD = 0.015;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (0.3): new prisons follow concessions, not the cycle. */

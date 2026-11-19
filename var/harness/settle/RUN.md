@@ -39,3 +39,18 @@ or net D/E >50% (and >0.1).
 Financials: banks hold ROE (15.0 -> 15.4) but their reported margin opens far from the seed's (38 -> 49%); insurers
 and card lenders ROE 17.5 -> 12.3 (SAFE 17.5 -> 12.3); REITs' leverage doubles (1.0-1.2 -> 2.1-2.3) and margins fall
 6-10pp.
+
+## Banks built from character (11-19)
+LAKE/RIVR/PLVR/EGRT/BNTH now state revenue, wholesale funding share, moat, addressable share and retained share; the
+bank model builds their books (`banks_after.jsonl` vs `frozen.jsonl`). Opening margin now equals the first report's
+(LAKE 45 -> 51.6 opening, files 52.4 either way); BNTH opens at its target cash (7.2% -> 8.2% of assets). ROE, cash,
+equity/GDP and P/B paths unchanged within 0.4pp; the other 98 firms are identical. Shared by both arms, not a seed
+effect: bank cash climbs from ~9% to ~10.9% of assets by y5 (past the 10%-of-deposits target), and PLVR/BNTH ROE
+drift up ~1.5pp over 10 years.
+
+## Moat ladder (11-19)
+Every firm carries a moat step (`moat.jsonl` vs `banks_after.jsonl`). Operating firms' return state now reverts to
+their own step instead of the model's 0.5-3pp: median 10y drift -2.07 -> +0.08pp (IQR -3.4..-0.6 -> -0.5..+0.6), ops
+ROIC at y10 14.7 -> 16.7%; P/B and P/E unchanged. Banks open on cost of equity + step: LAKE 21.0 -> 18.1% ROE (P/B
+3.25 -> 2.74), RIVR 15.0 -> 13.6, PLVR 11.0 -> 10.1, EGRT 13.0 -> 12.2, BNTH 18.0 -> 19.2. Insurers settle higher (SAFE
++3.3pp, DOVE +1.5). The other financials do not read the moat.

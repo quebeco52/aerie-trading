@@ -6,9 +6,9 @@ namespace App\Tests\Data\Company;
 
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\AnchorStake;
-use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\Data\Company\StrategicHoldings;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Model\Sector\InvestmentCompanyBusinessModel;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -36,7 +36,7 @@ class AnchorHoldingsTest extends TestCase
     {
         $rows = [];
 
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             $rows[$row['ticker']] = $row;
         }
 
@@ -102,7 +102,7 @@ class AnchorHoldingsTest extends TestCase
     {
         $anchored = [];
 
-        foreach (InitialMarket::STOCKS as $row) {
+        foreach (SeedRows::all() as $row) {
             $ticker = $row['ticker'];
             $declared = (float) ($row['public_float'] ?? 0.90);
             $closelyHeld = AnchorHoldings::closelyHeldShare($ticker);

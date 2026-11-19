@@ -165,8 +165,6 @@ class SpaceSystemsBusinessModel extends StandardCorporateBusinessModel
     public const BROADBAND_VARIANCE_SCALAR = 0.40;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (4pp): the only reusable rockets in the market. */
-    public const MOAT_SPREAD = 0.04;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (0.3): the firm builds for its own growth. */

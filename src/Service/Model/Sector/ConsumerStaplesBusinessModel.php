@@ -135,8 +135,6 @@ class ConsumerStaplesBusinessModel extends StandardCorporateBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
     public const ROIC_REVERSION_SPEED = 0.15;
-    /** Excess return over the required return the moat sustains (1.5pp). */
-    public const MOAT_SPREAD = 0.015;
 
     // --- Seasonality ---
     /** Calendar-quarter revenue seasonality [Q1, Q2, Q3, Q4] summing to 4.0. Slight Q4 holiday pantry load. */

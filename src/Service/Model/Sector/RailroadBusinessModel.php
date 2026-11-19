@@ -117,8 +117,6 @@ class RailroadBusinessModel extends StandardCorporateBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.15 a year). */
     public const ROIC_REVERSION_SPEED = 0.15;
-    /** Excess return over the required return the moat sustains (2pp). */
-    public const MOAT_SPREAD = 0.02;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (0.7). Heavy rail maintenance CapEx. */

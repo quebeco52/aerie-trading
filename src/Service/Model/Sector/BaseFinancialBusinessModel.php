@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\IndustryBetas;
 use App\DTO\DebtCostDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -12,6 +13,7 @@ use App\Service\Math\CreditRisk;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
+use App\Service\Math\Valuation;
 use App\Service\Model\AbstractBusinessModel;
 use App\Service\Model\ModelParam;
 
@@ -160,6 +162,18 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
     public function getTrueReturn(Stock $stock): float
     {
         return (float) $stock->getRoeTtm();
+    }
+
+    /**
+     * The return a seed row's equity is required to earn at the opening: CAPM on its seed beta, which a financial
+     * carries levered, at the through-the-cycle premium. Its moat is struck over this, so a lender and an operating
+     * company with the same moat are equally strong franchises.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function openingCostOfEquity(array $seedRow, MacroStateDTO $openingMacro): float
+    {
+        return Valuation::calculateCAPM($openingMacro->equityRiskFreeRate, IndustryBetas::seedBetaFor($seedRow), MacroConstants::BASE_EQUITY_RISK_PREMIUM);
     }
 
     /** A balance-sheet firm is measured on equity; its baselineRoic column is a seed placeholder nothing fills. */

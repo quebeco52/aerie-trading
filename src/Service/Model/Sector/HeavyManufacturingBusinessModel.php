@@ -87,8 +87,6 @@ class HeavyManufacturingBusinessModel extends StandardCorporateBusinessModel
     // --- Return Reversion ---
     /** Pull of the trailing return toward the required return plus the moat (0.12 a year). */
     public const ROIC_REVERSION_SPEED = 0.12;
-    /** Excess return over the required return the moat sustains (1pp). */
-    public const MOAT_SPREAD = 0.01;
 
     // --- Capital Cycle ---
     /** Elasticity of the capital budget to the cycle signal (4). Much higher than standard 1.5. */

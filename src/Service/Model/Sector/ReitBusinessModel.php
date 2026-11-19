@@ -223,8 +223,6 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const MARGIN_REVERSION_SPEED      = 2.0;
 
     // --- Return Reversion ---
-    /** Excess return over the required return the moat sustains (0.5pp). */
-    public const MOAT_SPREAD = 0.005;
 
     // --- Capital Cycle ---
     /** Share of construction in progress completed into plant each quarter (12.5%). */
