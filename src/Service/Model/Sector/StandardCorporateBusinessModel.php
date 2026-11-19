@@ -110,7 +110,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $revenue = (float) $seedRow['revenue'];
         $margin = (float) $seedRow['operating_margin'];
         $addressableShare = (float) $seedRow['addressable_share'];
-        $taxRate = $openingMacro->corporateTaxRate;
+        $taxRate = $this->getEffectiveTaxRate($openingMacro->corporateTaxRate);
         $baselineRoic = $this->openingReturn($seedRow, $openingMacro);
 
         $stock = (new Stock())

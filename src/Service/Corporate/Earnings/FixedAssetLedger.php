@@ -6,6 +6,7 @@ namespace App\Service\Corporate\Earnings;
 
 use App\Data\Macro\CapitalGoodsPrices;
 use App\DTO\EarningsSimulationContext;
+use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\EarningsEngine;
 
@@ -41,14 +42,20 @@ final class FixedAssetLedger
         return max(0.0, $ctx->strategy->getDepreciableBase($ctx->stock)) * $this->resolveDepreciationRate($ctx) / 4.0;
     }
 
-    /** Annual declining-balance depreciation rate: the stock's own rate, else its industry's. */
-    public function resolveDepreciationRate(EarningsSimulationContext $ctx): float
+    /** Annual declining-balance depreciation rate for a firm: its own rate, else its industry's. */
+    public static function depreciationRateFor(Stock $stock, ?CorporateMetrics $corporateMetrics = null): float
     {
-        $custom = (float) $ctx->stock->getDepreciationRate();
+        $custom = (float) $stock->getDepreciationRate();
 
         return $custom > 0.0
             ? $custom
-            : $this->corporateMetrics->getIndustryDepreciationRate($ctx->stock->getIndustry() ?: 'General');
+            : ($corporateMetrics ?? CorporateMetrics::getInstance())->getIndustryDepreciationRate($stock->getIndustry() ?: 'General');
+    }
+
+    /** Annual declining-balance depreciation rate: the stock's own rate, else its industry's. */
+    public function resolveDepreciationRate(EarningsSimulationContext $ctx): float
+    {
+        return self::depreciationRateFor($ctx->stock, $this->corporateMetrics);
     }
 
     /**

@@ -17,6 +17,8 @@ final class PayoutHarnessTest extends BoardRun
     private array $macro = [];
     /** @var array<string, list<array{t: float, d: string}>> */
     private array $pol = [];
+    /** @var array<string, list<array{0: float, 1: float, 2: float}>> affo1: REIT time, price, perceived fair value. */
+    private array $reitTrace = [];
 
     protected function onStart(): void
     {
@@ -37,6 +39,13 @@ final class PayoutHarnessTest extends BoardRun
     {
         if ($this->currentMacro !== null && $this->tick % max(1, intdiv($this->tpy, 4)) === 0) {
             $this->macro[] = [round($this->currentTime, 3), $this->currentMacro->nominalGdpIndex, $this->reading->equityMarketCap];
+        }
+        if ($this->tick <= 30 || $this->tick % 9 === 0) {
+            foreach ($result['updates'] as $u) {
+                if (($this->meta[$u['ticker']]['model'] ?? '') === 'ReitBusinessModel') {
+                    $this->reitTrace[$u['ticker']][] = [round($this->currentTime, 4), (float) $u['price'], (float) $u['perceived_fair_value']];
+                }
+            }
         }
     }
 
@@ -78,6 +87,6 @@ final class PayoutHarnessTest extends BoardRun
 
     protected function record(array $record): array
     {
-        return $record + ['meta' => $this->meta, 'macro' => $this->macro, 'pol' => $this->pol, 'gdp_usd' => App\Service\Math\MacroConstants::DISTRICT_GDP_USD];
+        return $record + ['meta' => $this->meta, 'macro' => $this->macro, 'pol' => $this->pol, 'reit_trace' => $this->reitTrace, 'gdp_usd' => App\Service\Math\MacroConstants::DISTRICT_GDP_USD];
     }
 }

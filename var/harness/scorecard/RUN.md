@@ -326,3 +326,25 @@ flat under MIN_ANNOUNCED_DIVIDEND_RAISE 3%; cuts any quarter)
 - REIT acquisitions 0 -> 3.75 a run (all after y4, debt-funded, large goodwill); board deals 183.5 -> 183.0.
 - Board: covenant breach firms y1-3 6.25 -> 4.25 (t -1.6), firm-quarters 275 -> 172 (t -19.9; REITs are 97 of it).
   Scorecard nothing newly out. STRK fails in reit1 s1 at y13.1 (BB and losing in rhead too): path divergence.
+
+### affo1 (REITs open at their own 0% tax, REIT depreciation halved, FairValue on AFFO = FFO - maintenance reserve) 11-19
+- Arms: `ahead` = HEAD 9a8a3bab as a BASE tree (git archive in the session scratchpad, vendor symlinked; reproduces
+  reit1 row for row), `affo1` = working tree. `PayoutHarnessTest` now also records `reit_trace` (REIT t, price,
+  perceived fair value; ticks 1-30 then every 9th). Run: `PAY_BASE=<tree> PAY_BASE_ARM=ahead HEALTH=1
+  bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 ahead && HEALTH=1 bin/harness-batch
+  var/harness/scorecard/run_payout.sh 1-4 affo1` (112 s per arm at 4 slots), then new `python3 affo.py ahead affo1`
+  (reit.py tables + P/FFO, P/AFFO, yield, 85% floor, goodwill, trace: opening move, drawdown, log(px/fv)) ->
+  `affo1_4s.out`, and `scorecard.py ahead affo1` -> `scorecard_affo1_4s.out`.
+- P/B y0 3.35-3.58 -> 1.93-2.20 (t -31..-98), y20 3.8-5.2 -> 2.36-2.98. P/FFO y0 15.8-17.8 -> 9.5-12.2 (PLZA 9.5),
+  y20 18.8-25.3 -> 14.0-16.5. Yield y0 3.8-4.4 -> 6.1-7.4%, y20 4.7-5.4%. eq/GDP +20% at y0, +25-35% at y20.
+- FFO payout y0 .70-.74, y10 .78-.86 (+.09-.15, SHOR above 75%), y20 .74-.79. 85% floor binding yrs/20 SHOR/PLZA/ELDE/
+  KITE 1.3/3.3/5.0/4.0 (HEAD .8/1.5/3.3/.8; KITE t 5.2). D/E y20 within .1 of target for SHOR/ELDE/KITE, PLZA 1.06 vs
+  .83. ndE 3.5-4.4x y0, 3.8-5.3x y20 (unchanged). Shares +4.5-5.8% by y20 (+1.2-2.1pp, t 6.6-13.5).
+- REIT deals 3.75 -> 4.25 a run, goodwill $8.1 -> 6.3bn. Covenant qtrs SHOR .5 -> 3.25, KITE 0 -> 1.75; DPS cuts SHOR
+  1.25 -> 3.75, KITE 0 -> 1.5. Ratings BBB throughout, no REIT death/default, icr never < 1.
+- Price path: opening move tick 1-30 within 4%, fv/px at tick 1 = 1.00. Mispricing |log(px/fv)| .09 -> .12-.15 for
+  PLZA/ELDE/KITE (t 3.4-4.5), time >25% off fv 3-6% -> 10-17%, mean px under fv by 6-7% (SHOR, KITE). AFFO's fixed
+  reserve levers FFO swings: 1y sd of log fv ELDE .12 -> .20 while price .12 -> .16. Drawdowns 60-88% for SHOR/KITE in
+  both arms (board cycle; 9-10 firms past 80%).
+- Board: scorecard nothing newly out beyond drawdown>80% firms 9.2 -> 10.2 (t 0.6, edge 10). Non-REIT mean |log eq
+  diff| y10 .05, y20 .10 (largest STRK, fails in ahead s1): path divergence. Defaulters .5 -> 1.25 (FALC both, TERN, BOWR).

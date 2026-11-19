@@ -7,6 +7,7 @@ namespace App\DTO;
 use App\Data\Company\Sectors;
 use App\Entity\Stock;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Model\BusinessModelInterface;
@@ -115,6 +116,10 @@ class MarketPricingContext
         public float $capacitySpare = 0.0,
         /** The shift the firm's own news has given the log-odds of its structural margin (Stock::$franchisePower). */
         public float $franchisePower = 0.0,
+        /**
+         * Annual depreciation per share a trust reporting FFO must spend to keep its plant; zero for any other firm.
+         */
+        public float $maintenanceReservePerShare = 0.0,
     ) {}
 
     /**
@@ -202,6 +207,9 @@ class MarketPricingContext
             capacityGap: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0),
             capacitySpare: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_SPARE] ?? 0.0),
             franchisePower: (float) ($stock->getFranchisePower() ?? 0.0),
+            maintenanceReservePerShare: $strategy->reportsFundsFromOperations()
+                ? (max(0.0, $strategy->getDepreciableBase($stock)) * FixedAssetLedger::depreciationRateFor($stock)) / $shares
+                : 0.0,
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

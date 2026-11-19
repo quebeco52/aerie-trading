@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Tests\DTO;
 
 use App\Data\Company\AnchorHoldings;
+use App\Data\Company\Sectors;
 use App\DTO\DebtHealthDTO;
+use App\DTO\EarningsSimulationContext;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\StockBuilder;
@@ -68,7 +71,7 @@ class MarketPricingContextTest extends TestCase
         $firm->setPreAnnouncedEconomicShortfall(1_000_000_000.0);
         $after = MarketPricingContext::forStock($firm, $macroState, $this->health($firm, $macroState), new AnchorStakeLedger())->trailingReturn;
 
-        $capital = \App\Data\Company\Sectors::strategyFor($firm->getIndustry())->getEvaluationCapital((float) $firm->getTotalEquity(), $firm->getInvestedCapital());
+        $capital = Sectors::strategyFor($firm->getIndustry())->getEvaluationCapital((float) $firm->getTotalEquity(), $firm->getInvestedCapital());
         $this->assertGreaterThan(0.0, $capital);
         $this->assertEqualsWithDelta($before - (1_000_000_000.0 / $capital), $after, 1e-12);
     }
@@ -109,7 +112,7 @@ class MarketPricingContextTest extends TestCase
         $context = MarketPricingContext::forStock($sphere, $macroState, $this->health($sphere, $macroState), $ledger);
 
         // Its net asset value: the marked book with the subsidiaries at what they earn.
-        $strategy = \App\Data\Company\Sectors::strategyFor('Investment Companies');
+        $strategy = Sectors::strategyFor('Investment Companies');
         $netAssetValue = (float) $ledger->resolveMarkedBookValuePerShare($sphere)
             + (DebtEngine::subsidiaryRevaluation($sphere, $strategy, $macroState) / (float) $sphere->getSharesOutstanding());
         $this->assertEqualsWithDelta($netAssetValue, $context->bookValuePerShare, 1e-9);
@@ -140,7 +143,7 @@ class MarketPricingContextTest extends TestCase
         }
         $ledger = new AnchorStakeLedger();
         $ledger->beginTick($board);
-        $strategy = \App\Data\Company\Sectors::strategyFor('Investment Companies');
+        $strategy = Sectors::strategyFor('Investment Companies');
         $nav = fn(float $shift): float => MarketPricingContext::forStock($sphere, new MacroStateDTO(equityValuationShift: $shift), $this->health($sphere, new MacroStateDTO(equityValuationShift: $shift)), $ledger)->bookValuePerShare;
 
         $calm = new MacroStateDTO();
@@ -225,5 +228,38 @@ class MarketPricingContextTest extends TestCase
 
         $this->assertSame(0.04, $context->capacityGap);
         $this->assertSame(-0.03, $context->capacitySpare);
+    }
+
+    /**
+     * A trust reporting FFO carries its annual structural depreciation per share as a maintenance reserve, matching
+     * four quarters of FixedAssetLedger::resolveStructuralDepreciation(); every other firm carries zero.
+     */
+    public function testMaintenanceReserveMatchesAnnualStructuralDepreciationForReitsAndIsZeroOtherwise(): void
+    {
+        $macroState = new MacroStateDTO();
+        $reit = $this->firm('SHOR', 'REIT - Residential');
+        $reit->setGrossPpe('80000000000');
+        $reit->setAccumulatedDepreciation('20000000000');
+        $reit->setDepreciationRate('0.00');
+
+        $context = MarketPricingContext::forStock($reit, $macroState, $this->health($reit, $macroState), new AnchorStakeLedger());
+
+        $ledger = new FixedAssetLedger(CorporateMetrics::getInstance());
+        $earningsCtx = new EarningsSimulationContext(
+            $reit,
+            $macroState,
+            Sectors::strategyFor($reit->getIndustry()),
+            Sectors::businessModelFor($reit->getIndustry()),
+        );
+        $annualDepreciation = 4.0 * $ledger->resolveStructuralDepreciation($earningsCtx);
+        $shares = (float) $reit->getSharesOutstanding();
+
+        $this->assertGreaterThan(0.0, $annualDepreciation);
+        $this->assertEqualsWithDelta(1.0, ($context->maintenanceReservePerShare * $shares) / $annualDepreciation, 1e-9);
+
+        $operating = $this->firm('SOFT', 'Software - Infrastructure');
+        $operating->setGrossPpe('80000000000');
+        $operating->setAccumulatedDepreciation('20000000000');
+        $this->assertSame(0.0, MarketPricingContext::forStock($operating, $macroState, $this->health($operating, $macroState), new AnchorStakeLedger())->maintenanceReservePerShare);
     }
 }

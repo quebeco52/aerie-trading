@@ -171,8 +171,8 @@ class OpeningBoardBuilder
         // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
         $targetMetrics = $strategy->getTargetMetrics($stock, $openingMacro, $this->mathUtility);
         $investedCapital = $targetMetrics['invested_capital'];
-        $taxRate = $openingMacro->corporateTaxRate;
-        $revenue = $margin > 0 ? $investedCapital * FirmEconomics::structuralAssetTurnover((float) $targetMetrics['baseline_roic'], $margin, $taxRate) : 0.0;
+        $effectiveTaxRate = $strategy->getEffectiveTaxRate($openingMacro->corporateTaxRate);
+        $revenue = $margin > 0 ? $investedCapital * FirmEconomics::structuralAssetTurnover((float) $targetMetrics['baseline_roic'], $margin, $effectiveTaxRate) : 0.0;
 
         $stock->setTotalRevenue((string) $revenue);
 
@@ -202,7 +202,6 @@ class OpeningBoardBuilder
             $interestExpense = $debtHealth->rawMetrics->interestExpense;
             $interestIncome = $strategy->calculateInterestIncome($stock, $openingMacro);
             $ebt = $ebit - $interestExpense + $interestIncome;
-            $effectiveTaxRate = $strategy->getEffectiveTaxRate($taxRate);
             $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
         }
 

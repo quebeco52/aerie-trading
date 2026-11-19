@@ -83,6 +83,7 @@ final class FairValue
             $ctx->capacityGap,
             $ctx->capacitySpare,
             $ctx->franchisePower,
+            $ctx->maintenanceReservePerShare,
         );
 
         // Value at the market's discount rate: the repricing the market factor has put on equities reaches the
@@ -147,6 +148,8 @@ final class FairValue
      * @param float $capacityGap         Log of the plant the expected market calls for over the plant in use.
      * @param float $capacitySpare       A company with plant by segment: its segments' plant to spare, valued apart.
      * @param float $franchisePower     The log-odds shift the firm's own news has given its structural margin.
+     * @param float $maintenanceReservePerShare Annual depreciation per share a trust reporting FFO must spend to keep
+     *                                          its plant; zero for any other firm.
      * @return array{perceived_fair_value: float, dynamic_reversion: float, policy_repricing: float, analyst_targets: array, franchise_base: float, franchise_share: float, franchise_multiple: float, franchise_leverage: float}
      */
     private static function evaluateFundamentalState(
@@ -179,6 +182,7 @@ final class FairValue
         float $capacityGap = 0.0,
         float $capacitySpare = 0.0,
         float $franchisePower = 0.0,
+        float $maintenanceReservePerShare = 0.0,
     ): array {
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
@@ -249,8 +253,18 @@ final class FairValue
             $targetPayoutRatio,
             $dividendAdjustmentSpeed,
             $capacityGap,
-            $capacitySpare
+            $capacitySpare,
+            $maintenanceReservePerShare
         ): array {
+            // The engine replaces this wear, so it is neither paid out nor reinvested in growth; the market values what
+            // is left, AFFO (FFO less that reserve).
+            if ($maintenanceReservePerShare > 0.0 && $strategy->reportsFundsFromOperations()) {
+                $affo = max(0.01, $structuralEps - $maintenanceReservePerShare);
+                $equityReturn -= $maintenanceReservePerShare / max(0.01, $bookValuePerShare);
+                $targetPayoutRatio = max(0.0, min(1.0, $targetPayoutRatio * $structuralEps / $affo));
+                $structuralEps = $affo;
+            }
+
             // 1. MACRO FORWARD GUIDANCE & FUNDAMENTAL P/E
             // The growth transmission and the Sloan accruals discount live in Valuation because the corporate
             // engines strike the same multiple when management decides on a buyback, an offering or a deal.
@@ -350,6 +364,7 @@ final class FairValue
                 'book_value' => $pbFairValue,
                 'expected_growth' => $expectedGrowth,
                 'normalized_eps' => $normalizedEps,
+                'payout_ratio' => $targetPayoutRatio,
             ];
         };
 
@@ -366,7 +381,7 @@ final class FairValue
         if ($macroState !== null) {
             // The dividend its policy pays, as the income leg strikes it, over the value before the laws: the yield its
             // holders' tax is charged on. A dividend omitted for a quarter is still the policy's, and still taxed.
-            $policyDividend = $legs['normalized_eps'] * min(1.0, $targetPayoutRatio * Valuation::dividendTaxPayoutScale($macroState->dividendTaxRate));
+            $policyDividend = $legs['normalized_eps'] * min(1.0, $legs['payout_ratio'] * Valuation::dividendTaxPayoutScale($macroState->dividendTaxRate));
             $dividendYield = $policyDividend / max(0.01, $legs['fair_value']);
 
             $underExpectedLaws = function (bool $previous) use ($strikeLegs, $strategy, $macroState, $policyBasesPerShare, $capRate, $dividendYield, $equityReturn, $trueStructuralEps, $bookValuePerShare): array {

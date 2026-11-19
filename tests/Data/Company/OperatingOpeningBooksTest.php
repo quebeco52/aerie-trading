@@ -12,6 +12,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
@@ -22,6 +23,8 @@ use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
+use App\Tests\Support\CorporateEngineFactory;
+use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
@@ -35,8 +38,13 @@ use PHPUnit\Framework\TestCase;
 #[Group('unit')]
 class OperatingOpeningBooksTest extends TestCase
 {
+    use CorporateEngineFactory;
+
     /** Relative gap between the revenue a firm opens on and its stated revenue (1e-6). */
     private const REVENUE_TOLERANCE = 1.0e-6;
+
+    /** How far a trust's first report's annualised revenue may sit from the revenue it opened on (2%). */
+    private const FIRST_REPORT_REVENUE_TOLERANCE = 0.02;
 
     /** How far its debt to equity may sit from its manager's target (0.01): the books are stored to the cent. */
     private const LEVERAGE_TOLERANCE = 0.01;
@@ -179,6 +187,40 @@ class OperatingOpeningBooksTest extends TestCase
         $this->expectException(\DomainException::class);
 
         SeedRows::resolve($row);
+    }
+
+    /** @return array<string, array{array<string, mixed>}> Every REIT whose row states its character, by ticker. */
+    public static function reitProvider(): array
+    {
+        $reits = [];
+        foreach (InitialMarket::STOCKS as $row) {
+            if (isset($row['revenue']) && Sectors::strategyFor($row['industry']) instanceof ReitBusinessModel) {
+                $reits[$row['ticker']] = [$row];
+            }
+        }
+
+        return $reits;
+    }
+
+    /**
+     * A pass-through trust opens at its own zero corporate tax rate, so its first report on the opening macro files
+     * the revenue it opened on instead of dropping by the corporate tax wedge.
+     *
+     * @param array<string, mixed> $row
+     */
+    #[DataProvider('reitProvider')]
+    public function testAReitsFirstReportFilesTheRevenueItOpenedOn(array $row): void
+    {
+        $stock = $this->open($row);
+        $openedRevenue = (float) $stock->getTotalRevenue();
+        $math = new ScriptedDraws(generateUniform: 0.5, generateUniformBetween: static fn(float $min, float $max): float => ($min + $max) / 2.0);
+        $engine = self::earningsEngine($math);
+        $ticksPerYear = 360;
+
+        $report = $engine->calculate($stock, new MacroStateDTO(), EarningsEngine::resolveReportingTick($row['ticker'], $ticksPerYear), $ticksPerYear);
+
+        $this->assertNotNull($report, "{$row['ticker']} reports on its reporting tick.");
+        $this->assertEqualsWithDelta(1.0, (float) $stock->getTotalRevenue() / $openedRevenue, self::FIRST_REPORT_REVENUE_TOLERANCE, $row['ticker']);
     }
 
     /** A share of retained earnings the row states is the one the firm opens on. */

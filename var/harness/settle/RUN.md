@@ -87,3 +87,12 @@ its market cap rate (10.68%) and caps debt expansion at `min(debtTolerance, leve
 1.48 vs 1.48, PLZA 1.20 vs 1.21, ELDE 0.87 vs 0.88, KITE 1.28 vs 1.29; before: SHOR 1.86, PLZA 2.28, ELDE 1.13 vs 0.52),
 with share growth 0.15-0.17%/yr. Flagged 11 -> 10 of 103 (SHOR margin flag gone; PLZA and ELDE keep margin flags; zero
 REIT leverage flags).
+
+## REITs valued on AFFO, opened untaxed, and worn at land-adjusted rates (11-19)
+Opening turnover uses the model's own effective tax rate (0 for trusts), equity-REIT industry depreciation rates are
+halved (0.03 -> 0.015, 0.04 -> 0.02), and `FairValue` deducts `maintenanceReservePerShare` into AFFO while rescaling the
+target payout so the dividend leg pays the same cash (`affo_after.jsonl` vs `affo_before.jsonl` at 9a8a3bab; the other
+99 firms identical). Q1 revenue no longer drops 16.6-16.9% (now +0.18 to +0.53% of GDP, +0.76 to +0.91% nominal); P/B
+falls from 3.17-3.48 (q0) and 3.66-4.50 (q40) to 1.91-2.13 (q0) and 2.30-2.65 (q40); P/FFO at q0 drops from 15.8-16.5 to
+11.2-12.9 (dividend yield 4.9-5.9% at q0, 5.3-5.6% at q40); y10 D/E tracks `de_target` within 0.071. Flagged 10 -> 8 of
+103 (PLZA and ELDE margin flags gone; zero REIT flags).
