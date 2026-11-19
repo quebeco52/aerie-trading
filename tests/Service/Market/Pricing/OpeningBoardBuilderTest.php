@@ -216,7 +216,10 @@ class OpeningBoardBuilderTest extends TestCase
             $this->builder->open($stock, $stockData, $openingMacro);
 
             $taxRate = $strategy->getEffectiveTaxRate($openingMacro->corporateTaxRate);
-            $preInterest = ((float) $stock->getTotalRevenue() * (float) $stock->getOperatingMargin() + $strategy->calculateInterestIncome($stock, $openingMacro)) * (1.0 - $taxRate);
+            $depreciationAddBack = $strategy->reportsFundsFromOperations()
+                ? $strategy->getPlantCapital($stock, $stock->getInvestedCapital()) * \App\Service\Corporate\Earnings\FixedAssetLedger::depreciationRateFor($stock)
+                : 0.0;
+            $preInterest = ((float) $stock->getTotalRevenue() * (float) $stock->getOperatingMargin() + $depreciationAddBack + $strategy->calculateInterestIncome($stock, $openingMacro)) * (1.0 - $taxRate);
             $leastInterest = $debt * (float) $stock->getCreditSpread() * (1.0 - $taxRate);
             if ($preInterest <= $leastInterest) {
                 continue;

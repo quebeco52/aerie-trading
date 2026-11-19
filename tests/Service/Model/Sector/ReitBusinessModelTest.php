@@ -86,13 +86,14 @@ class ReitBusinessModelTest extends TestCase
         $model = new ReitBusinessModel();
         $stock = new Stock();
         $stock->setTicker('REIT_PROP');
+        $stock->setIndustry('REIT - Residential');
+        $stock->setBeta('0.68');
+        $stock->setDepreciationRate('0.03');
         $stock->setTotalEquity('500000000');
         $stock->setWholesaleDebt('500000000');
         $stock->setCorporateTreasury('0');
         $stock->setBaselineRoic('0.07');
 
-        // Macro: 10y yield = 4.5%, ERP = 5.5%, Credit spread = 1.5% (sensitivity = 1.20 => 1.8% spread drag)
-        // Target Cap Rate = 4.5% + 5.5% + 1.8% = 11.8%
         $macro = $this->createMacroState(yield10y: 0.045, equityRiskPremium: 0.055);
         $math = new MathUtility();
 
@@ -102,9 +103,59 @@ class ReitBusinessModelTest extends TestCase
         $this->assertArrayHasKey('invested_capital', $metrics);
         $this->assertEquals(1000000000.0, $metrics['invested_capital']);
 
-        // Blended Cap Rate = (0.07 * 0.975) + (0.118 * 0.025) = 0.06825 + 0.00295 = 0.0712
-        // Baseline ROIC is updated in stock
-        $this->assertEqualsWithDelta(0.0712, (float) $stock->getBaselineRoic(), 0.0001);
+        $targetBookCapRate = ReitBusinessModel::bookCapRate(0.68, 0.03, $macro);
+        $expectedBlended = (0.07 * (1.0 - ReitBusinessModel::PORTFOLIO_TURNOVER_RATE))
+            + ($targetBookCapRate * ReitBusinessModel::PORTFOLIO_TURNOVER_RATE);
+        $this->assertEqualsWithDelta($expectedBlended, (float) $stock->getBaselineRoic(), 0.0001);
+    }
+
+    public function testUpdateDynamicRoicMeasuresNoiBeforeDepreciation(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_NOI');
+        $stock->setIndustry('REIT - Residential');
+        $stock->setBeta('0.68');
+        $stock->setDepreciationRate('0.03');
+        $stock->setTotalEquity('500000000');
+        $stock->setWholesaleDebt('500000000');
+        $stock->setRoicTtm('0.10');
+
+        $macro = new MacroStateDTO();
+        // Quarterly EBIT = 17.5M, quarterly book depreciation = 7.5M => quarterly NOI = 25M => 10% annualized on 1B IC.
+        $measured = $model->updateDynamicRoic(
+            $stock,
+            actualTotalNetIncome: 25000000.0,
+            investedCapital: 1000000000.0,
+            ebit: 17500000.0,
+            corporateTaxRate: 0.21,
+            macroState: $macro,
+            depreciation: 7500000.0,
+        );
+
+        $this->assertEqualsWithDelta(0.10, $measured, 1e-9);
+    }
+
+    public function testResolveLongRunReturnTracksLiveBookCapRatePlusRealizedExcess(): void
+    {
+        $model = new ReitBusinessModel();
+        $stock = new Stock();
+        $stock->setTicker('REIT_LR');
+        $stock->setIndustry('REIT - Office');
+        $stock->setBeta('0.58');
+        $stock->setDepreciationRate('0.03');
+        $stock->setBaselineRoic('0.10');
+        $stock->setEarningsMomentumZ([\App\Service\Corporate\EarningsEngine::STATE_ANCHOR_RETURN => 0.11]);
+
+        $lowRateMacro = new MacroStateDTO(equityRiskFreeRate: 0.03, tipsBreakeven: 0.02);
+        $highRateMacro = new MacroStateDTO(equityRiskFreeRate: 0.05, tipsBreakeven: 0.02);
+
+        $expectedLow = ReitBusinessModel::bookCapRate(0.58, 0.03, $lowRateMacro) + 0.01;
+        $expectedHigh = ReitBusinessModel::bookCapRate(0.58, 0.03, $highRateMacro) + 0.01;
+
+        $this->assertEqualsWithDelta($expectedLow, $model->resolveLongRunReturn($stock, $lowRateMacro), 1e-9);
+        $this->assertEqualsWithDelta($expectedHigh, $model->resolveLongRunReturn($stock, $highRateMacro), 1e-9);
+        $this->assertGreaterThan($expectedLow, $expectedHigh);
     }
 
     public function testRevenueStreamPhysics(): void
@@ -556,25 +607,27 @@ class ReitBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(200.0, $coverageBound, 0.001);
     }
 
-    public function testCapRateFloorTetheredTo10YearYield(): void
+    public function testCapRateFloorBoundsDepressedBaseline(): void
     {
         $model = new ReitBusinessModel();
         $stock = new Stock();
         $stock->setTicker('REIT_FLOOR');
+        $stock->setIndustry('REIT - Residential');
+        $stock->setBeta('0.0');
+        $stock->setDepreciationRate('0.03');
         $stock->setTotalEquity('100000000');
         $stock->setWholesaleDebt('100000000');
         $stock->setCorporateTreasury('0');
-        $stock->setBaselineRoic('0.02'); // Depressed historical baseline
+        $stock->setBaselineRoic('0.005'); // Depressed historical baseline below floor
 
-        // Macro: 10y yield = 4.5%, negative/flat risk premiums
-        $macro = $this->createMacroState(yield10y: 0.045, equityRiskPremium: -0.01);
+        $macro = new MacroStateDTO(equityRiskFreeRate: 0.01, tipsBreakeven: 0.04);
         $math = new MathUtility();
 
         $metrics = $model->getTargetMetrics($stock, $macro, $math);
 
-        // Baseline ROIC and target Cap Rate must be floored at least at 10Y yield (0.045)
-        $this->assertGreaterThanOrEqual(0.045, (float) $stock->getBaselineRoic());
-        $this->assertGreaterThanOrEqual(0.045, $metrics['baseline_roic']);
+        $floor = \App\Service\Math\FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD + ReitBusinessModel::ECONOMIC_UPKEEP_RATE;
+        $this->assertGreaterThanOrEqual($floor, (float) $stock->getBaselineRoic());
+        $this->assertGreaterThanOrEqual($floor, $metrics['baseline_roic']);
     }
 
     public function testDynamicRoicRevertsToMarketCapRateWhenMacroStatePresent(): void

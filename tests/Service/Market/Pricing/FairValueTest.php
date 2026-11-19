@@ -71,19 +71,14 @@ class FairValueTest extends TestCase
         $rescaledPayout = min(1.0, $payout * $structuralFfo / $affo);
         $this->assertEqualsWithDelta($policyDividend, $affo * $rescaledPayout, 1e-12);
 
-        $expectedNoReserveIncome = Valuation::calculateDividendDiscountModel(
+        $expectedIncome = Valuation::calculateDividendDiscountModel(
             $policyDividend,
             $hurdle,
-            min(0.04, ($structuralFfo / $book) * (1.0 - $payout)),
-        );
-        $expectedAffoIncome = Valuation::calculateDividendDiscountModel(
-            $policyDividend,
-            $hurdle,
-            min(0.04, ($affo / $book) * (1.0 - $rescaledPayout)),
+            (new \App\DTO\MacroStateDTO())->tipsBreakeven,
         );
 
-        $this->assertEqualsWithDelta($expectedNoReserveIncome, $withoutReserve['analyst_targets']['income_analyst'], 1e-9);
-        $this->assertEqualsWithDelta($expectedAffoIncome, $withReserve['analyst_targets']['income_analyst'], 1e-9);
+        $this->assertEqualsWithDelta($expectedIncome, $withoutReserve['analyst_targets']['income_analyst'], 1e-9);
+        $this->assertEqualsWithDelta($expectedIncome, $withReserve['analyst_targets']['income_analyst'], 1e-9);
     }
 
     /** An operating firm's earnings are already post-depreciation, so the reserve field has no effect on its value. */

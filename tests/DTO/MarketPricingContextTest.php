@@ -252,10 +252,12 @@ class MarketPricingContextTest extends TestCase
             Sectors::businessModelFor($reit->getIndustry()),
         );
         $annualDepreciation = 4.0 * $ledger->resolveStructuralDepreciation($earningsCtx);
+        $bookDepRate = FixedAssetLedger::depreciationRateFor($reit);
+        $expectedUpkeepRatio = \App\Service\Model\Sector\ReitBusinessModel::ECONOMIC_UPKEEP_RATE / $bookDepRate;
         $shares = (float) $reit->getSharesOutstanding();
 
         $this->assertGreaterThan(0.0, $annualDepreciation);
-        $this->assertEqualsWithDelta(1.0, ($context->maintenanceReservePerShare * $shares) / $annualDepreciation, 1e-9);
+        $this->assertEqualsWithDelta($expectedUpkeepRatio, ($context->maintenanceReservePerShare * $shares) / $annualDepreciation, 1e-9);
 
         $operating = $this->firm('SOFT', 'Software - Infrastructure');
         $operating->setGrossPpe('80000000000');

@@ -431,6 +431,53 @@ final class Valuation
     }
 
     /**
+     * Property cap rate (NOI over market value): unlevered required return less expected rent growth plus annual
+     * economic upkeep, floored at the perpetual growth spread plus upkeep so no property capitalises at zero.
+     */
+    public static function propertyCapRate(float $requiredReturn, float $rentGrowth, float $upkeepRate): float
+    {
+        return max(
+            FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD + $upkeepRate,
+            $requiredReturn - max(0.0, $rentGrowth) + $upkeepRate,
+        );
+    }
+
+    /**
+     * Steady-state ratio of market property value to historic-cost net book PP&E for a going-concern trust whose
+     * buildings retire on a 1/d_book useful-life schedule, depreciate on GAAP books at d_book, wear physically at
+     * upkeep rate u and inflate in value at pi: (g_real + pi + 2 d_book) / (g_real + d_book + u). Equals 1 when
+     * book depreciation matches physical wear and inflation is zero.
+     */
+    public static function historicCostPropertyValueRatio(
+        float $realGrowth,
+        float $inflation,
+        float $bookDepreciationRate,
+        float $upkeepRate,
+    ): float {
+        $denominator = max(FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, $realGrowth + $bookDepreciationRate + $upkeepRate);
+
+        return max(1.0, ($realGrowth + max(0.0, $inflation) + (2.0 * $bookDepreciationRate)) / $denominator);
+    }
+
+    /**
+     * Unlevered market value of a property portfolio: NOI less economic upkeep, capitalised as a perpetuity growing
+     * with expected rent inflation at the property's asset cost of capital.
+     */
+    public static function propertyValue(
+        float $investedCapital,
+        float $noiYield,
+        float $upkeepRate,
+        float $assetCostOfCapital,
+        float $rentGrowth,
+    ): float {
+        $discountRate = max(self::MIN_COST_OF_EQUITY, $assetCostOfCapital);
+        $perpetualGrowth = self::perpetualGrowthRate($discountRate, max(0.0, $rentGrowth));
+        $spread = max(FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD, $discountRate - $perpetualGrowth);
+
+        return max(0.0, $investedCapital * max(0.0, $noiYield - $upkeepRate) / $spread);
+    }
+
+    /**
      * Share of a growing perpetuity's value that a lasting change starting some years from now captures, phasing in at
      * a given speed from then. A stream growing at g and discounted at k accrues its value at the density (k - g)
      * e^{-(k - g) t} (Gordon 1959), so the part after t0 is e^{-(k - g) t0}; a change that closes the gap to its full

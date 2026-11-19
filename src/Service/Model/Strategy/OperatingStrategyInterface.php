@@ -311,6 +311,20 @@ interface OperatingStrategyInterface
     public function reportsFundsFromOperations(): bool;
 
     /**
+     * Annual real wear rate the firm must spend to keep its plant intact: equals the book depreciation rate for an
+     * ordinary physical firm; a property trust overrides with its lower economic upkeep rate because GAAP writes
+     * buildings down faster than they physically wear.
+     */
+    public function getMaintenanceCapexRate(float $bookDepreciationRate): float;
+
+    /**
+     * Annual revenue per unit of invested capital implied by the model's return definition, operating margin and tax
+     * rate. An operating firm defines return after depreciation (EBIT/IC), while a property trust defines it before
+     * book depreciation (NOI/IC) and deducts book depreciation before striking turnover.
+     */
+    public function resolveStructuralAssetTurnover(float $baselineRoic, float $operatingMargin, float $effectiveTaxRate, float $depreciationRate): float;
+
+    /**
      * The part of invested capital that is physical plant, and so opens a fixed-asset ledger. All of it for an
      * operating company; marketable investments sit on their own line and are not plant.
      */

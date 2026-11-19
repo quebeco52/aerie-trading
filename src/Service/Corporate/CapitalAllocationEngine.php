@@ -327,7 +327,12 @@ class CapitalAllocationEngine
         }
 
         $usableCash = $cashAboveFloor + $borrowedForDividend;
-        $distributableSurplus = max(0.0, (float) $stock->getRetainedEarnings() + ($ctx->quarterlyEps * $ctx->sharesOutstanding));
+        // A property trust distributes out of FFO, which routinely exceeds GAAP net income after non-cash book
+        // depreciation and leaves GAAP retained earnings negative while total equity stays positive; its legal ceiling
+        // is total capital surplus rather than GAAP retained earnings.
+        $distributableSurplus = $ctx->strategy->reportsFundsFromOperations()
+            ? max(0.0, (float) $stock->getTotalEquity() + $ctx->quarterlyNetIncome)
+            : max(0.0, (float) $stock->getRetainedEarnings() + ($ctx->quarterlyEps * $ctx->sharesOutstanding));
 
         $maxCashDividendPerShare = $ctx->sharesOutstanding > 0 ? ($usableCash / $ctx->sharesOutstanding) : 0.0;
         $maxLegalDividendPerShare = $ctx->sharesOutstanding > 0 ? ($distributableSurplus / $ctx->sharesOutstanding) : 0.0;

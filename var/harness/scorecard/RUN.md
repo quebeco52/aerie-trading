@@ -348,3 +348,22 @@ flat under MIN_ANNOUNCED_DIVIDEND_RAISE 3%; cuts any quarter)
   both arms (board cycle; 9-10 firms past 80%).
 - Board: scorecard nothing newly out beyond drawdown>80% firms 9.2 -> 10.2 (t 0.6, edge 10). Non-REIT mean |log eq
   diff| y10 .05, y20 .10 (largest STRK, fails in ahead s1): path divergence. Defaulters .5 -> 1.25 (FALC both, TERN, BOWR).
+
+### planb2 (REIT Plan B: cap rate, beta 0.68, rent growth, 3% book dep vs 1.5% upkeep, live bookCapRate anchor) 11-20
+- Arms: `affo1` (HEAD 7e4025da) vs `planb2` (working tree), 4 seeds (`HEALTH=1 bin/harness-batch
+  var/harness/scorecard/run_payout.sh 1-4 planb2`, 113 s at 4 slots); compared via `affo.py affo1 planb2` and
+  `scorecard.py affo1 planb2`. Note: `affo.py`'s `P/AFFO` column reads `ni - dep`, which is GAAP net income at 3% book
+  depreciation rather than true 1.5% upkeep AFFO.
+- Cap rates at open (vs 4.62% 10Y): SHOR/KITE 7.20% (+2.58pp), PLZA/ELDE 6.75% (+2.13pp).
+- P/B y0 1.92-2.20 -> 1.93-2.08, y20 2.36-2.98 -> 1.89-2.13 (all inside 1.5-2.5; SHOR t -3.7, KITE t -3.9).
+- P/FFO y0 9.5-12.2 -> 12.1-14.0 (PLZA 9.5 -> 12.1, t 61.6; ELDE 11.3 -> 12.6, t 4.4), y20 14.0-16.5 -> 13.5-16.4
+  (all inside 12-20). Yield y0 6.1-7.4% -> 5.4-5.6%, y20 4.1-5.9%.
+- FFO payout y0 .68-.75, y10 .67-.78 (was .78-.86), y20 .67-.73 (was .74-.79). 85% taxable-income floor binding
+  yrs/20: SHOR/PLZA/ELDE/KITE 1.25/3.25/5.00/4.00 -> 1.00/0.00/0.50/0.50 (ELDE t -15.6, KITE t -4.0).
+- Mispricing `share |log(px/fv)|>.25`: SHOR 32.7% -> 10.9% (ahead 29.1%), PLZA 10.4% -> 0.5% (ahead 2.5%), ELDE
+  16.5% -> 0.1% (ahead 5.8%, t -14.8), KITE 16.7% -> 1.2% (ahead 3.1%, t -3.9). `|log(px/fv)|` mean .12-.15 ->
+  .05-.06 on PLZA/ELDE/KITE; opening move tick 1-30 within 1.4%, `fv/px` tick 1 = 0.996-1.000.
+- REIT acquisitions 4.25 -> 0.25 a run, goodwill $6.35 -> $0.12bn; DPS cuts SHOR 3.75 -> 2.50, KITE 1.50 -> 0.75;
+  ratings BBB throughout, 0 deaths/defaults, 0 `icr < 1` quarters.
+- Board: scorecard nothing newly out; drawdown>80% returns inside range (10.2 -> 9.2). Non-REIT mean |log diff| y10
+  eq 0.050, y20 eq 0.090 (path divergence).

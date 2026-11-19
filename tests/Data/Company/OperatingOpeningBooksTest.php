@@ -137,7 +137,11 @@ class OperatingOpeningBooksTest extends TestCase
         $opening = new MacroStateDTO();
         $strategy = Sectors::strategyFor($row['industry']);
         $expectedReturn = $strategy instanceof ReitBusinessModel
-            ? ReitBusinessModel::marketCapRate($opening)
+            ? ReitBusinessModel::bookCapRate(
+                IndustryBetas::seedBetaFor($row),
+                (float) Sectors::INDUSTRY_METRICS[$row['industry']]['depreciation'],
+                $opening,
+            )
             : Valuation::calculateCAPM($opening->equityRiskFreeRate, IndustryBetas::seedBetaFor($row), MacroConstants::BASE_EQUITY_RISK_PREMIUM)
                 + IndustryMoats::forRow($row)->spread();
 

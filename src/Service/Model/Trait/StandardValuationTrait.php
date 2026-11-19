@@ -48,6 +48,22 @@ trait StandardValuationTrait
         return 0.0;
     }
 
+    /** Unlevered operating value on the value-driver formula (Koller et al.). */
+    public function resolveOperatingBusinessValue(Stock $stock, float $valuationReturn, float $assetCostOfCapital, float $expectedNominalGrowth, MacroStateDTO $macroState): float
+    {
+        return Valuation::operatingCapitalValue(
+            $stock->getInvestedCapital(),
+            $valuationReturn,
+            $assetCostOfCapital,
+            $expectedNominalGrowth,
+        );
+    }
+
+    public function resolveLongRunReturn(Stock $stock, ?MacroStateDTO $macroState = null): ?float
+    {
+        return \App\DTO\MarketPricingContext::anchorReturn($stock, $this);
+    }
+
     /** An operating company's own news is news about the margin it earns. */
     public function carriesFranchise(): bool
     {

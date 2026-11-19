@@ -71,7 +71,7 @@ final class ManagementValuation
      */
     private static function equityRates(BusinessModelInterface $strategy, Stock $stock, DebtHealthDTO $health, MacroStateDTO $macroState): array
     {
-        $valuationReturn = $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), MarketPricingContext::anchorReturn($stock, $strategy), $health->valuationCostOfEquity);
+        $valuationReturn = $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), $strategy->resolveLongRunReturn($stock, $macroState), $health->valuationCostOfEquity);
 
         return $strategy->getEquityValuationRates($stock, $valuationReturn, $health, $macroState->corporateTaxRate);
     }

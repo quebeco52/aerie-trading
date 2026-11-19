@@ -77,6 +77,10 @@ final class CapitalBudgetEngine
     {
         $stock = $ctx->stock;
 
+        $bookDepRate = $this->plant->resolveDepreciationRate($ctx);
+        $upkeepRate = $ctx->strategy->getMaintenanceCapexRate($bookDepRate);
+        $quarterlyUpkeep = $bookDepRate > 0.0 ? $ctx->quarterlyDepreciation * ($upkeepRate / $bookDepRate) : $ctx->quarterlyDepreciation;
+
         if ($ctx->sharesOutstanding <= 0) {
             $fcfData = ['fcf_per_share' => 0.0, 'capex' => 0.0, 'direct_capex' => 0.0];
         } else {
@@ -85,7 +89,7 @@ final class CapitalBudgetEngine
             $cycleCapExModifier = max(self::MIN_CAPEX_CYCLE_MODIFIER, min(self::MAX_CAPEX_CYCLE_MODIFIER, 1.0 + ($cycleSignal * $capexCyclicality)));
 
             // Operational CapEx:
-            // 1. Maintenance CapEx: replaces depreciating physical capital in ongoing operations, at the capital-goods
+            // 1. Maintenance CapEx: replaces physically worn capital in ongoing operations, at the capital-goods
             //    replacement cost of the plant worn out, scaled with the capex cycle. Plant idled in an industry glut is
             //    left to wear out (Abel & Eberly 1994), and so is running plant its market no longer needs while new
             //    plant earns below its cost of capital: the firm's (resolvePlantGate()) or a segment's
@@ -94,7 +98,7 @@ final class CapitalBudgetEngine
             $this->resolvePlantGate($ctx);
             $this->resolveSegmentGates($ctx);
             $this->resolveEarningPower($ctx);
-            $maintenanceCapEx = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * $cycleCapExModifier * self::plantKept($ctx);
+            $maintenanceCapEx = $quarterlyUpkeep * $ctx->replacementCostRatio * $cycleCapExModifier * self::plantKept($ctx);
             if ($ctx->strategy->isFinancial()) {
                 // A balance-sheet business keeps no plant ledger: what it spends to stand still (branches,
                 // systems) is expensed as it is spent, so the cash out is the depreciation charge and nothing
@@ -186,9 +190,9 @@ final class CapitalBudgetEngine
         $ctx->operatingCapex = $fcfData['capex'];
 
         // Replacement CapEx is the bar the firm has to clear to stand still, so the reinvestment ratio is
-        // measured against the depreciation charge restated at today's prices, not the historical-cost charge, on the
+        // measured against the real wear charge restated at today's prices, not the historical-cost charge, on the
         // plant in use. A venture into a new industry is not reinvestment in this business.
-        $replacementDepreciation = $ctx->quarterlyDepreciation * $ctx->replacementCostRatio * self::plantKept($ctx);
+        $replacementDepreciation = $quarterlyUpkeep * $ctx->replacementCostRatio * self::plantKept($ctx);
         $reinvestmentRatio = $replacementDepreciation > 0 ? (($fcfData['capex'] - ($ctx->marketEntry['capex'] ?? 0.0)) / $replacementDepreciation) : 1.0;
         $ctx->strategy->recordReinvestmentRatio($stock, $reinvestmentRatio, $ctx->dt);
 

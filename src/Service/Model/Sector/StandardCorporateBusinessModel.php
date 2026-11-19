@@ -15,7 +15,6 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -116,6 +115,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $stock = (new Stock())
             ->setTicker($ticker)
             ->setIndustry($industry)
+            ->setBeta((string) IndustryBetas::seedBetaFor($seedRow))
             ->setManagementStyle(ManagementStyle::tryFromNullable($seedRow['management_style'] ?? null))
             ->setOperatingMargin((string) $margin)
             ->setTotalRevenue(Decimal::format($revenue))
@@ -138,7 +138,12 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
 
         // Trial capital at the stated return, then scaled until the capital earns the stated revenue as the opening
         // strikes it (OpeningBoardBuilder: invested capital at its structural turnover, net of saturation).
+        $bookDepRate = (float) $seedRow['depreciation_rate'];
         $investedCapital = $revenue * $margin * (1.0 - $taxRate) / max(0.01, $baselineRoic);
+        if ($this->reportsFundsFromOperations()) {
+            $openingTurnover = $this->resolveStructuralAssetTurnover($baselineRoic, $margin, $taxRate, $bookDepRate);
+            $investedCapital = $openingTurnover > 0.0 ? $revenue / $openingTurnover : $investedCapital;
+        }
         $equity = $investedCapital;
         $debt = 0.0;
         $cash = 0.0;
@@ -155,7 +160,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
             }
             $this->setOpeningBooks($stock, $equity, $debt, $cash, $addressableShare, $openingMacro);
             if ($covenantMultiple !== null) {
-                $depreciation = max(0.0, $this->getPlantCapital($stock, $stock->getInvestedCapital()) - $workingCapital) * (float) $seedRow['depreciation_rate'];
+                $depreciation = max(0.0, $this->getPlantCapital($stock, $stock->getInvestedCapital()) - $workingCapital) * $bookDepRate;
                 $covenantDebt = ($covenantMultiple * (float) $this->getNormalEbitda($stock, $taxRate, $depreciation)) + $cash;
                 if ($debt > $covenantDebt) {
                     $debt = $covenantDebt;
@@ -165,7 +170,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
             }
 
             $metrics = $this->getTargetMetrics($stock, $openingMacro, new MathUtility());
-            $earned = $metrics['invested_capital'] * FirmEconomics::structuralAssetTurnover($metrics['baseline_roic'], $margin, $taxRate);
+            $earned = $metrics['invested_capital'] * $this->resolveStructuralAssetTurnover($metrics['baseline_roic'], $margin, $taxRate, $bookDepRate);
             if ($earned <= 0.0 || $equity <= 0.0) {
                 throw new \DomainException("{$ticker} earns nothing on the books its character builds.");
             }

@@ -23,6 +23,13 @@ final class IndustryBetas
     /** The marginal tax rate the table unlevers at: US federal 21% plus state (Damodaran, January 2026). */
     public const DAMODARAN_MARGINAL_TAX_RATE = 0.25;
 
+    // --- District Property Beta ---
+    /**
+     * Operating-asset beta of District commercial real estate: higher than Damodaran's 2021-25 US REIT regression
+     * (0.40) so property cap rates sit 2-3.5pp over the ten-year yield without an extra premium.
+     */
+    public const DISTRICT_REIT_ASSET_BETA = 0.68;
+
     // --- Lore Band ---
     /**
      * Half-width of the band lore may place a firm's beta in around its industry's: 1.96 standard errors of a 60-month
@@ -289,9 +296,14 @@ final class IndustryBetas
      */
     public static function anchorFor(?string $industry): float
     {
+        $model = Sectors::businessModelFor($industry);
+        if ($model === 'reit') {
+            return self::DISTRICT_REIT_ASSET_BETA;
+        }
+
         $row = self::DAMODARAN[self::damodaranIndustryFor($industry)];
 
-        return Sectors::isFinancial(Sectors::businessModelFor($industry)) ? $row['levered'] : $row['unlevered_cash'];
+        return Sectors::isFinancial($model) ? $row['levered'] : $row['unlevered_cash'];
     }
 
     /** A lore position held to the band: lore picks where in it a firm sits, never how far outside. */

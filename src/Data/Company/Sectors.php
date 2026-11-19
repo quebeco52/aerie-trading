@@ -277,23 +277,23 @@ class Sectors
         'Real Estate Services' => ['pe' => 18.00, 'depreciation' => 0.02, 'ebitda_limit' => 2.5, 'equity_limit' => 0.5, 'business_model' => 'none'],
         // Highly discretionary, first to drop in recession.
         'Recreational Vehicles' => ['pe' => 11.00, 'depreciation' => 0.05, 'ebitda_limit' => 2.5, 'equity_limit' => 1.0, 'business_model' => 'heavy_manufacturing'],
-        'REIT - Diversified' => ['pe' => 16.00, 'depreciation' => 0.015, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
+        'REIT - Diversified' => ['pe' => 16.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
         // Very stable
-        'REIT - Healthcare Facilities' => ['pe' => 15.00, 'depreciation' => 0.015, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
+        'REIT - Healthcare Facilities' => ['pe' => 15.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
         // Highly cyclical, less debt allowed
-        'REIT - Hotel & Motel' => ['pe' => 13.00, 'depreciation' => 0.02, 'ebitda_limit' => 5.5, 'equity_limit' => 2.0, 'business_model' => 'reit'],
+        'REIT - Hotel & Motel' => ['pe' => 13.00, 'depreciation' => 0.04, 'ebitda_limit' => 5.5, 'equity_limit' => 2.0, 'business_model' => 'reit'],
         // Warehouses (Amazon effect), premium P/E
-        'REIT - Industrial' => ['pe' => 18.00, 'depreciation' => 0.015, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
+        'REIT - Industrial' => ['pe' => 18.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
         // Pure financial engineering (Bank Rule)
         'REIT - Mortgage' => ['pe' => 10.00, 'depreciation' => 0.01, 'ebitda_limit' => null, 'equity_limit' => 8.0, 'business_model' => 'shadow_bank'],
         // Work-from-home headwinds
-        'REIT - Office' => ['pe' => 12.00, 'depreciation' => 0.02, 'ebitda_limit' => 6.0, 'equity_limit' => 2.5, 'business_model' => 'reit'],
+        'REIT - Office' => ['pe' => 12.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.0, 'equity_limit' => 2.5, 'business_model' => 'reit'],
         // Apartments, highly resilient
-        'REIT - Residential' => ['pe' => 17.00, 'depreciation' => 0.015, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
+        'REIT - Residential' => ['pe' => 17.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
         // Malls, e-commerce risk
-        'REIT - Retail' => ['pe' => 14.00, 'depreciation' => 0.015, 'ebitda_limit' => 6.0, 'equity_limit' => 2.0, 'business_model' => 'reit'],
+        'REIT - Retail' => ['pe' => 14.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.0, 'equity_limit' => 2.0, 'business_model' => 'reit'],
         // Data centers, cell towers
-        'REIT - Specialty' => ['pe' => 16.00, 'depreciation' => 0.015, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
+        'REIT - Specialty' => ['pe' => 16.00, 'depreciation' => 0.03, 'ebitda_limit' => 6.5, 'equity_limit' => 2.5, 'business_model' => 'reit'],
         // Rental cars depreciate fast
         'Rental & Leasing Services' => ['pe' => 15.00, 'depreciation' => 0.10, 'ebitda_limit' => 3.5, 'equity_limit' => 1.5, 'business_model' => 'none'],
         // Homebuilders: land bank at cost, sold at the market price.

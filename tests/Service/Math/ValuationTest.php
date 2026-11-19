@@ -280,6 +280,35 @@ class ValuationTest extends TestCase
         $this->assertGreaterThan(0.0, Valuation::operatingCapitalValue(100.0, 0.08, -0.02, 0.03), 'A hedge is discounted at the floor.');
     }
 
+    /**
+     * Property cap rate is required return less expected rent growth plus upkeep, floored above zero; historic-cost
+     * books depreciating faster than physical wear while values inflate carry market value above net book (1.0 when
+     * book depreciation equals upkeep and inflation is zero); propertyValue capitalises NOI less upkeep at k - g.
+     */
+    public function testPropertyValuationFormulas(): void
+    {
+        // Cap rate = requiredReturn - rentGrowth + upkeep = 7.70% - 2.00% + 1.50% = 7.20%.
+        $this->assertEqualsWithDelta(0.072, Valuation::propertyCapRate(0.077, 0.02, 0.015), 1e-12);
+        // Floored at MIN_PERPETUAL_GROWTH_SPREAD + upkeep when required return falls below rent growth.
+        $this->assertEqualsWithDelta(
+            FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD + 0.015,
+            Valuation::propertyCapRate(0.01, 0.03, 0.015),
+            1e-12,
+        );
+
+        // Zero inflation and book depreciation matching physical wear leaves market value equal to net book.
+        $this->assertEqualsWithDelta(1.0, Valuation::historicCostPropertyValueRatio(0.025, 0.0, 0.02, 0.02), 1e-12);
+        // 3% book dep vs 1.5% physical wear at 2% inflation and 2.54% real growth => (0.0254 + 0.02 + 0.06) / (0.0254 +
+        // 0.03 + 0.015) ≈ 1.497.
+        $ratio = Valuation::historicCostPropertyValueRatio(0.0254, 0.02, 0.03, 0.015);
+        $this->assertEqualsWithDelta(1.497159, $ratio, 1e-5);
+
+        // Capital 100 earning 10% NOI less 1.5% upkeep = 8.5, discounted at k 7.5% - g 2.0% = 5.5% => 8.5 / 0.055.
+        $this->assertEqualsWithDelta(8.5 / 0.055, Valuation::propertyValue(100.0, 0.10, 0.015, 0.075, 0.02), 1e-9);
+        // Earning below upkeep floors at zero rather than negative property value.
+        $this->assertSame(0.0, Valuation::propertyValue(100.0, 0.01, 0.015, 0.075, 0.02));
+    }
+
     public function testCalculateLeveredBeta(): void
     {
         $unleveredBeta = 1.0;

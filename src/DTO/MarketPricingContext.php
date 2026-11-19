@@ -117,9 +117,12 @@ class MarketPricingContext
         /** The shift the firm's own news has given the log-odds of its structural margin (Stock::$franchisePower). */
         public float $franchisePower = 0.0,
         /**
-         * Annual depreciation per share a trust reporting FFO must spend to keep its plant; zero for any other firm.
+         * Annual economic upkeep reserve per share a trust reporting FFO must spend to keep its plant; zero for any
+         * other firm.
          */
         public float $maintenanceReservePerShare = 0.0,
+        /** Unlevered operating-asset beta (Stock::$beta); zero falls back to the levered beta. */
+        public float $assetBeta = 0.0,
     ) {}
 
     /**
@@ -202,14 +205,15 @@ class MarketPricingContext
             dividendAdjustmentSpeed: (float) $stock->getDividendSpeed(),
             priorMarketVol: $priorMarketVol,
             costOfDebt: $health->rawMetrics->currentMarketRate,
-            longRunReturn: self::anchorReturn($stock, $strategy),
+            longRunReturn: $strategy->resolveLongRunReturn($stock, $macroState),
             excessCashPerShare: $excessCash / $shares,
             capacityGap: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_GAP] ?? 0.0),
             capacitySpare: (float) (($stock->getEarningsMomentumZ() ?? [])[CapitalBudgetEngine::STATE_CAPACITY_SPARE] ?? 0.0),
             franchisePower: (float) ($stock->getFranchisePower() ?? 0.0),
             maintenanceReservePerShare: $strategy->reportsFundsFromOperations()
-                ? (max(0.0, $strategy->getDepreciableBase($stock)) * FixedAssetLedger::depreciationRateFor($stock)) / $shares
+                ? (max(0.0, $strategy->getDepreciableBase($stock)) * $strategy->getMaintenanceCapexRate(FixedAssetLedger::depreciationRateFor($stock))) / $shares
                 : 0.0,
+            assetBeta: (float) $stock->getBeta(),
             policyBasesPerShare: array_filter([
                 'bankLevyRate' => $strategy->annualBankLevyBase($stock) / $shares,
                 'extractionStringency' => $strategy->annualExtractionCostBase($stock) / $shares,

@@ -1082,6 +1082,18 @@ trait StandardOperatingPhysicsTrait
         return false;
     }
 
+    /** Ordinary physical plant wears out at its book depreciation rate. */
+    public function getMaintenanceCapexRate(float $bookDepreciationRate): float
+    {
+        return $bookDepreciationRate;
+    }
+
+    /** Annual revenue per unit of invested capital from after-tax operating return and margin. */
+    public function resolveStructuralAssetTurnover(float $baselineRoic, float $operatingMargin, float $effectiveTaxRate, float $depreciationRate): float
+    {
+        return FirmEconomics::structuralAssetTurnover($baselineRoic, $operatingMargin, $effectiveTaxRate);
+    }
+
     /**
      * Invested capital less any marketable investments, which carry their own asset line and no depreciation. The
      * treasury is already outside it, so the stakes are the only deduction.

@@ -7,6 +7,7 @@ namespace App\Service\Market\Pricing;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
+use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
@@ -84,6 +85,7 @@ final class FairValue
             $ctx->capacitySpare,
             $ctx->franchisePower,
             $ctx->maintenanceReservePerShare,
+            $ctx->assetBeta,
         );
 
         // Value at the market's discount rate: the repricing the market factor has put on equities reaches the
@@ -183,6 +185,7 @@ final class FairValue
         float $capacitySpare = 0.0,
         float $franchisePower = 0.0,
         float $maintenanceReservePerShare = 0.0,
+        float $assetBeta = 0.0,
     ): array {
 
         $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
@@ -254,7 +257,10 @@ final class FairValue
             $dividendAdjustmentSpeed,
             $capacityGap,
             $capacitySpare,
-            $maintenanceReservePerShare
+            $maintenanceReservePerShare,
+            $assetBeta,
+            $investedCapitalPerShare,
+            $afterTaxCostOfDebt
         ): array {
             // The engine replaces this wear, so it is neither paid out nor reinvested in growth; the market values what
             // is left, AFFO (FFO less that reserve).
@@ -323,7 +329,11 @@ final class FairValue
                 $requiredYield = max(self::MIN_DIVIDEND_REQUIRED_YIELD, $hurdleRate);
                 $payoutRatio = min(1.0, $targetPayoutRatio);
                 $returnOnEquity = $bookValuePerShare > 0.0 ? $normalizedEps / $bookValuePerShare : 0.0;
-                $sustainableGrowth = max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $returnOnEquity * (1.0 - $payoutRatio)));
+                // A property trust pays out nearly all of its AFFO; its dividends grow with rents (expected inflation)
+                // rather than with retained AFFO.
+                $sustainableGrowth = $strategy->reportsFundsFromOperations()
+                    ? max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $macro->tipsBreakeven))
+                    : max(0.0, min(self::MAX_DIVIDEND_IMPLIED_GROWTH, $returnOnEquity * (1.0 - $payoutRatio)));
                 $targetDividend = $normalizedEps * $payoutRatio;
 
                 $dividendSupportValue = max(
@@ -336,8 +346,26 @@ final class FairValue
             // Intrinsic Price-to-Book (P/B) Valuation
             // The multiple belongs to the business model: plant earning above its hurdle is worth more than the
             // plant, while a portfolio of marketable stakes is worth the portfolio, so a trust declares 1.0 and
-            // this term hands its model net asset value per share rather than a multiple of it.
-            $pbFairValue = $bookValuePerShare * $strategy->getIntrinsicPbMultiple($equityReturn, $hurdleRate);
+            // this term hands its model net asset value per share rather than a multiple of it. For a property trust
+            // whose books stay at historic cost, this leg is net asset value: NOI less upkeep capitalised at the
+            // property's asset cost of capital less expected rent growth, net of debt.
+            if ($strategy->reportsFundsFromOperations() && $investedCapitalPerShare > 0.0) {
+                $unleveredBeta = $assetBeta > 0.0 ? $assetBeta : $beta;
+                $assetCostOfCapital = Valuation::calculateCAPM($macro->equityRiskFreeRate, $unleveredBeta, MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+                $impliedDebt = max(0.0, $investedCapitalPerShare - $bookValuePerShare);
+                $netOperatingCashFlow = max(0.0, $normalizedEps + ($impliedDebt * $afterTaxCostOfDebt));
+                $realSpread = max(
+                    FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD,
+                    max(Valuation::MIN_COST_OF_EQUITY, $assetCostOfCapital) - Valuation::perpetualGrowthRate($assetCostOfCapital, max(0.0, $macro->tipsBreakeven)),
+                );
+                $navPerShare = ($netOperatingCashFlow / $realSpread) - $impliedDebt;
+                $pbFairValue = max(
+                    $bookValuePerShare * FinancialConstants::MIN_INTRINSIC_PB,
+                    min($bookValuePerShare * FinancialConstants::MAX_INTRINSIC_PB, $navPerShare),
+                );
+            } else {
+                $pbFairValue = $bookValuePerShare * $strategy->getIntrinsicPbMultiple($equityReturn, $hurdleRate);
+            }
 
             // A financial is valued on tangible book, since its regulator deducts goodwill from capital. The same
             // earnings over the smaller base give the same value wherever the multiple is interior; the change is

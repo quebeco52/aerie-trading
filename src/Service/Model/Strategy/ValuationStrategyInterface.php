@@ -74,6 +74,18 @@ interface ValuationStrategyInterface
     public function resolveSubsidiaryRevaluation(Stock $stock, float $assetCostOfCapital, float $growth, float $taxRate, float $marketRepricing): float;
 
     /**
+     * Unlevered operating value of the business at its asset cost of capital, used by DebtEngine to find the equity
+     * supporting its debt for Hamada re-levering.
+     */
+    public function resolveOperatingBusinessValue(Stock $stock, float $valuationReturn, float $assetCostOfCapital, float $expectedNominalGrowth, MacroStateDTO $macroState): float;
+
+    /**
+     * Long-run return the market and management expect the firm's filed returns to revert to. Defaults to the firm's
+     * trailing anchor return; a property trust's reverts to its current market book cap rate plus realized excess.
+     */
+    public function resolveLongRunReturn(Stock $stock, ?MacroStateDTO $macroState = null): ?float;
+
+    /**
      * Whether the firm's own news is news about the margin it earns (Stock::$franchisePower). A trust's own news is
      * its holdings', which reach its value through their own prices, so it carries none.
      */

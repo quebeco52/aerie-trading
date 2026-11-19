@@ -18,11 +18,11 @@ use App\Entity\Stock;
 use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\ManagementSuccessionEngine;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
-use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
@@ -172,7 +172,10 @@ class OpeningBoardBuilder
         $targetMetrics = $strategy->getTargetMetrics($stock, $openingMacro, $this->mathUtility);
         $investedCapital = $targetMetrics['invested_capital'];
         $effectiveTaxRate = $strategy->getEffectiveTaxRate($openingMacro->corporateTaxRate);
-        $revenue = $margin > 0 ? $investedCapital * FirmEconomics::structuralAssetTurnover((float) $targetMetrics['baseline_roic'], $margin, $effectiveTaxRate) : 0.0;
+        $bookDepRate = FixedAssetLedger::depreciationRateFor($stock);
+        $revenue = $margin > 0
+            ? $investedCapital * $strategy->resolveStructuralAssetTurnover((float) $targetMetrics['baseline_roic'], $margin, $effectiveTaxRate, $bookDepRate)
+            : 0.0;
 
         $stock->setTotalRevenue((string) $revenue);
 
@@ -203,6 +206,11 @@ class OpeningBoardBuilder
             $interestIncome = $strategy->calculateInterestIncome($stock, $openingMacro);
             $ebt = $ebit - $interestExpense + $interestIncome;
             $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
+            // A trust reports funds from operations (net income with book depreciation added back), so it opens on
+            // the same figure its first report files and its dividend policy pays from.
+            if ($strategy->reportsFundsFromOperations()) {
+                $netIncome += $strategy->getPlantCapital($stock, $investedCapital) * $bookDepRate;
+            }
         }
 
         $shares = $stockData['shares_outstanding'];

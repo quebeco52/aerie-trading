@@ -75,6 +75,25 @@ class OperatingCyclicalityTest extends TestCase
     #[DataProvider('sectorModelFiles')]
     public function testNoSectorModelReadsEquityBetaInOperatingPhysics(string $file): void
     {
-        $this->assertStringNotContainsString('getBeta()', (string) file_get_contents($file), basename($file) . ' must declare OPERATING_CYCLICALITY instead of reading equity beta');
+        $className = 'App\\Service\\Model\\Sector\\' . basename($file, '.php');
+        $this->assertTrue(class_exists($className), "Sector model class {$className} must exist.");
+        $ref = new \ReflectionClass($className);
+        $lines = file($file) ?: [];
+
+        foreach (['getMacroPhysics', 'calculateSectorPhysics'] as $methodName) {
+            if (!$ref->hasMethod($methodName)) {
+                continue;
+            }
+            $method = $ref->getMethod($methodName);
+            if ($method->getFileName() !== realpath($file)) {
+                continue;
+            }
+            $body = implode('', array_slice($lines, $method->getStartLine() - 1, $method->getEndLine() - $method->getStartLine() + 1));
+            $this->assertStringNotContainsString(
+                'getBeta()',
+                $body,
+                basename($file) . "::{$methodName}() must declare OPERATING_CYCLICALITY instead of reading equity beta",
+            );
+        }
     }
 }

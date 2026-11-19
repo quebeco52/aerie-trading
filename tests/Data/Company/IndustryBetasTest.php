@@ -64,7 +64,10 @@ final class IndustryBetasTest extends TestCase
                 $this->assertSame($row['levered'], IndustryBetas::anchorFor($industry), "$industry passes its beta through, so it stores the levered one.");
             } else {
                 $this->assertEqualsWithDelta(Valuation::calculateLeveredBeta(1.0, 0.25, 1.0), $relevered, 1e-12, "$industry re-levers by Hamada in full.");
-                $this->assertSame($row['unlevered_cash'], IndustryBetas::anchorFor($industry), "$industry re-levers, so it stores the asset beta.");
+                $expected = Sectors::businessModelFor($industry) === 'reit'
+                    ? IndustryBetas::DISTRICT_REIT_ASSET_BETA
+                    : $row['unlevered_cash'];
+                $this->assertSame($expected, IndustryBetas::anchorFor($industry), "$industry re-levers, so it stores the asset beta.");
             }
         }
     }

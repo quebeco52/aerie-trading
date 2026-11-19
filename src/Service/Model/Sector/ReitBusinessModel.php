@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\IndustryBetas;
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\DebtHealthDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-
+use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Event\ShockEvent;
 use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\Distributions;
@@ -19,6 +20,7 @@ use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
 use App\Service\Math\MathUtility;
+use App\Service\Math\Valuation;
 use App\Service\Model\ModelParam;
 
 /**
@@ -168,15 +170,20 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const BENIGN_LEASING_Z_FLOOR         = 1.00;
     /** Rent roll won per unit of tenant-default Z-score above the floor. */
     public const LEASING_BONUS_SCALE            = 0.015;
-    /** Sensitivity of market cap rates to macroeconomic credit spread fluctuations. */
-    public const CAP_RATE_SPREAD_SENSITIVITY    = 1.20;
+    /**
+     * Annual economic wear and maintenance capex rate (1.5%) required to keep buildings physically intact, distinct
+     * from GAAP/tax book depreciation (~3%). Used for upkeep spend, the AFFO reserve and the property cap rate.
+     */
+    public const ECONOMIC_UPKEEP_RATE           = 0.015;
     /**
      * Quarterly share of the fixed-rate bond stock that matures and reprices (~7-year ladder of unsecured notes and
      * mortgages), so rate shocks reach FFO with a lag.
      */
     public const DEBT_MATURITY_ROLLOVER_RATE    = 0.035;
-    /** Minimum operating efficiency ratio (operating revenue / fixed costs) floor. */
-    public const MIN_EFFICIENCY_RATIO           = 0.35;
+    /**
+     * Minimum cash operating expense ratio (cash opex / revenue) floor after depreciation is carved out (NNN floor).
+     */
+    public const MIN_EFFICIENCY_RATIO           = 0.15;
 
     // --- Housing Supply & Tenant Default Transmission ---
     /** Sensitivity of new building supply competition to residential housing starts. */
@@ -224,6 +231,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const MARGIN_REVERSION_SPEED      = 2.0;
 
     // --- Return Reversion ---
+    /**
+     * Annual share of a rent-roll return gap that persists a year on (0.80), matching the trust's 6-year WALT lease
+     * ladder and 20% annual return reversion speed (Ohlson 1995).
+     */
+    public const RETURN_PERSISTENCE = 0.80;
 
     // --- Capital Cycle ---
     /** Share of construction in progress completed into plant each quarter (12.5%). */
@@ -240,25 +252,93 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     public const BUYBACK_MIN_ICR = 1.15;
 
     /**
-     * Market cap rate the property book prices on: 10-year yield plus equity risk premium and credit spread drag,
-     * floored at the 10-year yield.
+     * Market cap rate (NOI over market property value): property's unlevered required return (CAPM on its asset beta)
+     * less expected rent growth (ten-year breakeven inflation) plus annual economic upkeep.
      */
-    public static function marketCapRate(MacroStateDTO $macroState): float
+    public static function capRate(float $assetBeta, MacroStateDTO $macroState): float
     {
-        $yield10y = $macroState->yield10yEma;
+        $requiredReturn = Valuation::calculateCAPM(
+            $macroState->equityRiskFreeRate,
+            $assetBeta,
+            MacroConstants::BASE_EQUITY_RISK_PREMIUM,
+        );
 
-        return max($yield10y, $yield10y + $macroState->equityRiskPremium + ($macroState->macroCreditSpreadEma * self::CAP_RATE_SPREAD_SENSITIVITY));
+        return Valuation::propertyCapRate($requiredReturn, $macroState->tipsBreakeven, self::ECONOMIC_UPKEEP_RATE);
     }
 
     /**
-     * The trust's revenue is anchored on the market cap rate (getTargetMetrics()), so it opens there; its moat accrues
-     * through the return's reversion (updateDynamicRoic()).
+     * Historic-cost book NOI yield (NOI over depreciated net book PP&E) implied by the market cap rate on an
+     * established portfolio whose books depreciate faster than physical wear while values inflate.
+     */
+    public static function bookCapRate(float $assetBeta, float $bookDepreciationRate, MacroStateDTO $macroState): float
+    {
+        return self::capRate($assetBeta, $macroState) * Valuation::historicCostPropertyValueRatio(
+            MacroConstants::TREND_REAL_GROWTH,
+            MacroConstants::TARGET_INFLATION,
+            $bookDepreciationRate,
+            self::ECONOMIC_UPKEEP_RATE,
+        );
+    }
+
+    /**
+     * The trust's revenue is anchored on its historic-cost book NOI yield (getTargetMetrics()), so it opens there; its
+     * moat accrues through the return's reversion (updateDynamicRoic()).
      *
      * @param array<string, mixed> $seedRow
      */
     protected function openingReturn(array $seedRow, MacroStateDTO $openingMacro): float
     {
-        return self::marketCapRate($openingMacro);
+        return self::bookCapRate(
+            IndustryBetas::seedBetaFor($seedRow),
+            (float) $seedRow['depreciation_rate'],
+            $openingMacro,
+        );
+    }
+
+    public function getMaintenanceCapexRate(float $bookDepreciationRate): float
+    {
+        return self::ECONOMIC_UPKEEP_RATE;
+    }
+
+    /**
+     * A trust's return is NOI before book depreciation, while OperatingCapacityEngine carves book depreciation out of
+     * operating costs so EBIT = revenue x margin. Turnover is struck on the after-depreciation operating return
+     * (NOI yield less book depreciation), making EBIT + depreciation equal baselineRoic x invested capital.
+     */
+    public function resolveStructuralAssetTurnover(float $baselineRoic, float $operatingMargin, float $effectiveTaxRate, float $depreciationRate): float
+    {
+        return FirmEconomics::structuralAssetTurnover(max(0.01, $baselineRoic - $depreciationRate), $operatingMargin, $effectiveTaxRate);
+    }
+
+    public function resolveOperatingBusinessValue(Stock $stock, float $valuationReturn, float $assetCostOfCapital, float $expectedNominalGrowth, MacroStateDTO $macroState): float
+    {
+        return Valuation::propertyValue(
+            $stock->getInvestedCapital(),
+            $valuationReturn,
+            self::ECONOMIC_UPKEEP_RATE,
+            $assetCostOfCapital,
+            $macroState->tipsBreakeven,
+        );
+    }
+
+    /**
+     * A property trust's operating return reverts toward its current market book cap rate (updateDynamicRoic()), so its
+     * long-run valuation return moves with bookCapRate() plus whatever realized excess its historical anchor carries
+     * over its portfolio cap rate. Existing leases keep their spread until they roll (RETURN_PERSISTENCE).
+     */
+    public function resolveLongRunReturn(Stock $stock, ?MacroStateDTO $macroState = null): ?float
+    {
+        $anchor = parent::resolveLongRunReturn($stock, $macroState);
+        if ($macroState === null) {
+            return $anchor;
+        }
+        $baseline = (float) $stock->getBaselineRoic();
+        $excess = ($anchor !== null && $baseline > 0.0) ? ($anchor - $baseline) : 0.0;
+
+        return max(
+            0.01,
+            self::bookCapRate((float) $stock->getBeta(), FixedAssetLedger::depreciationRateFor($stock), $macroState) + $excess,
+        );
     }
 
     public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
@@ -266,13 +346,13 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $investedCapital = $stock->getInvestedCapital();
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
 
-        $yield10y = $macroState->yield10yEma;
-        $targetCapRate = self::marketCapRate($macroState);
+        $minCapRate = FinancialConstants::MIN_PERPETUAL_GROWTH_SPREAD + self::ECONOMIC_UPKEEP_RATE;
+        $targetCapRate = self::bookCapRate((float) $stock->getBeta(), FixedAssetLedger::depreciationRateFor($stock), $macroState);
 
         $portfolioTurnoverRate = self::PORTFOLIO_TURNOVER_RATE;
         $maxCapRate = max(self::MAX_CAP_RATE_CLAMP, $macroState->yield10yEma + self::CAP_RATE_CEILING_SPREAD);
-        $blendedCapRate = min($maxCapRate, max($yield10y, ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate)));
-        $stock->setBaselineRoic((string) max($yield10y, $blendedCapRate));
+        $blendedCapRate = min($maxCapRate, max($minCapRate, ($baselineRoic * (1.0 - $portfolioTurnoverRate)) + ($targetCapRate * $portfolioTurnoverRate)));
+        $stock->setBaselineRoic((string) max($minCapRate, $blendedCapRate));
 
         $targetEbitYield = $blendedCapRate;
 
@@ -461,8 +541,10 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
 
         $stock->setCurrentRoic((string) max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $truePostTaxReturn)));
 
-        // The return a property book is required to earn is the cap rate the market prices it on.
-        $targetYield = $macroState !== null ? self::marketCapRate($macroState) : $wacc;
+        // The return a property book is required to earn on historic-cost capital is its book cap rate.
+        $targetYield = $macroState !== null
+            ? self::bookCapRate((float) $stock->getBeta(), FixedAssetLedger::depreciationRateFor($stock), $macroState)
+            : $wacc;
 
         $stock->setRoicTtm((string) $this->revertTrailingReturn($stock, (float) $stock->getRoicTtm(), $truePostTaxReturn, $targetYield, self::TTM_ROIC_WEIGHT, abs($investedCapital), $macroState));
 

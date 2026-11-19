@@ -808,7 +808,12 @@ final class OperatingCapacityEngine
             return (float) $stored;
         }
 
-        $structuralTurnover = FirmEconomics::structuralAssetTurnover(max(0.01, (float) $ctx->stock->getBaselineRoic()), $ctx->stableMargin, $ctx->corporateTaxRate);
+        $structuralTurnover = $ctx->strategy->resolveStructuralAssetTurnover(
+            max(0.01, (float) $ctx->stock->getBaselineRoic()),
+            $ctx->stableMargin,
+            $ctx->corporateTaxRate,
+            $this->plant->resolveDepreciationRate($ctx),
+        );
         $ctx->stock->setAssetTurnover((string) $structuralTurnover);
 
         return $structuralTurnover;

@@ -12,7 +12,6 @@ use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Bond\RatingMethodology;
 use App\Service\Math\CreditRisk;
-use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\StochasticProcesses;
@@ -163,7 +162,12 @@ class DebtEngine
         if ($revenue <= 0.0) {
             $targetMetrics = $strategy->getTargetMetrics($stock, $macroState, $this->mathUtility);
             $investedCapital = $targetMetrics['invested_capital'];
-            $revenue = $investedCapital * FirmEconomics::structuralAssetTurnover((float) $targetMetrics['baseline_roic'], (float) $stock->getOperatingMargin(), $macroState->corporateTaxRate);
+            $revenue = $investedCapital * $strategy->resolveStructuralAssetTurnover(
+                (float) $targetMetrics['baseline_roic'],
+                (float) $stock->getOperatingMargin(),
+                $strategy->getEffectiveTaxRate($macroState->corporateTaxRate),
+                $this->resolveDepreciationRate($stock),
+            );
         }
 
         $margin = $overrideMargin ?? (float) $stock->getOperatingMargin();
@@ -730,12 +734,13 @@ class DebtEngine
         // reach the beta either. A trust's stakes earn their dividends and their price beside the operating return, so
         // they are worth their mark rather than their dividend capitalised.
         $assetCostOfCapital = self::assetCostOfCapital($stock, $macroState);
-        $businessValue = Valuation::operatingCapitalValue(
-            $stock->getInvestedCapital(),
-            $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), MarketPricingContext::anchorReturn($stock, $strategy), $assetCostOfCapital)
+        $businessValue = $strategy->resolveOperatingBusinessValue(
+            $stock,
+            $strategy->getValuationReturn(MarketPricingContext::trailingReturn($stock, $strategy), $strategy->resolveLongRunReturn($stock, $macroState), $assetCostOfCapital)
                 + $strategy->getExpectedHoldingReturn($stock, $assetCostOfCapital),
             $assetCostOfCapital,
             Valuation::calculateExpectedNominalGrowth(SegmentBooks::fadedSecularGrowth($strategy, $stock, $macroState->totalTime), $macroState->tipsBreakeven, $assetCostOfCapital),
+            $macroState,
         );
         $supportedEquity = $businessValue - (1.0 - $impliedTaxShieldRate) * $netDebtCapital;
         $debtToEquity = $supportedEquity > 0.0 ? ($netDebtCapital / $supportedEquity) : self::MAX_BETA_DEBT_TO_EQUITY;

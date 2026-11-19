@@ -96,3 +96,13 @@ target payout so the dividend leg pays the same cash (`affo_after.jsonl` vs `aff
 falls from 3.17-3.48 (q0) and 3.66-4.50 (q40) to 1.91-2.13 (q0) and 2.30-2.65 (q40); P/FFO at q0 drops from 15.8-16.5 to
 11.2-12.9 (dividend yield 4.9-5.9% at q0, 5.3-5.6% at q40); y10 D/E tracks `de_target` within 0.071. Flagged 10 -> 8 of
 103 (PLZA and ELDE margin flags gone; zero REIT flags).
+
+## REIT Plan B: cap rate, beta, rent growth, wear (11-20)
+One cap rate (`k_A - rent_growth + upkeep`) from `IndustryBetas::DISTRICT_REIT_ASSET_BETA = 0.68` (+2.13-2.58pp over the
+opening 4.62% 10Y) mapped to historic-cost book via `historicCostPropertyValueRatio()`; book/tax depreciation restored to
+3% (4% hotels) with separate 1.5% upkeep/AFFO reserve; `updateDynamicRoic()` measures NOI before depreciation and
+`resolveLongRunReturn()` tracks live `bookCapRate() + excess` (`RETURN_PERSISTENCE = 0.80`); `FairValue` grows REIT
+dividends at `tipsBreakeven` and values the book leg on property NAV (`reit_planb_after.jsonl` vs
+`reit_planb_before.jsonl` at 7e4025da; all 99 non-REIT firms bit-identical). Q1 return jump gone (`10.68 -> 12.3-12.7%`
+becomes `10.1-10.8% -> 10.2-10.9%`); P/B `1.91-2.05` (q0) and `1.83-2.00` (q40) vs `1.91-2.13 -> 2.30-2.65`; P/FFO
+`12.2-13.0` (q0) and `13.5-15.6` (q40); y10 D/E within 0.02 of `de_target`. Flagged 8/103 unchanged (zero REIT flags).
