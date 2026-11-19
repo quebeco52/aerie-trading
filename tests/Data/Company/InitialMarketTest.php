@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Data\Company;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryPayoutPolicies;
 use App\Data\Company\InitialMarket;
+use App\Data\Company\PayoutPolicy;
 use App\Data\Company\Sectors;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Market\Index\MarketIndex;
@@ -150,10 +152,7 @@ class InitialMarketTest extends TestCase
         $this->assertGreaterThanOrEqual(0.0, $stock['jump_vol'], "Jump volatility negative for {$ticker}");
 
         $this->assertGreaterThanOrEqual(0.0, $stock['capex_ratio'] ?? 0.0, "CapEx ratio negative for {$ticker}");
-        $this->assertGreaterThanOrEqual(0.0, $stock['target_payout_ratio'], "Target payout ratio negative for {$ticker}");
-        $this->assertLessThanOrEqual(1.0, $stock['target_payout_ratio'], "Target payout ratio exceeds 100% for {$ticker}");
 
-        $this->assertGreaterThan(0.0, $stock['dividendSpeed'], "Dividend speed non-positive for {$ticker}");
         $this->assertGreaterThanOrEqual(0.0, $stock['fixed_cost_ratio'], "Fixed cost ratio negative for {$ticker}");
         $this->assertLessThanOrEqual(1.0, $stock['fixed_cost_ratio'], "Fixed cost ratio exceeds 1.0 for {$ticker}");
 
@@ -190,9 +189,9 @@ class InitialMarketTest extends TestCase
     }
 
     /**
-     * A raw row states what sets the firm apart, not a default SeedRows fills in: no share count, a depreciation rate
-     * only where it differs from its industry's, and a reinvestment rate (capex_ratio) only on a lender, the one firm
-     * that reads it.
+     * A raw row states what sets the firm apart, not a default: no share count, a depreciation rate or dividend policy
+     * only where it differs from its industry's, no dividend speed (its model's), and a reinvestment rate (capex_ratio)
+     * only on a lender, the one firm that reads it.
      */
     public function testEveryRawRowStatesOnlyWhatSetsItApart(): void
     {
@@ -203,6 +202,11 @@ class InitialMarketTest extends TestCase
             if (isset($row['depreciation_rate'])) {
                 $this->assertNotEqualsWithDelta(Sectors::metricsFor($industry)['depreciation'], $row['depreciation_rate'], 1e-12, "{$ticker} restates its industry's depreciation rate.");
             }
+            if (isset($row['payout'])) {
+                $this->assertNotSame(IndustryPayoutPolicies::forIndustry($industry), PayoutPolicy::from((string) $row['payout']), "{$ticker} restates its industry's dividend policy.");
+            }
+            $this->assertArrayNotHasKey('target_payout_ratio', $row, "{$ticker} states a payout ratio; it names a dividend policy step.");
+            $this->assertArrayNotHasKey('dividendSpeed', $row, "{$ticker} states a dividend speed; its business model sets it.");
             $isLender = Sectors::isFinancial(Sectors::businessModelFor($industry));
             $this->assertSame($isLender, isset($row['capex_ratio']), $isLender ? "{$ticker} is a lender with no reinvestment rate." : "{$ticker} states a reinvestment rate its capital budget never reads.");
         }

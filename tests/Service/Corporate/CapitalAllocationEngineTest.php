@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate;
 
 use App\Data\Company\AnchorHoldings;
-use App\Data\Company\InitialMarket;
+use App\Data\Company\DividendTier;
 use App\Data\Company\ManagementStyle;
+use App\Data\Company\PayoutPolicy;
 use App\DTO\DebtHealthDTO;
 use App\DTO\DebtMetricsDTO;
 use App\DTO\MacroStateDTO;
@@ -15,6 +16,7 @@ use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateLedgerService;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\TreasuryEngine;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\Valuation;
@@ -22,6 +24,7 @@ use App\Service\Model\Sector\InsuranceBusinessModel;
 use App\Tests\Support\DebtHealthBuilder;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\AllowMockObjectsWithoutExpectations;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\MockObject\Stub;
 use PHPUnit\Framework\TestCase;
 
@@ -339,7 +342,7 @@ class CapitalAllocationEngineTest extends TestCase
         $this->assertEqualsWithDelta(4.0 * $result['dividend_paid'] / 100.00, $dividend[0]['fact']['yield'], 1e-9);
     }
 
-    public function testLifeCycleDividendExpansionUnderSaturation(): void
+    public function testSaturationRaisesThePayoutPolicyOneStepAtTheAnnualReview(): void
     {
         $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
         $this->corporateMetricsMock->method('getIndustryDepreciationRate')->willReturn(0.05);
@@ -363,7 +366,8 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setPrice('100.00');
         $stock->setTotalEquity('100000000');
         $stock->setCorporateTreasury('50000000');
-        $stock->setTargetPayoutRatio('0.30'); // baseline target is 30%
+        $stock->setPayoutPolicy(PayoutPolicy::Balanced);
+        $stock->setBasePayoutPolicy(PayoutPolicy::Balanced);
         $stock->setDividendSpeed('1.00');
         $stock->setLastDividend('0.00');
         $stock->setRetainedEarnings('50000000.00');
@@ -376,10 +380,116 @@ class CapitalAllocationEngineTest extends TestCase
 
         $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
 
-        // Trailing EPS = $8.00 ($2.00 a quarter). Under 100% saturation, effective payout is 85% ($1.70 per share)
+        // Trailing EPS = $8.00 ($2.00 a quarter). Mid-year the board pays its policy, saturated or not: 35% of $2.00.
         $result = $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState);
+        $this->assertEqualsWithDelta(0.70, $result['dividend_paid'], 0.0001, 'The policy moves only at the annual review.');
 
-        $this->assertEqualsWithDelta(1.70, $result['dividend_paid'], 0.0001, 'Saturated company should expand dividend payout to 85% under Life-Cycle physics');
+        // The first year's close that points up is not yet a lasting change, so the board waits.
+        $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState, isFiscalYearEnd: true);
+        $this->assertSame(PayoutPolicy::Balanced, $stock->getPayoutPolicy(), 'One review is not enough to change policy.');
+
+        // The second confirms it: the 85% saturation implies moves the policy one step, to income (50%), and says so.
+        $result = $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState, isFiscalYearEnd: true);
+        $this->assertSame(PayoutPolicy::Income, $stock->getPayoutPolicy(), 'One step at a time, not straight to the implied payout.');
+        $this->assertEqualsWithDelta(0.50, $stock->getPolicyPayoutRatio(), 1e-9);
+        $this->assertGreaterThan(0.70, $result['dividend_paid']);
+        $this->assertContains('Raised its dividend policy to income, 50% of earnings.', array_column($result['events'], 'description'));
+
+        // The next step takes two more reviews.
+        $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState, isFiscalYearEnd: true);
+        $this->assertSame(1, ($stock->getEarningsMomentumZ() ?? [])[CapitalAllocationEngine::STATE_PENDING_POLICY_STEP] ?? null, 'The step up waits on the next review.');
+        $this->assertEqualsWithDelta(0.50, $stock->getPolicyPayoutRatio(), 1e-9);
+        $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState, isFiscalYearEnd: true);
+        $this->assertSame(PayoutPolicy::Harvest, $stock->getPayoutPolicy());
+    }
+
+    /**
+     * A firm that reinvested 40% of its earnings for three years takes that as its reference; years putting nothing
+     * back free a quarter of its earnings or more (smoothed), half of which the dividend target takes, and the board
+     * steps up to income once two reviews agree. Years reinvesting everything it earns step it down to low.
+     */
+    #[DataProvider('reinvestmentShiftProvider')]
+    public function testTheAnnualReviewFollowsWhatTheFirmReinvests(float $laterReinvestment, PayoutPolicy $expected, string $headline): void
+    {
+        $this->corporateMetricsMock = $this->createStub(CorporateMetrics::class);
+        $this->corporateMetricsMock->method('getIndustryDepreciationRate')->willReturn(0.05);
+        $this->corporateMetricsMock->method('calculateLifeCyclePayoutRatio')->willReturnArgument(0);
+        $this->corporateMetricsMock->method('calculateOperatingBase')->willReturn(5000000.0);
+        $engine = new CapitalAllocationEngine($this->corporateLedgerServiceMock, $this->corporateMetricsMock, $this->debtEngineMock, $this->mathUtilityMock, $this->treasuryEngineMock);
+
+        $stock = new Stock();
+        $stock->setTicker('TEST_REINVEST');
+        $stock->setIndustry('Software - Infrastructure');
+        $stock->setSharesOutstanding('1000000');
+        $stock->setPrice('100.00');
+        $stock->setTotalEquity('100000000');
+        $stock->setCorporateTreasury('50000000');
+        $stock->setPayoutPolicy(PayoutPolicy::Balanced);
+        $stock->setBasePayoutPolicy(PayoutPolicy::Balanced);
+        $stock->setDividendSpeed('1.00');
+        $stock->setLastDividend('0.70');
+        $stock->setRetainedEarnings('50000000.00');
+        $stock->setTotalRevenue('10000000.00');
+        $stock->setOperatingMargin('0.20');
+        $stock->setWholesaleDebt('10000000.00');
+        $stock->setCustomerDeposits('0.00');
+        $stock->setRoicTtm('0.05');
+        $stock->setTotalNetIncome('8000000.00');
+        $macroState = new MacroStateDTO(corporateTaxRate: 0.21);
+
+        // Two years on record: too soon to take a reference, so the review holds.
+        for ($quarter = 0; $quarter < 8; $quarter++) {
+            CapitalAllocationEngine::recordReinvestment($stock, 800000.0, 2000000.0);
+        }
+        $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState, isFiscalYearEnd: true);
+        $this->assertArrayNotHasKey(CapitalAllocationEngine::STATE_REINVESTMENT_REFERENCE, $stock->getEarningsMomentumZ() ?? []);
+
+        // Three years: the reference is what it reinvests now, so the policy it opened on holds.
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            CapitalAllocationEngine::recordReinvestment($stock, 800000.0, 2000000.0);
+        }
+        $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState, isFiscalYearEnd: true);
+        $this->assertEqualsWithDelta(0.40, ($stock->getEarningsMomentumZ() ?? [])[CapitalAllocationEngine::STATE_REINVESTMENT_REFERENCE], 1e-9);
+        $this->assertSame(PayoutPolicy::Balanced, $stock->getPayoutPolicy());
+
+        // Three years on, the review points to a new step; the board moves once the next year's review confirms it.
+        for ($quarter = 0; $quarter < 12; $quarter++) {
+            CapitalAllocationEngine::recordReinvestment($stock, $laterReinvestment, 2000000.0);
+        }
+        $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState, isFiscalYearEnd: true);
+        $this->assertSame(PayoutPolicy::Balanced, $stock->getPayoutPolicy());
+        for ($quarter = 0; $quarter < 4; $quarter++) {
+            CapitalAllocationEngine::recordReinvestment($stock, $laterReinvestment, 2000000.0);
+        }
+        $result = $engine->allocateCapital($stock, 8.00, 2.00, 100.00, 1000000.0, $macroState, isFiscalYearEnd: true);
+        $this->assertSame($expected, $stock->getPayoutPolicy());
+        $this->assertContains($headline, array_column($result['events'], 'description'));
+    }
+
+    public static function reinvestmentShiftProvider(): array
+    {
+        return [
+            'stops building' => [0.0, PayoutPolicy::Income, 'Raised its dividend policy to income, 50% of earnings.'],
+            'builds with everything' => [2000000.0, PayoutPolicy::Low, 'Lowered its dividend policy to low, 20% of earnings.'],
+        ];
+    }
+
+    /**
+     * Each report rebuilds the firm's state map from what the quarterly physics registers and carries only keys under
+     * the carried prefix: the dividend record and the reinvestment the review reads must sit under it, or they are
+     * gone by the next report and every year-end compares against nothing.
+     */
+    public function testTheDividendStateSurvivesTheQuarterlyRebuild(): void
+    {
+        foreach ([
+            CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND,
+            CapitalAllocationEngine::STATE_REINVESTED,
+            CapitalAllocationEngine::STATE_EARNED,
+            CapitalAllocationEngine::STATE_REINVESTMENT_QUARTERS,
+            CapitalAllocationEngine::STATE_REINVESTMENT_REFERENCE,
+        ] as $key) {
+            $this->assertStringStartsWith(EarningsEngine::CARRIED_STATE_PREFIX, $key);
+        }
     }
 
     public function testSaturationBuybackUnlock(): void
@@ -544,7 +654,7 @@ class CapitalAllocationEngineTest extends TestCase
      * set on long-run earnings: on a profitable year of falling earnings each follows its target down at its own speed
      * where another payer holds its dividend, and borrows nothing to pay it.
      */
-    #[\PHPUnit\Framework\Attributes\DataProvider('commodityProducers')]
+    #[DataProvider('commodityProducers')]
     public function testACommodityProducerLetsItsDividendFallWithEarnings(string $industry): void
     {
         [$miner, $minerStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), industry: $industry);
@@ -567,7 +677,7 @@ class CapitalAllocationEngineTest extends TestCase
         $target = 1.00 * $peerStock->getPolicyPayoutRatio();
         $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $peer['dividend_paid'], 1e-9, 'After a loss a firm follows its target payout down at its own speed.');
         $this->assertSame(1.00, $aristocrat['dividend_paid'], 'An aristocrat holds its dividend through a loss year.');
-        $this->assertTrue($aristocratStock->isDividendAristocrat());
+        $this->assertSame(30, $aristocratStock->getDividendStreakYears());
     }
 
     /**
@@ -583,6 +693,37 @@ class CapitalAllocationEngineTest extends TestCase
         $target = 0.75 * $peerStock->getPolicyPayoutRatio();
         $this->assertEqualsWithDelta(1.00 + (0.10 * ($target - 1.00)), $peer['dividend_paid'], 1e-9, 'Earning $0.75 a quarter does not cover $1.00.');
         $this->assertSame(1.00, $aristocrat['dividend_paid']);
+    }
+
+    /** A year closed above the last adds a year to the record; the fifth puts the firm on the roll as a challenger. */
+    public function testAYearClosedAboveTheLastExtendsTheRecordAndAnnouncesATier(): void
+    {
+        [$result, $stock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), streak: 4, lastYearEndDividend: 0.90);
+
+        $this->assertSame(1.00, $result['dividend_paid'], 'Control: a covered dividend is held.');
+        $this->assertSame(5, $stock->getDividendStreakYears());
+        $this->assertSame(DividendTier::Challenger, $stock->getDividendTier());
+        $this->assertContains("Joined the exchange's dividend roll as a challenger after 5 years of dividend increases.", array_column($result['events'], 'description'));
+    }
+
+    /**
+     * A firm on the roll closes a flat year with a token raise and keeps its record; one off the roll does not, and
+     * neither does one whose earnings would not cover the raise.
+     */
+    public function testATokenRaiseCarriesARecordThroughAFlatYearOnlyOnTheRoll(): void
+    {
+        [$listed, $listedStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 12, lastYearEndDividend: 1.00);
+        [$unlisted, $unlistedStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4400000.00', streak: 3, lastYearEndDividend: 1.00);
+        [$uncovered, $uncoveredStock] = $this->payDividendOnFallingEarnings(false, $this->buildHealth(), trailingNetIncome: '4000000.00', streak: 12, lastYearEndDividend: 1.00);
+
+        $this->assertLessThanOrEqual(1.00, $uncovered['dividend_paid'], 'A raise to $1.01 a quarter on $1.00 of trailing earnings is not made.');
+        $this->assertSame(0, $uncoveredStock->getDividendStreakYears());
+
+        $this->assertEqualsWithDelta(1.00 * (1.0 + CapitalAllocationEngine::STREAK_TOKEN_RAISE), $listed['dividend_paid'], 1e-9);
+        $this->assertSame(13, $listedStock->getDividendStreakYears());
+        $this->assertSame(1.00, $unlisted['dividend_paid']);
+        $this->assertSame(0, $unlistedStock->getDividendStreakYears(), 'A flat year ends a record.');
+        $this->assertSame([], array_filter(array_column($unlisted['events'], 'description'), static fn(string $d): bool => str_contains($d, 'dividend roll')), 'A record short of the roll ends quietly.');
     }
 
     /** A dividend its earnings no longer cover is not borrowed for: the cash cap takes it, as after a loss year. */
@@ -603,8 +744,8 @@ class CapitalAllocationEngineTest extends TestCase
         [$result, $stock] = $this->payDividendOnFallingEarnings(true, $this->buildHealth(interestCoverage: 0.5));
 
         $this->assertSame(0.0, $result['dividend_paid'], 'Coverage below one omits the dividend, aristocrat or not.');
-        $this->assertFalse($stock->isDividendAristocrat());
-        $this->assertContains('Cut its dividend, ending its record of dividend increases.', array_column($result['events'], 'description'));
+        $this->assertSame(0, $stock->getDividendStreakYears());
+        $this->assertContains("Cut its dividend, ending 30 years of increases and its place on the exchange's dividend roll.", array_column($result['events'], 'description'));
     }
 
     /**
@@ -633,7 +774,7 @@ class CapitalAllocationEngineTest extends TestCase
         [$peer, , $peerBorrowed] = $this->payDividendShortOfCash(false, '-1000000.00');
 
         $this->assertEqualsWithDelta(1.00, $aristocrat['dividend_paid'], 1e-9);
-        $this->assertTrue($aristocratStock->isDividendAristocrat(), 'A funded dividend is not a cut.');
+        $this->assertSame(30, $aristocratStock->getDividendStreakYears(), 'A funded dividend is not a cut.');
         $this->assertCount(1, $borrowed);
         $this->assertSame([], $peerBorrowed);
         $this->assertSame(0.0, $peer['dividend_paid'], 'Control: without the record the cash cap takes the dividend.');
@@ -658,7 +799,7 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setTargetPayoutRatio('0.30');
         $stock->setDividendSpeed('0.10');
         $stock->setLastDividend('1.00');
-        $stock->setDividendAristocrat($aristocrat);
+        $stock->setDividendStreakYears($aristocrat ? 30 : 0);
         $stock->setRetainedEarnings('50000000.00');
         $stock->setTotalRevenue('10000000.00');
         $stock->setOperatingMargin('0.20');
@@ -706,7 +847,7 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setTotalEquity('100000000');
         $stock->setCorporateTreasury('50000000');
         $stock->setTargetPayoutRatio('0.30');
-        $stock->setDividendSpeed((string) InitialMarket::LINTNER_QUARTERLY_ADJUSTMENT_SPEED);
+        $stock->setDividendSpeed((string) FinancialConstants::LINTNER_QUARTERLY_ADJUSTMENT_SPEED);
         $stock->setLastDividend('0.10');
         $stock->setRetainedEarnings('50000000.00');
         $stock->setTotalRevenue('10000000.00');
@@ -780,7 +921,7 @@ class CapitalAllocationEngineTest extends TestCase
      *
      * @return array{0: array<string, mixed>, 1: Stock}
      */
-    private function payDividendOnFallingEarnings(bool $aristocrat, DebtHealthDTO $health, string $roic = '0.12', string $trailingNetIncome = '4000000.00', string $industry = 'Software - Infrastructure'): array
+    private function payDividendOnFallingEarnings(bool $aristocrat, DebtHealthDTO $health, string $roic = '0.12', string $trailingNetIncome = '4000000.00', string $industry = 'Software - Infrastructure', ?int $streak = null, ?float $lastYearEndDividend = null): array
     {
         $stock = new Stock();
         $stock->setTicker($aristocrat ? 'ARIS' : 'PEER');
@@ -792,7 +933,10 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setTargetPayoutRatio('0.30');
         $stock->setDividendSpeed('0.10');
         $stock->setLastDividend('1.00');
-        $stock->setDividendAristocrat($aristocrat);
+        $stock->setDividendStreakYears($streak ?? ($aristocrat ? 30 : 0));
+        if ($lastYearEndDividend !== null) {
+            $stock->setEarningsMomentumZ([CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND => $lastYearEndDividend]);
+        }
         $stock->setRetainedEarnings('50000000.00');
         $stock->setTotalRevenue('10000000.00');
         $stock->setOperatingMargin('0.20');
@@ -802,7 +946,7 @@ class CapitalAllocationEngineTest extends TestCase
         $stock->setTotalNetIncome($trailingNetIncome);
 
         $result = $this->buildEngineWith($this->debtEngineReturning($health))
-            ->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+            ->allocateCapital($stock, 4.00, 1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), isFiscalYearEnd: $lastYearEndDividend !== null);
 
         return [$result, $stock];
     }

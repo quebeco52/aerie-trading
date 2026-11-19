@@ -86,7 +86,8 @@ class ScreenerController extends AbstractController
                 'creditRating' => $stock->getCreditRating(),
                 // Sorted by credit quality, not alphabetically (A, AA, AAA, B, ...).
                 'creditRatingRank' => CreditRatingAgency::RATING_RANKS[$stock->getCreditRating()] ?? null,
-                'dividendAristocrat' => $stock->isDividendAristocrat(),
+                'dividendTier' => $stock->getDividendTier(),
+                'dividendStreak' => $stock->getDividendStreakYears(),
                 'currentRoic'  => $effectiveRoic,
                 'equity'       => $equity,
                 'debt'         => (float) $stock->getTotalDebt(),

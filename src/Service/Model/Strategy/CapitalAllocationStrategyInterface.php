@@ -19,6 +19,12 @@ interface CapitalAllocationStrategyInterface
      * year's earnings and lets the dividend fall with them.
      */
     public function holdsDividendThroughDownturns(): bool;
+
+    /**
+     * Share of the gap to its target dividend the board closes each quarter: the Lintner speed for a board that holds
+     * its dividend, much faster for one that pays a share of each year's earnings.
+     */
+    public function getDividendAdjustmentSpeed(): float;
     public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float;
     public function getRegulatoryDividendCap(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?float;
     public function checkBuybackRegulatoryLockout(Stock $stock, float $currentTreasury, ?MacroStateDTO $macroState = null): ?bool;

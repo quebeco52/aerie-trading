@@ -95,6 +95,8 @@ class CapitalAllocationContext
      * from.
      */
     public ?float $openingCapitalRatio = null;
+    /** The quarter closes the firm's fiscal year, when its board reviews its dividend policy. */
+    public bool $isFiscalYearEnd = false;
     /**
      * What a regulator's distribution ceiling leaves this quarter for repurchases once the dividend is paid; null when
      * none applies.

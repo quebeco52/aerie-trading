@@ -99,6 +99,10 @@ class FinancialConstants
     // --- Dividend Smoothing (Lintner 1956) ---
     /** Share of the gap to the target dividend closed in a year: Fama & Babiak (1968) firm-level mean. */
     public const LINTNER_ANNUAL_ADJUSTMENT_SPEED = 0.32;
+    /** The same speed per quarter, the cadence dividends are declared at (~9%): compounds to the annual one. */
+    public const LINTNER_QUARTERLY_ADJUSTMENT_SPEED = 1.0 - ((1.0 - self::LINTNER_ANNUAL_ADJUSTMENT_SPEED) ** 0.25);
+    /** A variable payer closes half the gap each quarter (mining, oil): its dividend follows the year's earnings. */
+    public const VARIABLE_PAYER_ADJUSTMENT_SPEED = 0.50;
 
     // --- Regulatory Capital Conservation Buffer (Basel III / Solvency II) ---
     /** Leverage overshoot ratio (1.05x) triggering Tier 1 Capital Conservation Buffer restriction (max 60% payout). */

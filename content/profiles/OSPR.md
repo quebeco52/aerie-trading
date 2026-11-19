@@ -30,7 +30,7 @@ security and logistics, and emergency deployments carry a mobilisation surcharge
 standing retainers make up a tenth each.
 
 The operating margin is about 22%, high for a business whose main cost is people, because clients facing the loss of a
-mine do not negotiate hard over the guard bill. The company pays out about 45% of earnings.
+mine do not negotiate hard over the guard bill. The company pays out about half its earnings.
 
 ## The collateral business
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Corporate;
 
 use App\Data\Company\AnchorHoldings;
+use App\Data\Company\DividendTier;
 use App\DTO\CapitalAllocationContext;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -37,6 +38,34 @@ class CapitalAllocationEngine
     // --- Leverage Targeting ---
     /** Share of the gap to its target leverage a firm closes each year: about a third (Flannery & Rangan 2006). */
     public const LEVERAGE_TARGET_ADJUSTMENT_SPEED = 0.34;
+
+    // --- Dividend Roll ---
+    /** State key: the dividend declared at the last fiscal year's close, the bar this year's must clear. */
+    public const STATE_YEAR_END_DIVIDEND = EarningsEngine::CARRIED_STATE_PREFIX . 'year_end_dividend';
+    /** Token raise (1%) a firm on the roll makes to close a weak year above the last one. */
+    public const STREAK_TOKEN_RAISE = 0.01;
+
+    // --- Payout Review ---
+    /** State key: the firm's net reinvestment (capex less depreciation) a quarter, smoothed. */
+    public const STATE_REINVESTED = EarningsEngine::CARRIED_STATE_PREFIX . 'payout_reinvested';
+    /** State key: its net income a quarter, smoothed over the same window. */
+    public const STATE_EARNED = EarningsEngine::CARRIED_STATE_PREFIX . 'payout_earned';
+    /** State key: quarters of reinvestment on record. */
+    public const STATE_REINVESTMENT_QUARTERS = EarningsEngine::CARRIED_STATE_PREFIX . 'payout_quarters';
+    /** State key: the share of earnings it reinvested when it settled on its opening policy, the board's reference. */
+    public const STATE_REINVESTMENT_REFERENCE = EarningsEngine::CARRIED_STATE_PREFIX . 'payout_reference';
+    /** State key: the step (+1 up, -1 down, 0 none) the last review pointed to, which this one must confirm. */
+    public const STATE_PENDING_POLICY_STEP = EarningsEngine::CARRIED_STATE_PREFIX . 'payout_pending_step';
+    /** Window the board reads its reinvestment over (3 years), so one heavy build year is not a new policy. */
+    public const REINVESTMENT_EMA_YEARS = 3.0;
+    /** Quarters on record (3 years) before the board takes its reference and reviews against it. */
+    public const REINVESTMENT_REFERENCE_QUARTERS = 12;
+    /**
+     * Share of the earnings freed (or newly needed) by a change in reinvestment that the dividend target takes (half):
+     * the rest goes to or comes from buybacks, which carry about half of what listed firms pay out (Grullon & Michaely
+     * 2002; Skinner 2008).
+     */
+    public const REINVESTMENT_PAYOUT_SHARE = 0.5;
 
     // --- Capital Allocation & Life-Cycle Physics ---
     /**
@@ -78,6 +107,7 @@ class CapitalAllocationEngine
         float $stockCompensation = 0.0,
         ?float $openingCapitalRatio = null,
         ?float $expansionBudget = null,
+        bool $isFiscalYearEnd = false,
     ): array {
         $ctx = new CapitalAllocationContext(
             $stock,
@@ -91,6 +121,7 @@ class CapitalAllocationEngine
             $expansionBudget,
         );
         $ctx->openingCapitalRatio = $openingCapitalRatio;
+        $ctx->isFiscalYearEnd = $isFiscalYearEnd;
 
         $this->initializeContext($ctx);
         $this->executeDividends($ctx);
@@ -147,22 +178,23 @@ class CapitalAllocationEngine
     {
         $stock = $ctx->stock;
 
-        // Bertrand & Schoar (2003): payout policy carries a persistent manager fixed effect. An empire
-        // builder retains what a steward would distribute, from the same balance sheet.
-        $targetPayout = $stock->getPolicyPayoutRatio();
-        $speed = (float) $stock->getDividendSpeed();
+        // A longer record of increases costs more to break, so its board smooths the dividend harder.
+        $tier = $stock->getDividendTier();
+        $speed = (float) $stock->getDividendSpeed() * $tier->smoothing();
         $lastDividend = (float) $stock->getLastDividend();
-        $isAristocrat = $stock->isDividendAristocrat();
 
         $customDepreciation = (float) $stock->getDepreciationRate();
         $depRate = $customDepreciation > 0.0 ? $customDepreciation : $this->corporateMetrics->getIndustryDepreciationRate($ctx->industry);
 
-        $trueReturn = $ctx->strategy->getTrueReturn($stock) + $ctx->strategy->getExpectedHoldingReturn($stock, DebtEngine::hurdleAssetCostOfCapital($stock, $ctx->macroState));
-
-        // Life-Cycle Payout Target Expansion (DeAngelo & DeAngelo 2006 / Jensen 1986) As a firm approaches market
-        // saturation, internal reinvestment slows and target payout scales toward cash cow levels.
-        $saturationSeverity = $this->resolveRedeploymentSeverity($ctx, $trueReturn);
-        $effectiveTargetPayout = $this->corporateMetrics->calculateLifeCyclePayoutRatio($targetPayout, $saturationSeverity);
+        // The board reviews its policy once a year: as the firm reinvests less of what it earns, or its market fills,
+        // the payout its position implies rises from the policy it opened on, and the board moves a step toward it.
+        if ($ctx->isFiscalYearEnd) {
+            $trueReturn = $ctx->strategy->getTrueReturn($stock) + $ctx->strategy->getExpectedHoldingReturn($stock, DebtEngine::hurdleAssetCostOfCapital($stock, $ctx->macroState));
+            $this->reviewPayoutPolicy($ctx, $this->resolveRedeploymentSeverity($ctx, $trueReturn));
+        }
+        // Bertrand & Schoar (2003): payout policy carries a persistent manager fixed effect. An empire
+        // builder retains what a steward would distribute, from the same balance sheet.
+        $effectiveTargetPayout = $stock->getPolicyPayoutRatio();
         // A tax on dividends shifts payout toward buybacks, a cut back toward dividends (Chetty & Saez 2005).
         $effectiveTargetPayout *= Valuation::dividendTaxPayoutScale($ctx->macroState->dividendTaxRate);
 
@@ -185,11 +217,11 @@ class CapitalAllocationEngine
         // Managers are reluctant to cut (Lintner 1956): a payer holds a dividend its year's earnings still cover while
         // they fall, and once they no longer cover it, a loss year the extreme case (DeAngelo, DeAngelo & Skinner
         // 1992), follows its target down at its own speed. Held past its earnings, a dividend was paid from debt until
-        // the lenders' covenant cut it. One known for an unbroken record of increases does not cut by choice even
-        // then; either one still cuts when the caps below force it to. A board paying a share of each year's earnings
+        // the lenders' covenant cut it. A champion of the dividend roll does not cut by choice even then; either one
+        // still cuts when the caps below force it to. A board paying a share of each year's earnings
         // holds nothing, and lets the dividend fall at its own speed.
         $isCoveredByEarnings = $lastDividend <= $earningsBase;
-        $holdsDividend = $isAristocrat || ($isCoveredByEarnings && $ctx->strategy->holdsDividendThroughDownturns());
+        $holdsDividend = $tier->holdsThroughLosses() || ($isCoveredByEarnings && $ctx->strategy->holdsDividendThroughDownturns());
         $targetDividend = $holdsDividend ? max($calculatedTarget, $lastDividend) : $calculatedTarget;
 
         $isRegulatoryDividendHalt = false;
@@ -228,11 +260,16 @@ class CapitalAllocationEngine
             $targetDividend = min($targetDividend, $lastDividend);
         }
 
-        if ($saturationSeverity > 0.20 && $calculatedTarget > $lastDividend) {
-            $speed = min(1.0, $speed + ($saturationSeverity * 0.10));
-        }
-
         $ctx->newDividend = max(0.0, $lastDividend + ($speed * ($targetDividend - $lastDividend)));
+        // A firm on the roll protects its record (Brav, Graham, Harvey & Michaely 2005): a year that would close no
+        // higher than the last is closed with a token raise, unless a crisis, a regulator or a covenant forbids one, or
+        // the year's earnings would not cover it: boards raise only a dividend they expect to sustain. The caps below
+        // still bind, so a firm that cannot afford it loses its record.
+        $lastYearEndDividend = (float) (($stock->getEarningsMomentumZ() ?? [])[self::STATE_YEAR_END_DIVIDEND] ?? 0.0);
+        $tokenDividend = $lastYearEndDividend * (1.0 + self::STREAK_TOKEN_RAISE);
+        if ($ctx->isFiscalYearEnd && $tier->isListed() && $lastYearEndDividend > 0.0 && $tokenDividend <= $ctx->trailingQuarterlyEps && !$isLiquidityCrisis && !$isRegulatoryDividendHalt && $ctx->health->hasLeverageHeadroom) {
+            $ctx->newDividend = max($ctx->newDividend, $tokenDividend);
+        }
         // The tier caps what is paid, not only what the board aims at: smoothed from a dividend above it, the payment
         // would pass the cap for years, and the firm would borrow to pay it out of the capital the tier is rebuilding.
         if ($regulatoryCap !== null && $regulatoryCap > 0.0) {
@@ -293,12 +330,7 @@ class CapitalAllocationEngine
             $ctx->distributionRoom = max(0.0, $quarterCeiling - ($ctx->newDividend * $ctx->sharesOutstanding));
         }
 
-        // Any cut ends the record the aristocrat was known for, whatever forced it. Read at the four decimals a
-        // dividend is declared and stored in, so float dust from a funded shortfall is not a cut.
-        if ($isAristocrat && round($ctx->newDividend, 4) < $lastDividend) {
-            $stock->setDividendAristocrat(false);
-            $ctx->events[] = ['description' => 'Cut its dividend, ending its record of dividend increases.', 'shock' => 0.0];
-        }
+        $this->updateDividendStreak($ctx, $lastDividend, $tier);
         // Every share outstanding is paid, so the treasury debit below covers the whole register. Only
         // player-held shares are credited to a cash balance by the ledger service; the remainder is the
         // notional public float and simply leaves the company. The two are not meant to reconcile.
@@ -319,6 +351,127 @@ class CapitalAllocationEngine
 
         $ctx->newTreasury -= $ctx->totalPaid;
         $ctx->retainedEarningsThisQuarter = max(0.0, $ctx->quarterlyNetIncome - $ctx->totalPaid);
+    }
+
+    /**
+     * The firm's record of increases: any cut ends it, whatever forced it, and at the year's close a dividend higher
+     * than the last year's adds a year and one no higher ends it. Read at the four decimals a dividend is declared and
+     * stored in, so float dust from a funded shortfall is not a cut. Joining a tier of the roll, or leaving it, is
+     * announced.
+     */
+    private function updateDividendStreak(CapitalAllocationContext $ctx, float $lastDividend, DividendTier $tier): void
+    {
+        $stock = $ctx->stock;
+        $paid = round($ctx->newDividend, 4);
+        $streak = $stock->getDividendStreakYears();
+        $isCut = $paid < $lastDividend;
+        $isEnded = $isCut;
+
+        if ($ctx->isFiscalYearEnd) {
+            $state = $stock->getEarningsMomentumZ() ?? [];
+            $isRaised = $paid > 0.0 && $paid > round((float) ($state[self::STATE_YEAR_END_DIVIDEND] ?? 0.0), 4);
+            $state[self::STATE_YEAR_END_DIVIDEND] = $paid;
+            $stock->setEarningsMomentumZ($state);
+            $isEnded = $isEnded || !$isRaised;
+            if (!$isEnded) {
+                $stock->setDividendStreakYears($streak + 1);
+                $joined = $stock->getDividendTier();
+                if ($joined !== $tier) {
+                    $ctx->events[] = ['description' => self::rollHeadline($joined, $streak + 1), 'shock' => 0.0];
+                }
+
+                return;
+            }
+        }
+
+        if (!$isEnded || $streak === 0) {
+            return;
+        }
+        $stock->setDividendStreakYears(0);
+        if ($tier->isListed()) {
+            $action = $isCut ? 'Cut its dividend' : 'Held its dividend flat for the year';
+            $ctx->events[] = ['description' => "{$action}, ending {$streak} years of increases and its place on the exchange's dividend roll.", 'shock' => 0.0];
+        }
+    }
+
+    /** The headline for a firm reaching a tier of the dividend roll. */
+    private static function rollHeadline(DividendTier $tier, int $years): string
+    {
+        return match ($tier) {
+            DividendTier::Challenger => "Joined the exchange's dividend roll as a challenger after {$years} years of dividend increases.",
+            DividendTier::King => "Became a dividend king: {$years} years of dividend increases.",
+            default => 'Rose to ' . strtolower($tier->label()) . " on the exchange's dividend roll after {$years} years of dividend increases.",
+        };
+    }
+
+    /**
+     * Records the quarter's net reinvestment and earnings the annual payout review reads, each smoothed over the same
+     * window so their ratio is the share of earnings the firm has been putting back into the business.
+     */
+    public static function recordReinvestment(Stock $stock, float $netReinvestment, float $netIncome): void
+    {
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        $reinvested = isset($state[self::STATE_REINVESTED]) ? (float) $state[self::STATE_REINVESTED] : null;
+        $earned = isset($state[self::STATE_EARNED]) ? (float) $state[self::STATE_EARNED] : null;
+        $state[self::STATE_REINVESTED] = TimeSeries::ewmaLevel($reinvested, $netReinvestment, FinancialConstants::QUARTER_YEARS, self::REINVESTMENT_EMA_YEARS);
+        $state[self::STATE_EARNED] = TimeSeries::ewmaLevel($earned, $netIncome, FinancialConstants::QUARTER_YEARS, self::REINVESTMENT_EMA_YEARS);
+        $state[self::STATE_REINVESTMENT_QUARTERS] = (int) ($state[self::STATE_REINVESTMENT_QUARTERS] ?? 0) + 1;
+        $stock->setEarningsMomentumZ($state);
+    }
+
+    /**
+     * How far the payout the firm's reinvestment implies has moved from its reference: half of each point of earnings
+     * it no longer reinvests. The share is read between nothing and everything it earns: a firm building past its
+     * earnings funds the rest outside and can retain no more than all of them. Zero until three years are on record,
+     * which is when the reference is taken, in a year its smoothed earnings are not positive, and for a pass-through,
+     * whose payout the distribution rule sets.
+     */
+    private static function reinvestmentPayoutShift(CapitalAllocationContext $ctx): float
+    {
+        $stock = $ctx->stock;
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        $earned = (float) ($state[self::STATE_EARNED] ?? 0.0);
+        if ((int) ($state[self::STATE_REINVESTMENT_QUARTERS] ?? 0) < self::REINVESTMENT_REFERENCE_QUARTERS || $earned <= 0.0 || $ctx->strategy->getMinimumDistributionRatio() > 0.0) {
+            return 0.0;
+        }
+        $share = max(0.0, min(1.0, (float) ($state[self::STATE_REINVESTED] ?? 0.0) / $earned));
+        if (!isset($state[self::STATE_REINVESTMENT_REFERENCE])) {
+            $state[self::STATE_REINVESTMENT_REFERENCE] = $share;
+            $stock->setEarningsMomentumZ($state);
+        }
+
+        return self::REINVESTMENT_PAYOUT_SHARE * ((float) $state[self::STATE_REINVESTMENT_REFERENCE] - $share);
+    }
+
+    /**
+     * The annual review (DeAngelo & DeAngelo 2006 life cycle, Jensen 1986): the payout the firm's position implies is
+     * the policy it opened on, plus what it no longer needs to reinvest, plus what its saturated market cannot absorb.
+     * A board changes policy only on a change it believes will last (Lintner 1956), so the policy moves a step toward
+     * it once two reviews in a row point the same way, and a change is announced.
+     */
+    private function reviewPayoutPolicy(CapitalAllocationContext $ctx, float $saturationSeverity): void
+    {
+        $stock = $ctx->stock;
+        $current = $stock->getPayoutPolicy();
+        $base = $stock->getBasePayoutPolicy()->ratio();
+        $saturationShift = $this->corporateMetrics->calculateLifeCyclePayoutRatio($base, $saturationSeverity) - $base;
+        $implied = $base + self::reinvestmentPayoutShift($ctx) + $saturationShift;
+        $reviewed = $current->reviewed($implied);
+        $direction = $reviewed->rank() <=> $current->rank();
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        $confirmed = $direction !== 0 && (int) ($state[self::STATE_PENDING_POLICY_STEP] ?? 0) === $direction;
+        $state[self::STATE_PENDING_POLICY_STEP] = $confirmed ? 0 : $direction;
+        $stock->setEarningsMomentumZ($state);
+        if (!$confirmed) {
+            return;
+        }
+
+        $stock->setPayoutPolicy($reviewed);
+        $verb = $reviewed->rank() > $current->rank() ? 'Raised' : 'Lowered';
+        $ctx->events[] = [
+            'description' => "{$verb} its dividend policy to " . strtolower($reviewed->label()) . ', ' . WireFormat::percent($reviewed->ratio(), 0) . ' of earnings.',
+            'shock' => 0.0,
+        ];
     }
 
     private function executeCorporateStrategy(CapitalAllocationContext $ctx): void

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryPayoutPolicies;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -103,8 +104,9 @@ final class CapitalSaturationInvariantTest extends TestCase
         if (isset($row['capex_ratio'])) {
             $stock->setCapexRatio((string) $row['capex_ratio']);
         }
-        $stock->setTargetPayoutRatio((string) $row['target_payout_ratio']);
-        $stock->setDividendSpeed((string) $row['dividendSpeed']);
+        $stock->setPayoutPolicy(IndustryPayoutPolicies::forRow($row));
+        $stock->setBasePayoutPolicy(IndustryPayoutPolicies::forRow($row));
+        $stock->setDividendSpeed((string) Sectors::strategyFor($row['industry'])->getDividendAdjustmentSpeed());
         $stock->setFixedCostRatio((float) $row['fixed_cost_ratio']);
         $stock->setOperatingMargin((string) $row['operating_margin']);
         $stock->setDepreciationRate((string) $row['depreciation_rate']);

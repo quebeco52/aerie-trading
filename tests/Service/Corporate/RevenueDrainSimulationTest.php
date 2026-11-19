@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryPayoutPolicies;
+use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\EarningsEngine;
@@ -200,8 +202,9 @@ class RevenueDrainSimulationTest extends TestCase
         $stock->setBaselineRoic((string) ($data['baseline_roic'] ?? 0.15));
         $stock->setBaselineRoe((string) ($data['baseline_roe'] ?? 0.15));
         $stock->setOperatingMargin((string) ($data['operating_margin'] ?? 0.18));
-        $stock->setTargetPayoutRatio((string) ($data['target_payout_ratio'] ?? 0.30));
-        $stock->setDividendSpeed((string) ($data['dividendSpeed'] ?? 0.20));
+        $stock->setPayoutPolicy(IndustryPayoutPolicies::forRow($data));
+        $stock->setBasePayoutPolicy(IndustryPayoutPolicies::forRow($data));
+        $stock->setDividendSpeed((string) Sectors::strategyFor((string) $data['industry'])->getDividendAdjustmentSpeed());
         $stock->setCapexRatio((string) ($data['capex_ratio'] ?? 0.20));
         $stock->setSamRatio((string) ($data['sam_ratio'] ?? 0.05));
         $stock->setFixedCostRatio((float) ($data['fixed_cost_ratio'] ?? 0.35));

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Tests\Service\Market\Pricing;
 
 use App\Data\Company\AnchorHoldings;
+use App\Data\Company\DividendTier;
+use App\Data\Company\IndustryPayoutPolicies;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
@@ -101,27 +103,28 @@ class OpeningBoardBuilderTest extends TestCase
     }
 
     /**
-     * An aristocrat is a record of increases, not an adjustment speed. The seed names about the share of payers the
-     * S&P 500 Dividend Aristocrats are of that index (about 13%), and the board opens with exactly those firms
-     * carrying it. Reading it off a slow speed made 35 of 77 payers aristocrats.
+     * A place on the dividend roll is a record of increases, not an adjustment speed. The seed names champions in about
+     * the share of payers the S&P 500 Dividend Aristocrats are of that index (about 13%), and the board opens with
+     * exactly the streaks the seed names.
      */
-    public function testTheBoardOpensWithTheAristocratsTheSeedNames(): void
+    public function testTheBoardOpensWithTheStreaksTheSeedNames(): void
     {
         $board = $this->openBoard(new MacroStateDTO());
         $payers = 0;
-        $aristocrats = 0;
+        $champions = 0;
 
         foreach (SeedRows::all() as $row) {
-            $isPayer = (float) $row['target_payout_ratio'] > 0.0;
-            $named = (bool) ($row['dividend_aristocrat'] ?? false);
+            $isPayer = IndustryPayoutPolicies::forRow($row)->ratio() > 0.0;
+            $streak = (int) ($row['dividend_streak'] ?? 0);
+            $named = $streak >= DividendTier::CHAMPION_YEARS;
 
-            $this->assertSame($named, $board[$row['ticker']]->isDividendAristocrat(), "{$row['ticker']} opens with the wrong aristocrat standing.");
-            $this->assertTrue($isPayer || !$named, "{$row['ticker']} is named an aristocrat without paying a dividend.");
+            $this->assertSame($streak, $board[$row['ticker']]->getDividendStreakYears(), "{$row['ticker']} opens with the wrong record of increases.");
+            $this->assertTrue($isPayer || !$named, "{$row['ticker']} is named a champion without paying a dividend.");
             $payers += $isPayer ? 1 : 0;
-            $aristocrats += $named ? 1 : 0;
+            $champions += $named ? 1 : 0;
         }
 
-        $this->assertEqualsWithDelta(0.13, $aristocrats / $payers, 0.03);
+        $this->assertEqualsWithDelta(0.13, $champions / $payers, 0.03);
     }
 
     /**

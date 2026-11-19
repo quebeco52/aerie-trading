@@ -30,7 +30,7 @@ protection against a fall, which Peregrine keeps when the market turns out calme
 40% comes from trading, the bid-ask spread on the orders it fills and the retail order flow it internalises.
 
 The firm takes no view on direction. It hedges continuously to keep its book close to delta-neutral, on its own trading
-hardware and a private microwave network. The operating margin is about 35%, and it pays out about 40% of earnings.
+hardware and a private microwave network. The operating margin is about 35%, and it pays out about 35% of earnings.
 
 ## The hedge that pays twice
 

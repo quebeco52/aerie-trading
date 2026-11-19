@@ -54,7 +54,7 @@ the syndicated loans it leads. Fees from payments, payroll and the licence for t
 of revenue.
 
 By District standards the bank is run conservatively. It holds capital well above the Financial Regulator's requirement,
-pays out about 40% of earnings and keeps the rest for the next downturn. Plover Savings Bank is its only real competitor
+pays out about 35% of earnings and keeps the rest for the next downturn. Plover Savings Bank is its only real competitor
 for mortgages, and Brine Pool Capital lends where Lakebird is held back by the Regulator's capital rules.
 
 ## What the desk is watching

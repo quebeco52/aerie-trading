@@ -41,8 +41,7 @@ wait. A former chair put the philosophy on the wall of the boardroom: "Capital i
 
 ## How it earns
 
-Income is mostly dividends from the companies it holds and distributions from the concessions it owns. The Trust pays
-out about 60% of what it earns, the dividend the Foundation's grants depend on, and it has risen steadily. It carries little debt and a large reserve of cash
+Income is mostly dividends from the companies it holds and distributions from the concessions it owns. The Trust pays out about half of what it earns, the dividend the Foundation's grants depend on, and it has risen steadily. It carries little debt and a large reserve of cash
 and Exchequer bonds, which the family calls ballast. In a credit crunch the ballast is the point: when banks stop
 lending, Breakwater takes up its full share of every rights issue its companies make, which can be the difference
 between an issue that clears and one that fails.

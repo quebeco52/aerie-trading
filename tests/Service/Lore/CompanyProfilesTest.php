@@ -6,6 +6,7 @@ namespace App\Tests\Service\Lore;
 
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryPayoutPolicies;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\StockModelTuning;
 use App\Service\Lore\Almanac;
@@ -70,6 +71,12 @@ class CompanyProfilesTest extends TestCase
         }
 
         $this->assertSame([], $broken, 'These links point at no Almanac entry.');
+    }
+
+    /** The share of earnings the firm's opening dividend policy targets. */
+    private static function payout(string $ticker): float
+    {
+        return IndustryPayoutPolicies::forRow(self::seed($ticker))->ratio();
     }
 
     /** @return array<string, mixed> */
@@ -138,7 +145,7 @@ class CompanyProfilesTest extends TestCase
     {
         $tuning = static fn(string $ticker, ModelParam $param): float => StockModelTuning::get($ticker, $param, NAN);
 
-        yield 'LAKE payout' => ['LAKE', 'pays out about 40% of earnings', self::seed('LAKE')['target_payout_ratio'], 0.40];
+        yield 'LAKE payout' => ['LAKE', 'pays out about 35% of earnings', self::payout('LAKE'), 0.35];
         yield 'LAKE fees' => ['LAKE', 'add a further fifth of revenue', $tuning('LAKE', ModelParam::FeeRevenueWeight), 0.20];
         yield 'LAKE syndicate' => ['LAKE', 'a steady fifth of its revenue', $tuning('LAKE', ModelParam::ProprietaryDividendWeight), 0.20];
         yield 'LAKE mortgages' => ['LAKE', 'close to a third of the loan book', $tuning('LAKE', ModelParam::ResidentialMortgageShare), 0.30];
@@ -148,7 +155,7 @@ class CompanyProfilesTest extends TestCase
         yield 'SWAN beta' => ['SWAN', 'beta of about 0.9', self::beta('SWAN'), 0.90, self::BETA_ROUNDING];
         yield 'SAFE mutual' => ['SAFE', 'the mutual kept about 30% of the shares', 1.0 - self::seed('SAFE')['public_float'], 0.30];
         yield 'SAFE treaties' => ['SAFE', 'About 97% of revenue comes from these reinsurance treaties', $tuning('SAFE', ModelParam::TreatyReinsuranceWeight), 0.97];
-        yield 'SAFE payout' => ['SAFE', 'pays out about 30% of earnings', self::seed('SAFE')['target_payout_ratio'], 0.30];
+        yield 'SAFE payout' => ['SAFE', 'pays out about 35% of earnings', self::payout('SAFE'), 0.35];
         yield 'SAFE beta' => ['SAFE', 'beta of about 0.2', self::beta('SAFE'), 0.20, self::BETA_ROUNDING];
         yield 'BRKW foundation' => ['BRKW', 'holds about a quarter of the shares', 1.0 - self::seed('BRKW')['public_float'], 0.25];
         yield 'BRKW Crossbill' => ['BRKW', 'owns half of Crossbill', AnchorHoldings::forHolder('BRKW')['CBIL'], 0.50];
@@ -156,7 +163,7 @@ class CompanyProfilesTest extends TestCase
         foreach (['ALBT', 'KSTL', 'BIRD', 'ERNE'] as $held) {
             yield "BRKW $held" => ['BRKW', 'just over a third of four more', AnchorHoldings::forHolder('BRKW')[$held], 0.35];
         }
-        yield 'BRKW payout' => ['BRKW', 'pays out about 60% of what it earns', self::seed('BRKW')['target_payout_ratio'], 0.60];
+        yield 'BRKW payout' => ['BRKW', 'pays out about half of what it earns', self::payout('BRKW'), 0.50];
         yield 'BRKW beta' => ['BRKW', 'beta of about 0.9', self::beta('BRKW'), 0.90, self::BETA_ROUNDING];
         yield 'IBHI owners' => ['IBHI', 'hold about 55% of the shares between them', 1.0 - self::seed('IBHI')['public_float'], 0.55];
         yield 'IBHI civil' => ['IBHI', 'About 60% of revenue comes from civil infrastructure', $tuning('IBHI', ModelParam::CivilInfrastructureWeight), 0.60];
@@ -167,13 +174,13 @@ class CompanyProfilesTest extends TestCase
         yield 'PERE options' => ['PERE', 'About 60% of revenue comes from writing options', $tuning('PERE', ModelParam::OptionsPremiumIncomeWeight), 0.60];
         yield 'PERE trading' => ['PERE', 'The other 40% comes from trading', $tuning('PERE', ModelParam::TradingRevenueWeight), 0.40];
         yield 'PERE margin' => ['PERE', 'operating margin is about 35%', self::seed('PERE')['operating_margin'], 0.35];
-        yield 'PERE payout' => ['PERE', 'pays out about 40% of earnings', self::seed('PERE')['target_payout_ratio'], 0.40];
+        yield 'PERE payout' => ['PERE', 'pays out about 35% of earnings', self::payout('PERE'), 0.35];
         yield 'PERE beta' => ['PERE', 'beta of about 0.9', self::beta('PERE'), 0.90, self::BETA_ROUNDING];
         yield 'CORV partners' => ['CORV', 'still hold about 15% of the shares', 1.0 - self::seed('CORV')['public_float'], 0.15];
         yield 'CORV advisory' => ['CORV', 'those fees are about a quarter of revenue', $tuning('CORV', ModelParam::AdvisoryRevenueWeight), 0.25];
         yield 'CORV trading' => ['CORV', 'The other 75% comes from its own trading desks', $tuning('CORV', ModelParam::TradingRevenueWeight), 0.75];
         yield 'CORV margin' => ['CORV', 'operating margin is about 45%', self::seed('CORV')['operating_margin'], 0.45];
-        yield 'CORV payout' => ['CORV', 'pays out about 30% of earnings', self::seed('CORV')['target_payout_ratio'], 0.30];
+        yield 'CORV payout' => ['CORV', 'pays out about 35% of earnings', self::payout('CORV'), 0.35];
         yield 'CORV beta' => ['CORV', 'beta of about 0.9', self::beta('CORV'), 0.90, self::BETA_ROUNDING];
         yield 'WATCH concessions' => ['WATCH', 'about 40% of revenue', $tuning('WATCH', ModelParam::GovernmentContractWeight), 0.40];
         // Private clients buy guarding, the cash rounds and Black Label's counter-espionage on the same retainers.
@@ -183,7 +190,7 @@ class CompanyProfilesTest extends TestCase
         yield 'TRIV industrial' => ['TRIV', 'About two thirds of revenue comes from industrial products', $tuning('TRIV', ModelParam::IndustrialConglomerateWeight), 0.67];
         yield 'TRIV household' => ['TRIV', 'about a third from household goods', $tuning('TRIV', ModelParam::DefensiveStaplesWeight), 0.33];
         yield 'TRIV margin' => ['TRIV', 'operating margin is about 16%', self::seed('TRIV')['operating_margin'], 0.16];
-        yield 'TRIV payout' => ['TRIV', 'pays out about half its earnings', self::seed('TRIV')['target_payout_ratio'], 0.50];
+        yield 'TRIV payout' => ['TRIV', 'pays out about half its earnings', self::payout('TRIV'), 0.50];
         yield 'TRIV beta' => ['TRIV', 'beta of about 0.6', self::beta('TRIV'), 0.60, self::BETA_ROUNDING];
         yield 'TICK subscriptions' => ['TICK', 'About 90% of revenue is subscriptions', $tuning('TICK', ModelParam::SubscriptionRevenueWeight), 0.90];
         yield 'TICK margin' => ['TICK', 'operating margin is about 55%', self::seed('TICK')['operating_margin'], 0.55];
@@ -193,14 +200,14 @@ class CompanyProfilesTest extends TestCase
         yield 'GRIP development' => ['GRIP', 'A fifth comes from fixed-price development', $tuning('GRIP', ModelParam::FixedPriceDevWeight), 0.20];
         yield 'GRIP exports' => ['GRIP', 'The last fifth is exports', $tuning('GRIP', ModelParam::ForeignMilitarySalesWeight), 0.20];
         yield 'GRIP margin' => ['GRIP', 'operating margin is about 14%', self::seed('GRIP')['operating_margin'], 0.14];
-        yield 'GRIP payout' => ['GRIP', 'pays out about 45% of earnings', self::seed('GRIP')['target_payout_ratio'], 0.45];
+        yield 'GRIP payout' => ['GRIP', 'pays out about half its earnings', self::payout('GRIP'), 0.50];
         yield 'GRIP beta' => ['GRIP', 'beta of about 0.6', self::beta('GRIP'), 0.60, self::BETA_ROUNDING];
         yield 'OSPR insiders' => ['OSPR', 'still hold about a tenth of the company', 1.0 - self::seed('OSPR')['public_float'], 0.10];
         yield 'OSPR deployments' => ['OSPR', 'About 80% of revenue comes from deployments abroad', $tuning('OSPR', ModelParam::ExpeditionaryWeight), 0.80];
         yield 'OSPR government' => ['OSPR', 'Government contracts and standing retainers make up a tenth each', $tuning('OSPR', ModelParam::GovernmentContractWeight), 0.10];
         yield 'OSPR retainers' => ['OSPR', 'Government contracts and standing retainers make up a tenth each', $tuning('OSPR', ModelParam::RetainerWeight), 0.10];
         yield 'OSPR margin' => ['OSPR', 'operating margin is about 22%', self::seed('OSPR')['operating_margin'], 0.22];
-        yield 'OSPR payout' => ['OSPR', 'pays out about 45% of earnings', self::seed('OSPR')['target_payout_ratio'], 0.45];
+        yield 'OSPR payout' => ['OSPR', 'pays out about half its earnings', self::payout('OSPR'), 0.50];
         yield 'OSPR beta' => ['OSPR', 'beta of about 0.55', self::beta('OSPR'), 0.55, self::BETA_ROUNDING];
         yield 'GRIP export ban' => ['GRIP', 'take half the export book', 1.0 - DefenseContractorBusinessModel::EXPORT_BAN_MULT, 0.50];
     }

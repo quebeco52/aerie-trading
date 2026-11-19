@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Render;
 
+use App\Data\Company\DividendTier;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\StockInfo;
 use App\Entity\StockEvent;
@@ -25,7 +26,10 @@ final class PagesRenderTest extends KernelTestCase
         mt_srand(11);
 
         $stocks = [];
-        foreach (array_slice(InitialMarket::STOCKS, 0, 24) as $s) {
+        // One firm in each tier of the dividend roll, so the screener shows every badge.
+        $rollStreaks = [5 => 6, 6 => 12, 7 => 31, 8 => 56];
+        foreach (array_slice(InitialMarket::STOCKS, 0, 24) as $i => $s) {
+            $streak = $rollStreaks[$i] ?? (int) ($s['dividend_streak'] ?? 0);
             $price = mt_rand(800, 42000) / 100;
             $shares = mt_rand(50, 900) * 1_000_000;
             $stocks[] = [
@@ -37,6 +41,7 @@ final class PagesRenderTest extends KernelTestCase
                 'debtToEquity' => mt_rand(10, 300) / 100, 'netDebtToEbitda' => mt_rand(-50, 550) / 100,
                 'fcfConversion' => mt_rand(40, 130) / 100,
                 'creditRating' => 'BBB', 'creditRatingRank' => 4,
+                'dividendStreak' => $streak, 'dividendTier' => DividendTier::fromStreak($streak),
             ];
         }
         $this->assertArrayHasKey(3, $stocks);

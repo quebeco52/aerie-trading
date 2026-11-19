@@ -45,8 +45,7 @@ will be there to pay.
 ## How it is run
 
 Management is conservative even by the standards of reinsurance. Premiums are invested mainly in Exchequer bonds and
-other high-grade reserve assets, capital is held well beyond what the rules require, and the company pays out about 30%
-of earnings, keeping the rest for the year it will need it. In quiet years this looks like hoarding, and shareholders
+other high-grade reserve assets, capital is held well beyond what the rules require, and the company pays out about 35% of earnings, keeping the rest for the year it will need it. In quiet years this looks like hoarding, and shareholders
 say so at most annual meetings.
 
 ## What the desk is watching

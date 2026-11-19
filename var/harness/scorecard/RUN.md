@@ -97,3 +97,50 @@ that real economies span, so a change is judged on the board, not on one firm.
   Defaulters 0.94 both (t 0), deaths 0.06 -> 0. Margin sd >10pp 5.0 -> 5.6 (t +2.3, both already out of range).
   Not settled at 16; 48 seeds would be the last stage (64 more runs, ~18 min).
 
+
+## Payout policy 11-19 (4 seeds x 20y, TPY 360)
+- Question: is the board sensible with annual PayoutPolicy steps (retain/low/balanced/income/harvest, reviewed at fiscal
+  year end by CapitalAllocationEngine::reviewPayoutPolicy), and how often do firms move? Arms: `pbase` = dfef1d97 as a
+  BASE tree (git archive in the session scratchpad, vendor symlinked), `pay` = working tree. Harness
+  `PayoutHarnessTest.php` (scorecard record + `tpr`/`dspd` per quarter row, `tpr0` in meta, "dividend policy" event
+  lines in `pol`). Run: `PAY_BASE=<tree> bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pbase pay` (140 s
+  wall), then `python3 payout.py pbase pay; python3 scorecard.py pbase pay` -> `payout_policy_4s.out`.
+- Policy moves are rare: 4.5 raises + 1.25 cuts a run, 0.028 changes per firm per decade; 100.8 of 103 firms never
+  move. Only SKYL (retain -> income by y17 in 3/4 seeds), SAFE (balanced <-> income), DOVE, SILC move. Cause: the
+  implied ratio is max(base, base + (0.85 - base) x severity) (CorporateMetrics:466), so it never falls below the
+  opening step, and severity is near 0 for nearly every firm. A cut is only ever a return to base.
+- Flip-flops within 3y: 1.25 a run (SAFE 3, SKYL 2 over 4 seeds). Harvest: 14 at y0, 14 at y20 (no firm reaches it).
+- Board dividends (pay - pbase, paired): median payout of payers 0.367 -> 0.360 (t -1.5), median yield 2.1% -> 2.0%
+  (t -2.9), DPS falls >10% 116 -> 101 a run (t -4.7), >0.5% 568 -> 528 (t -3.4), non-payers 2.3 -> 2.5 (t 0.3).
+- Scorecard: nothing newly out of range; out in both (CASC revenue/GDP, margin sd, deals). Shares x3 0.8 -> 0 (t -3.0).
+
+## Payout pay2 11-19 (4 seeds x 20y, TPY 360)
+- Question: annual review on measured reinvestment (3y EMAs, reference frozen at 12 quarters, shift 0.5 x (ref - share))
+  plus the `carry:year_end_dividend` fix. Arm `pay2` = working tree; rows now carry `ref`/`rinv`/`earn`/`rq`/`yed`
+  (HEALTH=1 adds `icr`/`head`), meta `st0`. `pay` rows lack these and its streaks are invalid (wiped key).
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay2` (131 s wall), then from this directory
+  `python3 pay2.py pay2` (policy, reinvestment share, roll), `python3 payout.py pbase pay2`, `python3 scorecard.py pbase
+  pay2` -> `payout_pay2_4s.out`.
+- Policy: 28.8 of 103 firms move (pay 2.3); 34 raises + 34 cuts a run (pay 4.5 + 1.25); 18 changes in y3-10, 50 in
+  y10-20. >=3 changes in 7 firms a run: REITs ELDE (9) and SHOR (8), LOON, SKYL, TERN, CROP. Harvest 14 -> 12.5,
+  retain 1 -> 3.5. Share is noisy and unbounded: REIT and telecom shares run 1-2.6 over build cycles.
+- Share p10/p50/p90 (operating, n 328): ref .11/.26/.56, final .11/.24/.62, shift -.11/.00/+.09; financials ~0.
+- Roll among payers y0/5/10/20: listed 10.7/29/55/39%, champion+king 10.7/8.4/6.4/1.8%. Token 1% raise kept 218 of
+  664 listed streak years a run (33%). Breaks 9.4/y, joins 7.0/y. Div > TTM NI 4q while listed 3/run (IBIS, GRIP,
+  WELL); crisis/covenant while listed 4.3 firm-quarters/run.
+- vs pbase (paired): DPS falls >10% 116.5 -> 136.8 (t 2.8), >0.5% 568 -> 678 (t 6.8; 128 of them within 1y of a
+  token raise), payout 0.367 -> 0.393 (t 4.9). Only 8 of 137 large falls follow a policy cut. Scorecard: nothing newly
+  out of range; largest revenue/GDP 0.15 -> 0.18 (t 2.5, CASC, out in both).
+
+### pay3 (same seeds, the three fixes: share clamped [0,1] and 0 for pass-throughs, two same-way reviews per step,
+token raise only when covered by quarterly EPS)
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay3`, then `python3 pay2.py pay3`,
+  `python3 payout.py pbase pay3`, `python3 payout.py pay2 pay3`, `python3 cuts.py pay3 pbase pay2 pay3` (large falls
+  split by opening champions, st0 >= 25), `python3 scorecard.py pbase pay3` -> `payout_pay3_4s.out`.
+- Policy (pay2 -> pay3): moved 28.8 -> 21.3, raises 34 -> 18.8, cuts 34 -> 17.5; >=3 changes 29 -> 12 firm-runs
+  (max LOON 4; ELDE, SHOR quiet). Harvest 14 -> 14, retain 1 -> 3.75.
+- Roll, share of payers y5/10/20 (all four tiers): 24.8/50.1/47.5%; champion+king 7.2/4.7/1.0%. Token raises still
+  207 of 639 listed streak years (32%). Div > TTM NI 4q on the roll 3 -> 0 a run.
+- vs pbase: DPS falls >10% 116.5 -> 104.3 (t -2.3), >0.5% 568 -> 588 (t 3.3), median payout 0.367 -> 0.373 (t 1.2).
+  The pay2 rise in large falls was the 11 seeded champions: 0.75 (pbase) -> 12.5 (pay2) -> 3.25 (pay3) a run.
+- Scorecard: STRK (credit services) fails in seed 1 at y13.4; distressed and paying nothing from y11 in every arm.

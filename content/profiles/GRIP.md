@@ -31,8 +31,7 @@ absorbs any overrun. The last fifth is exports to other governments, the most pr
 mature line costs less to build than the one before.
 
 The build is only the start. A platform stays in service for decades, and the spares, upgrades and maintenance sold over
-that life earn more than the original sale. The operating margin is about 14%, and the company pays out about 45% of
-earnings. Revenue bunches in the third quarter, when the mainland's procurement agencies hurry to commit their money
+that life earn more than the original sale. The operating margin is about 14%, and the company pays out about half its earnings. Revenue bunches in the third quarter, when the mainland's procurement agencies hurry to commit their money
 before the fiscal year closes.
 
 ## Friends in the capital

@@ -41,6 +41,13 @@ trait StandardCapitalAllocationTrait
         return true;
     }
 
+    public function getDividendAdjustmentSpeed(): float
+    {
+        return $this->holdsDividendThroughDownturns()
+            ? FinancialConstants::LINTNER_QUARTERLY_ADJUSTMENT_SPEED
+            : FinancialConstants::VARIABLE_PAYER_ADJUSTMENT_SPEED;
+    }
+
     public function getMaxOrganicGrowthSpeed(bool $isHoarder, bool $isMegaHoarder): float
     {
         return $isHoarder

@@ -6,6 +6,7 @@ namespace App\Service\Market\Pricing;
 
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryPayoutPolicies;
 use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
@@ -13,6 +14,7 @@ use App\Data\Company\StockInfo;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
+use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
@@ -126,9 +128,12 @@ class OpeningBoardBuilder
         if (isset($stockData['capex_ratio'])) {
             $stock->setCapexRatio((string) $stockData['capex_ratio']);
         }
-        $stock->setTargetPayoutRatio((string) $stockData['target_payout_ratio']);
-        $stock->setDividendSpeed((string) $stockData['dividendSpeed']);
-        $stock->setDividendAristocrat((bool) ($stockData['dividend_aristocrat'] ?? false));
+        // The board opens on its policy and adjusts its dividend at the speed its business model sets.
+        $payoutPolicy = IndustryPayoutPolicies::forRow($stockData);
+        $stock->setBasePayoutPolicy($payoutPolicy);
+        $stock->setPayoutPolicy($payoutPolicy);
+        $stock->setDividendSpeed((string) Sectors::strategyFor($stockData['industry'] ?? null)->getDividendAdjustmentSpeed());
+        $stock->setDividendStreakYears((int) ($stockData['dividend_streak'] ?? 0));
         $stock->setFixedCostRatio((float) $stockData['fixed_cost_ratio']);
         $stock->setDepreciationRate((string) $stockData['depreciation_rate']);
 
@@ -205,6 +210,8 @@ class OpeningBoardBuilder
         // payout, carrying the manager's payout fixed effect, and never below a distribution the law requires.
         $startingDividend = max(0.0, $annualEps / 4.0) * max($stock->getPolicyPayoutRatio(), $strategy->getMinimumDistributionRatio());
         $stock->setLastDividend((string) $startingDividend);
+        // The opening dividend is the bar the first year's must clear to extend the firm's record.
+        $stock->setEarningsMomentumZ([CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND => round($startingDividend, 4)] + ($stock->getEarningsMomentumZ() ?? []));
 
         $sphere = null;
 

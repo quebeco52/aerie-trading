@@ -27,7 +27,7 @@ Corvid presents itself as an advisory firm. It advises on cross-border mergers, 
 restructurings, and those fees are about a quarter of revenue. The other 75% comes from its own trading desks, which
 take positions through options and credit default swaps.
 
-The operating margin is about 45%, and the firm pays out about 30% of earnings. A few large positions produce most of
+The operating margin is about 45%, and the firm pays out about 35% of earnings. A few large positions produce most of
 the profit, so results swing from quarter to quarter, though rarely in the same direction as the market.
 
 ## The research unit

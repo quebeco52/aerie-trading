@@ -1,0 +1,71 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/../lib/BoardRun.php';
+
+/**
+ * Scorecard record plus the dividend policy: each quarter row carries the firm's target payout ratio (`tpr`) and
+ * dividend speed (`dspd`), and the record carries every "dividend policy" event line (`pol`). Read-only; runs on any
+ * tree (getters that exist on both sides of the payout-policy change).
+ */
+final class PayoutHarnessTest extends BoardRun
+{
+    /** @var array<string, array{industry: string, sector: string, model: string, fin: bool}> */
+    private array $meta = [];
+    /** @var list<array{0: float, 1: float, 2: float}> Time, nominal GDP index, board cap. */
+    private array $macro = [];
+    /** @var array<string, list<array{t: float, d: string}>> */
+    private array $pol = [];
+
+    protected function onStart(): void
+    {
+        foreach ($this->stocks as $t => $s) {
+            $strategy = App\Data\Company\Sectors::strategyFor($s->getIndustry());
+            $this->meta[$t] = [
+                'industry' => (string) $s->getIndustry(),
+                'sector' => $s->getSector(),
+                'model' => (new ReflectionClass($strategy))->getShortName(),
+                'fin' => $strategy->isFinancial(),
+                'tpr0' => (float) $s->getTargetPayoutRatio(),
+                'st0' => method_exists($s, 'getDividendStreakYears') ? $s->getDividendStreakYears() : null,
+            ];
+        }
+    }
+
+    protected function afterStocks(array $result): void
+    {
+        if ($this->currentMacro !== null && $this->tick % max(1, intdiv($this->tpy, 4)) === 0) {
+            $this->macro[] = [round($this->currentTime, 3), $this->currentMacro->nominalGdpIndex, $this->reading->equityMarketCap];
+        }
+    }
+
+    protected function reportRow(array $row, App\Entity\CorporateReport $report): array
+    {
+        $s = $report->getStock();
+        $row['tpr'] = (float) $s->getTargetPayoutRatio();
+        $row['dspd'] = method_exists($s, 'getDividendSpeed') ? (float) $s->getDividendSpeed() : null;
+        $row['dps'] = method_exists($s, 'getDividendPerShare') ? (float) $s->getDividendPerShare() : null;
+        // pay2: the reinvestment driver the annual review reads, and the year-end dividend the roll compares against.
+        $st = $s->getEarningsMomentumZ() ?? [];
+        foreach (['ref' => 'carry:payout_reference', 'rinv' => 'carry:payout_reinvested', 'earn' => 'carry:payout_earned', 'rq' => 'carry:payout_quarters', 'yed' => 'carry:year_end_dividend'] as $k => $key) {
+            $row[$k] = isset($st[$key]) ? (float) $st[$key] : null;
+        }
+
+        return $row;
+    }
+
+    protected function onEvent(App\Entity\StockEvent $event): void
+    {
+        foreach (preg_split('/\n/', (string) $event->getDescription()) ?: [] as $line) {
+            if (stripos($line, 'dividend policy') !== false) {
+                $this->pol[$event->getStock()->getTicker()][] = ['t' => round($this->currentTime, 3), 'd' => substr(ltrim($line, "• "), 0, 120)];
+            }
+        }
+    }
+
+    protected function record(array $record): array
+    {
+        return $record + ['meta' => $this->meta, 'macro' => $this->macro, 'pol' => $this->pol, 'gdp_usd' => App\Service\Math\MacroConstants::DISTRICT_GDP_USD];
+    }
+}

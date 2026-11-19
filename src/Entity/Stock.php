@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Entity;
 
+use App\Data\Company\DividendTier;
+use App\Data\Company\PayoutPolicy;
 use App\Service\Math\Decimal;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Mapping as ORM;
@@ -412,23 +414,32 @@ class Stock
     private string $systemicImportance = 'none';
 
     /**
-     * @var string The target percentage of net income paid out as dividends.
+     * @var string The share of net income the board's dividend policy targets now: a PayoutPolicy step, which the board
+     * reviews once a year.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.30'])]
-    private string $targetPayoutRatio = '0.30';
+    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.35'])]
+    private string $targetPayoutRatio = '0.35';
 
     /**
-     * @var string How quickly the company adjusts its dividend towards the target payout ratio (Lintner model).
+     * @var string The dividend policy the firm opened on (PayoutPolicy), which its board returns to while its market
+     * has room; saturation raises the payout it implies from here (CorporateMetrics::calculateLifeCyclePayoutRatio()).
+     */
+    #[ORM\Column(length: 16, options: ['default' => 'balanced'])]
+    private string $basePayoutPolicy = 'balanced';
+
+    /**
+     * @var string How quickly the company adjusts its dividend towards the target payout ratio (Lintner model), set
+     * from its business model when its books open.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.20'])]
     private string $dividendSpeed = '0.20';
 
     /**
-     * @var bool Whether the firm is known for an unbroken record of dividend increases, as an S&P 500 Dividend
-     * Aristocrat is for 25 consecutive years of them. Set when its books open; any cut ends it.
+     * @var int Consecutive fiscal years the firm has raised its dividend, which places it on the exchange's dividend
+     * roll (DividendTier). A cut or a flat year ends it.
      */
-    #[ORM\Column(type: Types::BOOLEAN, options: ['default' => false])]
-    private bool $dividendAristocrat = false;
+    #[ORM\Column(type: Types::SMALLINT, options: ['default' => 0])]
+    private int $dividendStreakYears = 0;
 
     /**
      * @var string The absolute value of the last paid dividend per share.
@@ -1035,6 +1046,26 @@ class Stock
         return $this;
     }
 
+    /** The dividend policy the board runs now: the step its target payout sits on. */
+    public function getPayoutPolicy(): PayoutPolicy
+    {
+        return PayoutPolicy::nearest((float) $this->targetPayoutRatio);
+    }
+    public function setPayoutPolicy(PayoutPolicy $payoutPolicy): static
+    {
+        return $this->setTargetPayoutRatio((string) $payoutPolicy->ratio());
+    }
+
+    public function getBasePayoutPolicy(): PayoutPolicy
+    {
+        return PayoutPolicy::from($this->basePayoutPolicy);
+    }
+    public function setBasePayoutPolicy(PayoutPolicy $basePayoutPolicy): static
+    {
+        $this->basePayoutPolicy = $basePayoutPolicy->value;
+        return $this;
+    }
+
     /**
      * The payout ratio the dividend policy steers to: the target, carrying the manager's payout fixed effect (Bertrand
      * & Schoar 2003).
@@ -1054,14 +1085,20 @@ class Stock
         return $this;
     }
 
-    public function isDividendAristocrat(): bool
+    public function getDividendStreakYears(): int
     {
-        return $this->dividendAristocrat;
+        return $this->dividendStreakYears;
     }
-    public function setDividendAristocrat(bool $dividendAristocrat): static
+    public function setDividendStreakYears(int $dividendStreakYears): static
     {
-        $this->dividendAristocrat = $dividendAristocrat;
+        $this->dividendStreakYears = max(0, $dividendStreakYears);
         return $this;
+    }
+
+    /** The firm's standing on the exchange's dividend roll. */
+    public function getDividendTier(): DividendTier
+    {
+        return DividendTier::fromStreak($this->dividendStreakYears);
     }
 
     public function getLastDividend(): ?string

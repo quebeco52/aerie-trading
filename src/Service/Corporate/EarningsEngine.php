@@ -308,6 +308,7 @@ class EarningsEngine
         $this->allocateCapital($ctx);
         $this->capitalBudget->rollSegmentPlant($ctx, (float) ($ctx->allocation['organic_capex'] ?? 0.0));
         $this->reportFreeCashFlow($ctx);
+        CapitalAllocationEngine::recordReinvestment($ctx->stock, $ctx->totalReportedCapex - $ctx->quarterlyDepreciation, $ctx->actualQuarterlyNetIncome);
         $this->executeAnnouncementReturn($ctx);
 
         return $this->publishEventAndReport($ctx);
@@ -1202,6 +1203,7 @@ class EarningsEngine
             $ctx->stockCompensation,
             $ctx->openingCapitalRatio,
             $ctx->expansionBudget,
+            $ctx->fiscalQuarter === self::FISCAL_YEAR_END_QUARTER,
         );
 
         $stock->setSharesOutstanding((string) $ctx->allocation['new_shares']);

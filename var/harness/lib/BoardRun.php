@@ -460,7 +460,8 @@ abstract class BoardRun extends KernelTestCase
             'eps' => (float) $report->getStock()->getEarningsPerShare(),
             'apt' => (float) $report->getStock()->getAnalystPriceTarget(),
             'cvol' => (float) $report->getStock()->getCurrentVolatility(),
-            'aris' => $report->getStock()->isDividendAristocrat(),
+            'aris' => $report->getStock()->getDividendTier()->holdsThroughLosses(),
+            'streak' => $report->getStock()->getDividendStreakYears(),
         ] + $this->healthRow($report->getStock()) + $this->fvRow($report->getStock()) + [
             'tni' => (float) $report->getStock()->getTotalNetIncome(),
             'crude' => $m?->energyPriceIndexEma ?? 0.0,
