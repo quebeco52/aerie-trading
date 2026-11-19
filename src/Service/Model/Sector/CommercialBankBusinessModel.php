@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Company\IndustryMoats;
-use App\Data\Company\Moat;
 use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\InterestExpenseDTO;
 
@@ -16,6 +15,7 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
@@ -472,7 +472,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         }
 
         $ticker = (string) $seedRow['ticker'];
-        self::assertOpeningCharacter($ticker, $seedRow);
+        self::assertOpeningCharacter($seedRow);
         $capitalRatio = $this->getTargetCapitalRatio((new Stock())->setTicker($ticker));
         if ($capitalRatio === null || $capitalRatio <= 0.0 || $capitalRatio >= 1.0) {
             throw new \DomainException("{$ticker} builds its books on its capital ratio: set TargetCapitalRatio in StockModelTuning.");
@@ -538,35 +538,18 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
-     * A character row states every input and none of the books built from them, each inside its range: a book stated
-     * beside the character would be overwritten without a word.
+     * A character row states every input and none of the books built from them, each inside its range.
      *
      * @param array<string, mixed> $seedRow
      */
-    private static function assertOpeningCharacter(string $ticker, array $seedRow): void
+    private static function assertOpeningCharacter(array $seedRow): void
     {
-        $missing = array_diff(self::OPENING_CHARACTER_KEYS, array_keys($seedRow));
-        $stated = array_intersect(self::OPENING_BOOK_KEYS, array_keys($seedRow));
-        $ranges = [
+        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
             'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
-            'wholesale_funding_share' => (float) ($seedRow['wholesale_funding_share'] ?? -1.0) >= 0.0 && (float) $seedRow['wholesale_funding_share'] < 1.0,
+            'wholesale_funding_share' => (float) ($seedRow['wholesale_funding_share'] ?? -1.0) >= 0.0 && (float) ($seedRow['wholesale_funding_share'] ?? 1.0) < 1.0,
             'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
-            'retained_share' => (float) ($seedRow['retained_share'] ?? -1.0) >= 0.0 && (float) $seedRow['retained_share'] <= 1.0,
-        ];
-        if (isset($seedRow['moat']) && Moat::tryFrom((string) $seedRow['moat']) === null) {
-            $ranges['moat'] = false;
-        }
-        $outOfRange = array_keys(array_filter($ranges, static fn(bool $inRange): bool => !$inRange));
-
-        if ($missing !== [] || $stated !== [] || $outOfRange !== []) {
-            throw new \DomainException(sprintf(
-                '%s states its character with %s missing, %s stated beside it, %s out of range.',
-                $ticker,
-                implode(', ', $missing) ?: 'nothing',
-                implode(', ', $stated) ?: 'no book',
-                implode(', ', $outOfRange) ?: 'nothing',
-            ));
-        }
+            'retained_share' => (float) ($seedRow['retained_share'] ?? -1.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 2.0) <= 1.0,
+        ]);
     }
 
     /**

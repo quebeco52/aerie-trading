@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Pricing;
 
 use App\Data\Company\InitialMarket;
+use App\Data\Company\Moat;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 
@@ -79,5 +80,34 @@ final class SeedRows
         }
 
         throw new \InvalidArgumentException("No seed row for {$ticker}.");
+    }
+
+    /**
+     * Refuses a character row its model cannot build from: an input missing, a book stated beside the character (it
+     * would be overwritten without a word), an input outside its range, or a moat off the ladder.
+     *
+     * @param array<string, mixed> $row
+     * @param list<string> $characterKeys What the row must state.
+     * @param list<string> $bookKeys What the model builds, so the row must not state it.
+     * @param array<string, bool> $inRange Each input's range check, by key.
+     */
+    public static function assertCharacter(array $row, array $characterKeys, array $bookKeys, array $inRange): void
+    {
+        $missing = array_diff($characterKeys, array_keys($row));
+        $stated = array_intersect($bookKeys, array_keys($row));
+        if (isset($row['moat']) && Moat::tryFrom((string) $row['moat']) === null) {
+            $inRange['moat'] = false;
+        }
+        $outOfRange = array_keys(array_filter($inRange, static fn(bool $ok): bool => !$ok));
+
+        if ($missing !== [] || $stated !== [] || $outOfRange !== []) {
+            throw new \DomainException(sprintf(
+                '%s states its character with %s missing, %s stated beside it, %s out of range.',
+                (string) ($row['ticker'] ?? '?'),
+                implode(', ', $missing) ?: 'nothing',
+                implode(', ', $stated) ?: 'no book',
+                implode(', ', $outOfRange) ?: 'nothing',
+            ));
+        }
     }
 }

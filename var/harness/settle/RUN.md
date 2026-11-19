@@ -54,3 +54,15 @@ their own step instead of the model's 0.5-3pp: median 10y drift -2.07 -> +0.08pp
 ROIC at y10 14.7 -> 16.7%; P/B and P/E unchanged. Banks open on cost of equity + step: LAKE 21.0 -> 18.1% ROE (P/B
 3.25 -> 2.74), RIVR 15.0 -> 13.6, PLVR 11.0 -> 10.1, EGRT 13.0 -> 12.2, BNTH 18.0 -> 19.2. Insurers settle higher (SAFE
 +3.3pp, DOVE +1.5). The other financials do not read the moat.
+
+## Operating firms built from character (11-19)
+77 operating rows (all but the 4 REITs and BRKW) state revenue, operating margin and addressable share;
+`StandardCorporateBusinessModel::resolveOpeningBooks()` builds return (asset CAPM + moat), equity and debt at the
+manager's leverage target under the covenant cap, cash at the treasury target, retained = half of equity
+(`ops_after.jsonl` vs `ops_before.jsonl` at 4b4dd689; compare runs separately, settle.py averages files it is given).
+Medians over the 77, q0/q4/q8/q20/q40:
+- cash/assets 8.7/7.4/5.7/5.3/5.3% -> 4.4/5.8/4.9/4.7/4.6%; net D/E 0.58/0.68/0.70/0.73/0.73 -> 0.75/0.74/0.74/0.73/0.74
+  (|D/E - target| at q0 0.235 -> 0.000, max 1.18 -> 0.32); P/B 3.60 -> 4.59 by y10 before, 4.03 -> 4.34 after.
+- opening return gap to required + moat median +0.52 -> +0.08pp, max 11.4 -> 0.3pp; 10y drift IQR -0.47..+0.51 ->
+  -0.18..+0.50pp. Shares -9.8% -> -9.6% by y5: the buybacks are the ordinary payout, not the seed's cash surplus.
+- flagged 38 -> 13 of 103; among the 77, 30 -> 5 (BIRD, WADE margin; SKYL ret/margin; TICK rev/eq/margin; IBIS eq/lev).

@@ -4,12 +4,22 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryMoats;
+use App\Data\Company\ManagementStyle;
+use App\Data\Company\Sectors;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
-
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Market\Pricing\SeedRows;
+use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
+use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
+use App\Service\Math\Valuation;
 use App\Service\Model\AbstractBusinessModel;
 
 /**
@@ -27,6 +37,21 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     public const BASELINE_ROIC_WEIGHT = 0.50;
     /** Weight given to TTM ROIC when blending with historical baseline ROIC. */
     public const TTM_ROIC_WEIGHT      = 0.50;
+
+    // --- Opening Books ---
+    /** Share of an operating firm's opening equity that is retained earnings (half), where its row states none. */
+    public const OPENING_RETAINED_SHARE = 0.50;
+    /** Relative gap between the revenue the books earn and the stated revenue below which the solve stops. */
+    public const OPENING_BOOK_TOLERANCE = 1.0e-9;
+    /** Most passes of the opening solve; the books are near scale-free, so a few suffice. */
+    public const MAX_OPENING_BOOK_PASSES = 12;
+    /** What an operating firm's seed row states when its books are built from its character (resolveOpeningBooks()). */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roic', 'total_equity', 'wholesale_debt', 'customer_deposits', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio',
+    ];
 
     // --- Pricing Power & Macro Physics ---
     /**
@@ -60,10 +85,128 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     public const REVENUE_VARIANCE_SCALAR = 0.15;
 
     /**
+     * An operating firm's opening books from its character: the revenue it earns at its margin, its moat
+     * (IndustryMoats) over what its business must earn (CAPM on its asset beta at the base premium), and the share of
+     * its addressable market its capital spans. Its invested capital is what earns that revenue at that return; its
+     * manager's leverage target, capped where its net debt reaches its manager's share of the covenant, splits it into
+     * debt and equity; it holds the cash its treasury targets, and half its equity, or the share its row states, is
+     * retained earnings. A row that states its books (no revenue key) is handed back as it is.
+     */
+    public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
+    {
+        if (!isset($seedRow['revenue'])) {
+            return $seedRow;
+        }
+
+        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
+            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
+            'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
+            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
+            'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
+        ]);
+
+        $ticker = (string) $seedRow['ticker'];
+        $industry = $seedRow['industry'] ?? null;
+        $revenue = (float) $seedRow['revenue'];
+        $margin = (float) $seedRow['operating_margin'];
+        $addressableShare = (float) $seedRow['addressable_share'];
+        $taxRate = $openingMacro->corporateTaxRate;
+        $baselineRoic = Valuation::calculateCAPM($openingMacro->equityRiskFreeRate, IndustryBetas::seedBetaFor($seedRow), MacroConstants::BASE_EQUITY_RISK_PREMIUM)
+            + IndustryMoats::forRow($seedRow)->spread();
+
+        $stock = (new Stock())
+            ->setTicker($ticker)
+            ->setIndustry($industry)
+            ->setManagementStyle(ManagementStyle::tryFromNullable($seedRow['management_style'] ?? null))
+            ->setOperatingMargin((string) $margin)
+            ->setTotalRevenue(Decimal::format($revenue))
+            ->setDepreciationRate((string) $seedRow['depreciation_rate'])
+            ->setBaselineRoic((string) $baselineRoic)
+            ->setRoicTtm((string) $baselineRoic)
+            ->setLongRunReturn((string) $baselineRoic);
+
+        // The manager the engine recapitalises toward, at the typical intensity of its style
+        // (DebtEngine::analyzeDebtHealth()).
+        $manager = $stock->getManagementProfile();
+        $leverageShare = min(1.0, $manager->leverageBias());
+        $leverageTarget = $this->getLeverageTarget(Sectors::metricsFor($industry)['equity_limit'] * $leverageShare);
+        $covenant = Sectors::ebitdaCovenant($industry);
+        $covenantMultiple = $covenant !== null ? $this->getLeverageTarget($covenant * $leverageShare) : null;
+        $leaseLiability = CorporateMetrics::getInstance()->calculateLeaseLiability($revenue, $this->getLeaseIntensity($stock));
+        // The working capital the opening builds on this revenue; the rest of the capital is the plant that
+        // depreciates.
+        $workingCapital = CorporateMetrics::getInstance()->buildWorkingCapitalBalances($stock, $this->getWorkingCapitalDays($stock), $revenue, $revenue * (1.0 - $margin));
+
+        // Trial capital at the stated return, then scaled until the capital earns the stated revenue as the opening
+        // strikes it (OpeningBoardBuilder: invested capital at its structural turnover, net of saturation).
+        $investedCapital = $revenue * $margin * (1.0 - $taxRate) / max(0.01, $baselineRoic);
+        $equity = $investedCapital;
+        $debt = 0.0;
+        $cash = 0.0;
+        $converged = false;
+        for ($pass = 0; $pass < self::MAX_OPENING_BOOK_PASSES; $pass++) {
+            $heldCash = $cash;
+            $cash = $manager->managedTargetCash($this, max($revenue, $equity, FinancialConstants::MIN_OPERATING_BASE_CASH), 0.0, $debt);
+            // Net debt plus leases at the leverage target, nothing borrowed where the leases alone reach it.
+            $equity = ($investedCapital + $cash + $leaseLiability) / (1.0 + $leverageTarget);
+            $debt = ($leverageTarget * $equity) - $leaseLiability;
+            if ($debt < 0.0) {
+                $debt = 0.0;
+                $equity = $investedCapital + $cash;
+            }
+            $this->setOpeningBooks($stock, $equity, $debt, $cash, $addressableShare, $openingMacro);
+            if ($covenantMultiple !== null) {
+                $depreciation = max(0.0, $this->getPlantCapital($stock, $stock->getInvestedCapital()) - $workingCapital) * (float) $seedRow['depreciation_rate'];
+                $covenantDebt = ($covenantMultiple * (float) $this->getNormalEbitda($stock, $taxRate, $depreciation)) + $cash;
+                if ($debt > $covenantDebt) {
+                    $debt = $covenantDebt;
+                    $equity = $investedCapital + $cash - $debt;
+                    $this->setOpeningBooks($stock, $equity, $debt, $cash, $addressableShare, $openingMacro);
+                }
+            }
+
+            $metrics = $this->getTargetMetrics($stock, $openingMacro, new MathUtility());
+            $earned = $metrics['invested_capital'] * FirmEconomics::structuralAssetTurnover($metrics['baseline_roic'], $margin, $taxRate);
+            if ($earned <= 0.0 || $equity <= 0.0) {
+                throw new \DomainException("{$ticker} earns nothing on the books its character builds.");
+            }
+            // Settled once the capital earns the revenue and the cash target no longer moves with the equity it sits
+            // on.
+            if (abs($revenue / $earned - 1.0) < self::OPENING_BOOK_TOLERANCE && abs($cash - $heldCash) <= self::OPENING_BOOK_TOLERANCE * $revenue) {
+                $converged = true;
+                break;
+            }
+            $investedCapital *= $revenue / $earned;
+        }
+        if (!$converged) {
+            throw new \DomainException("{$ticker}'s books do not settle on its stated revenue in " . self::MAX_OPENING_BOOK_PASSES . ' passes.');
+        }
+
+        return array_merge($seedRow, [
+            'baseline_roic' => $baselineRoic,
+            'total_equity' => $equity,
+            'wholesale_debt' => $debt,
+            'customer_deposits' => 0.0,
+            'corporate_treasury' => $cash,
+            'retained_earnings' => (float) ($seedRow['retained_share'] ?? self::OPENING_RETAINED_SHARE) * $equity,
+            'sam_ratio' => (float) $stock->getSamRatio(),
+        ]);
+    }
+
+    /** The trial books, with the market sized so the capital spans the stated share of it. */
+    private function setOpeningBooks(Stock $stock, float $equity, float $debt, float $cash, float $addressableShare, MacroStateDTO $openingMacro): void
+    {
+        $stock->setTotalEquity(Decimal::format($equity))
+            ->setWholesaleDebt(Decimal::format($debt))
+            ->setCorporateTreasury(Decimal::format($cash));
+        $stock->setSamRatio((string) ($stock->getInvestedCapital() / (CorporateMetrics::BASELINE_SECTOR_TAM * $openingMacro->nominalGdpIndex * $addressableShare)));
+    }
+
+    /**
      * Physical businesses evaluate their true structural scale based on Invested Capital
      * (Total Equity + Debt - Cash), requiring physical assets to turn a profit.
      */
-    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
 
@@ -73,7 +216,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         }
 
         // Marginal ROIC on next dollar of capital: structural return minus Penrose scale diseconomy.
-        $saturationPenalty = \App\Service\Corporate\CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $stock->getInvestedCapital(), $macroState);
+        $saturationPenalty = CorporateMetrics::getInstance()->calculateMarketSaturationPenalty($stock, $stock->getInvestedCapital(), $macroState);
         $effectiveRoic = max(0.0, $baselineRoic - $saturationPenalty);
 
         return [
@@ -82,7 +225,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         return [
             'macro_demand_shift' => $this->resolveCycleDemandShift($stock, $macroState),
@@ -94,7 +237,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
      * The firm's demand shift from the lagged output gap and the exchange rate. Pure: unlike getMacroPhysics() it
      * steps no pass-through state, so a sector model may read it again inside its own physics.
      */
-    protected function resolveCycleDemandShift(Stock $stock, \App\DTO\MacroStateDTO $macroState): float
+    protected function resolveCycleDemandShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $macroSensitivityMultiplier = self::CYCLE_SENSITIVITY_BASE + $this->resolvePricingPower($stock);
 
@@ -126,7 +269,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
      *
      * @return array{pricing_power_multiplier: float, input_cost_multiplier: float}
      */
-    public function resolvePricingMultipliers(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    public function resolvePricingMultipliers(Stock $stock, MacroStateDTO $macroState): array
     {
         $expectedInflation = $this->resolveExpectedInflationBasis($macroState);
         $costInflation = $this->resolveCostInflationBasis($macroState);
@@ -155,7 +298,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
      * menu costs and contract repricing mean posted prices reach the new level over several quarters. The
      * lag state is persisted on the stock, so a firm carries its own repricing history.
      */
-    protected function resolveInflationPassThrough(Stock $stock, \App\DTO\MacroStateDTO $macroState, float $elasticity, ?float $expectedInflation = null, ?float $lagYears = null): float
+    protected function resolveInflationPassThrough(Stock $stock, MacroStateDTO $macroState, float $elasticity, ?float $expectedInflation = null, ?float $lagYears = null): float
     {
         $targetPassThrough = ($expectedInflation ?? $macroState->tipsBreakevenEma) * $elasticity;
 
@@ -174,7 +317,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     /**
      * Idiosyncratic variance is applied directly to sales volume.
      */
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $pricingPower = $this->resolvePricingPower($stock);
 
@@ -205,7 +348,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     /**
      * Normal physical companies are evaluated on NOPAT / Invested Capital (ROIC).
      */
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0, float $afterTaxSpecialCharges = 0.0): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?MacroStateDTO $macroState = null, float $depreciation = 0.0, float $afterTaxSpecialCharges = 0.0): float
     {
         $nopatProxy = $ebit > 0 ? $ebit * (1.0 - $corporateTaxRate) : $ebit;
 

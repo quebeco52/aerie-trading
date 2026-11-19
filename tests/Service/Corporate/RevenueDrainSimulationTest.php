@@ -75,7 +75,8 @@ class RevenueDrainSimulationTest extends TestCase
 
         $hiked = $simulate(true, 42);
 
-        $seededTurnover = 0.13 / (0.09 * (1.0 - $hiked['tax_rate']));
+        $seed = SeedRows::for('IBHI');
+        $seededTurnover = (float) $seed['baseline_roic'] / ((float) $seed['operating_margin'] * (1.0 - $hiked['tax_rate']));
         $this->assertEqualsWithDelta($seededTurnover, $hiked['turnover'], 0.001, 'turnover is seeded once by the DuPont identity and held');
 
         $openingYear = array_slice($hiked['revenues'], 0, 4, true);

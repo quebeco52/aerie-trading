@@ -254,3 +254,26 @@ flat under MIN_ANNOUNCED_DIVIDEND_RAISE 3%; cuts any quarter)
   y0.6, 0.65 -> 0.43 in every seed), 1 in quarter 1. Survival 10-24 .910, 25-49 .898.
 - vs pbase2: DPS falls >10% 117 -> 89 (t -3.1), >0.5% 260 -> 265 (t 0.2), payout .367 -> .358; opening yield 2.1%
   (t -10.3), cap/GDP at open 3.76 (t -0.6). Scorecard: drawdown >80% 11.0 (limit 10, pbase2 9.8, t 0.7).
+
+### books1 (77 operating rows build their opening books: CAPM + moat return, leverage target, treasury-target cash)
+- Arms: `pbase3` = 4b4dd689 as a BASE tree (git archive in the session scratchpad, vendor symlinked), `books1` =
+  working tree. Run: `PAY_BASE=<tree> HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pbase3 books1`
+  (141 s wall), then `scorecard.py`, `payout.py`, `champs.py`, `opening.py`, `sticky.py` on `pbase3 books1`, `pay2.py`
+  and `longrun.py books1 1`, and new `python3 books.py pbase3 books1 --list` -> `payout_books1_4s.out`.
+- `books.py`: over `ops77.py` (rows stating `addressable_share`, non-financial = 77): cash/assets, net D/E at y0/1/5/20,
+  share change by y5, covenant breaches y1-3 (ndE > covL), opening P/E, streak >= 25 breaks and cash vs a floor
+  estimated from books1's first row (k x max(4 rev, eq); 76-82% of all quarters sit under 1.2x it, so weak).
+- 77 books (books1 - pbase3, paired): cash/assets y0/1/5/20 .074/.063/.049/.047 -> .054/.053/.046/.044 (t -12.7, -7.9,
+  -2.9, -1.6); net D/E .42/.44/.48/.43 -> .53/.51/.49/.48. Shares y5 median -6.7% -> -7.2% (t -1.0); firms issuing >2%
+  16.8 -> 13.0 (t -3.4). Covenant breach firms y1-3 4.25 -> 5.0 (t 1.0); GRIP none in either arm.
+- Dividends: DPS falls >10% 88.5 -> 90.3 (t 0.3), >0.5% 265 -> 285 (t 2.0), payout .358 -> .355. Roll y0/5/10/20
+  31.1/23.4/29.7/35.2%, champion+king 7.8/3.1/1.8/2.3%. Opening champions unbroken y5 16 -> 25%, y10/20 12/6% both;
+  breaks 44 -> 39 (cuts 17 -> 8). Streak >= 25 breaks among the 77: 4.75 -> 3.75 a run, LOON/WALL first breaks move
+  from y1-3 to y5-10.
+- Scorecard: acquisitions 169 -> 197 (t 3.3), 5+ deal firms 12 -> 15 (t 7.3), both out in both arms, spread after y5
+  (SKUA, BNTH, SAFE, GULL +13..23; TICK -18). Margin sd >10pp 6.0 -> 4.2 (t -3.7). Opening cap/GDP 3.76 -> 3.69 (t
+  -1.7), P/E (77) 18.9 -> 18.4 (t -3.5), yield 2.1% both.
+- Streak >= 25 firms y5/10/15/20: -0.25/-0.75/-1.50/-1.75 a run (t -0.3/-1.6/-3.0/-1.0). Mostly SHRK (st0 20, 0.75
+  policy): broken in s2/s3/s4 at y4/y10/y2 (pbase3 s1 only), each a flat year, covered (DPS 0.67-0.76 of EPS/4),
+  cash at the treasury target (1.01x), headroom true, icr 30-40: the hold is funded by debt, the raise is not
+  (CapitalAllocationEngine:303-308).

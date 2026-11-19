@@ -7,9 +7,15 @@ namespace App\Tests\Service\Model\Sector;
 use App\DTO\ActualFinancialsDTO;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
+use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Event\ShockEvent;
+use App\Service\Market\Pricing\MarketEngine;
+use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\MacroConstants;
+use App\Service\Math\MathUtility;
 use App\Service\Model\Sector\RefiningBusinessModel;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\Group;
@@ -204,15 +210,18 @@ final class RefiningBusinessModelTest extends TestCase
 
     /**
      * CASC's seeded margins must leave room for refinery fuel and chemicals above the crude it buys, or the
-     * opex floor would be carrying the firm. Bounded conservatively: the whole invested capital depreciates.
+     * opex floor would be carrying the firm. Depreciation runs on the plant it opens with, not its working capital.
      */
     public function testCascadesSeedLeavesRoomForRefineryOpexAboveFeedstock(): void
     {
         $casc = SeedRows::for('CASC');
+        $math = MathUtility::ownStream(20261119);
+        $opened = (new Stock())->setTicker('CASC');
+        (new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance()), new MarketEngine($math), new AnchorStakeLedger()))
+            ->open($opened, $casc, new MacroStateDTO());
 
         $margin = (float) $casc['operating_margin'];
-        $turnover = (float) $casc['baseline_roic'] / ($margin * (1.0 - MacroConstants::BASE_CORPORATE_TAX_RATE));
-        $depreciationShare = (float) $casc['depreciation_rate'] / $turnover;
+        $depreciationShare = (float) $casc['depreciation_rate'] * (float) $opened->getNetPpe() / (float) $opened->getTotalRevenue();
         $variableCostRatio = (1.0 - $margin - $depreciationShare) * (1.0 - (float) $casc['fixed_cost_ratio']);
         $feedstockShare = RefiningBusinessModel::REFERENCE_CRUDE_PRICE / $this->baselineRealization();
 
