@@ -309,3 +309,20 @@ flat under MIN_ANNOUNCED_DIVIDEND_RAISE 3%; cuts any quarter)
   streak y20 26.5 (lend1 10.8, raise1 40). Dividend borrowing 18.5 events, $18.6bn a run (lend1 12.5 t 2.1, raise1
   17.3 t 0.2). Raise share .677 (lend1 .671 t 1.5, raise1 .693 t -3.2); token share .043 = lend1. Scorecard: nothing
   newly out (largest revenue/GDP 0.17, out in all arms).
+
+### reit1 (REIT debt capacity capped at min(tolerance, leverage target); four trusts open from character) 11-19
+- Arms: `rhead` = HEAD 40e61299 via `OVR=<scratchpad>/ovr_head` (HEAD copies of InitialMarket, ReitBusinessModel,
+  StandardCorporateBusinessModel at src-relative paths); identical to `raise2` row for row. `reit1` = working tree.
+  `PayoutHarnessTest::healthRow` now also records `deH` (recap D/E) and `lt` (leverage target). Run:
+  `OVR=<dir> HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 rhead && HEALTH=1 bin/harness-batch
+  var/harness/scorecard/run_payout.sh 1-4 reit1` (109 s per arm), then new `python3 reit.py rhead reit1` ->
+  `reit1_4s.out` (per-REIT D/E vs target, ndE, ROE, P/B, FFO payout, shares, eq and rev/GDP, covenant, ratings, cuts;
+  board breaches, deals, non-REIT log equity/revenue scan) and `scorecard.py rhead reit1` -> `scorecard_reit1_4s.out`.
+- D/E y20 (gross) SHOR 2.09 -> 1.41, PLZA 2.01 -> 1.34, ELDE 1.08 -> 1.00, KITE 1.88 -> 1.45 (t -7.2/-3.0/-0.4/-3.1),
+  each within 0.13 of its target (1.12/1.40/1.02/1.51). ndE y20 4.1-5.2x (HEAD 5.3-6.6). REIT covenant quarters
+  97 -> 0.5 a run; DPS cuts 33 -> 2.75; ratings BBB throughout both arms; no REIT death or default.
+- ELDE: P/B 1.69 -> 3.47 at y0 and stays ~3.4-3.8; ROE 10-14% -> 17-20%; FFO payout .27 -> .50; eq/GDP .41 -> .32%.
+  All REITs P/B 3.1-5.2 in both arms (above 1.5-2.5); FFO payout .43-.59 (below 70-75%). Share growth ~3.5%/20y both.
+- REIT acquisitions 0 -> 3.75 a run (all after y4, debt-funded, large goodwill); board deals 183.5 -> 183.0.
+- Board: covenant breach firms y1-3 6.25 -> 4.25 (t -1.6), firm-quarters 275 -> 172 (t -19.9; REITs are 97 of it).
+  Scorecard nothing newly out. STRK fails in reit1 s1 at y13.1 (BB and losing in rhead too): path divergence.

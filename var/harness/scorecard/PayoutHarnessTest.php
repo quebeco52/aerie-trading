@@ -40,6 +40,19 @@ final class PayoutHarnessTest extends BoardRun
         }
     }
 
+    /** reit1: the parent's health columns plus the recap test's D/E (`deH`) and the firm's leverage target (`lt`). */
+    protected function healthRow(App\Entity\Stock $stock): array
+    {
+        if ($this->debtEngine === null || $this->currentMacro === null || !getenv('HEALTH')) {
+            return [];
+        }
+        $h = $this->debtEngine->analyzeTrailingDebtHealth($stock, $this->currentMacro);
+
+        return ['uL' => $h->isUnderLeveraged, 'ndE' => $h->netDebtToEbitda, 'covL' => $h->ebitdaCovenantLimit, 'head' => $h->hasLeverageHeadroom,
+            'tol' => $h->debtTolerance, 'icr' => $h->interestCoverage, 'can' => $h->canIssueDebt, 'hEbitda' => $h->rawMetrics->ebitda, 'hEbit' => $h->rawMetrics->ebit,
+            'deH' => $h->debtToEquity, 'lt' => $h->leverageTarget];
+    }
+
     protected function reportRow(array $row, App\Entity\CorporateReport $report): array
     {
         $s = $report->getStock();

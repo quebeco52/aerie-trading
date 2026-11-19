@@ -111,8 +111,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $margin = (float) $seedRow['operating_margin'];
         $addressableShare = (float) $seedRow['addressable_share'];
         $taxRate = $openingMacro->corporateTaxRate;
-        $baselineRoic = Valuation::calculateCAPM($openingMacro->equityRiskFreeRate, IndustryBetas::seedBetaFor($seedRow), MacroConstants::BASE_EQUITY_RISK_PREMIUM)
-            + IndustryMoats::forRow($seedRow)->spread();
+        $baselineRoic = $this->openingReturn($seedRow, $openingMacro);
 
         $stock = (new Stock())
             ->setTicker($ticker)
@@ -191,6 +190,18 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
             'retained_earnings' => (float) ($seedRow['retained_share'] ?? self::OPENING_RETAINED_SHARE) * $equity,
             'sam_ratio' => (float) $stock->getSamRatio(),
         ]);
+    }
+
+    /**
+     * The return the firm opens on: what its business must earn (CAPM on its asset beta at the base premium) plus its
+     * moat.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function openingReturn(array $seedRow, MacroStateDTO $openingMacro): float
+    {
+        return Valuation::calculateCAPM($openingMacro->equityRiskFreeRate, IndustryBetas::seedBetaFor($seedRow), MacroConstants::BASE_EQUITY_RISK_PREMIUM)
+            + IndustryMoats::forRow($seedRow)->spread();
     }
 
     /** The trial books, with the market sized so the capital spans the stated share of it. */

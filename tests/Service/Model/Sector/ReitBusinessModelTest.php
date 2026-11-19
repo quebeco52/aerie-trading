@@ -486,11 +486,12 @@ class ReitBusinessModelTest extends TestCase
         $this->assertEqualsWithDelta(0.02 * 0.25 * ReitBusinessModel::OPERATING_CYCLICALITY, $physics['macro_demand_shift'], 0.0001);
     }
 
-    private function createDebtHealth(float $debtTolerance, float $interestExpense = 0.0): DebtHealthDTO
+    private function createDebtHealth(float $debtTolerance, float $interestExpense = 0.0, ?float $leverageTarget = null): DebtHealthDTO
     {
         return DebtHealthBuilder::healthy()
             ->withCarry(0.05, 0.05, 0.03)
             ->withDebtTolerance($debtTolerance)
+            ->withRecapitalization(0.5, $leverageTarget ?? $debtTolerance)
             ->withCostOfCapital(0.06, 0.08)
             ->withMetrics(new DebtMetricsDTO(
                 interestExpense: $interestExpense,
@@ -530,6 +531,29 @@ class ReitBusinessModelTest extends TestCase
         // availableCapacity = 12.1212 / 0.05 = 242.424
         $incomeBoundCapacity = $model->calculateDebtExpansionCapacity($equity, $totalDebt, $wholesaleDebt, $health, $newBorrowingRate, $lowEbit, $depreciation);
         $this->assertEqualsWithDelta(242.424, $incomeBoundCapacity, 0.01);
+    }
+
+    public function testDebtExpansionCapacityCapsAtTargetLeverage(): void
+    {
+        $model = new ReitBusinessModel();
+        $health = $this->createDebtHealth(debtTolerance: 2.5, interestExpense: 0.0, leverageTarget: 1.2);
+        $equity = 1000.0;
+        $newBorrowingRate = 0.05;
+
+        // Below target (D/E 0.90 vs target 1.20, sector ceiling 2.50): borrows only (1.20 - 0.90) * 1000 = 300.
+        $belowTarget = $model->calculateDebtExpansionCapacity($equity, 900.0, 900.0, $health, $newBorrowingRate, ebit: 100.0, depreciation: 50.0);
+        $this->assertEqualsWithDelta(300.0, $belowTarget, 0.001);
+
+        // At or above target, even well below the 2.50 sector ceiling: no new growth debt.
+        $atTarget = $model->calculateDebtExpansionCapacity($equity, 1200.0, 1200.0, $health, $newBorrowingRate, ebit: 100.0, depreciation: 50.0);
+        $aboveTarget = $model->calculateDebtExpansionCapacity($equity, 1500.0, 1500.0, $health, $newBorrowingRate, ebit: 100.0, depreciation: 50.0);
+        $this->assertSame(0.0, $atTarget);
+        $this->assertSame(0.0, $aboveTarget);
+
+        // Coverage capacity still binds when smaller than target leverage headroom:
+        // minimumIcr = 1.65, maxTolerableInterest = 16.5 / 1.65 = 10.0, capacity = 10.0 / 0.05 = 200.0 < 300.0.
+        $coverageBound = $model->calculateDebtExpansionCapacity($equity, 900.0, 900.0, $health, $newBorrowingRate, ebit: 16.5, depreciation: 50.0);
+        $this->assertEqualsWithDelta(200.0, $coverageBound, 0.001);
     }
 
     public function testCapRateFloorTetheredTo10YearYield(): void

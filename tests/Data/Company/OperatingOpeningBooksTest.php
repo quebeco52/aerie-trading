@@ -20,6 +20,7 @@ use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
+use App\Service\Model\Sector\ReitBusinessModel;
 use App\Service\Model\Sector\StandardCorporateBusinessModel;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\Group;
@@ -70,7 +71,7 @@ class OperatingOpeningBooksTest extends TestCase
 
     public function testTheBoardCarriesOperatingFirmsBuiltFromTheirCharacter(): void
     {
-        $this->assertGreaterThanOrEqual(77, count(self::characterProvider()), 'Every operating firm but the trusts and the holding company states its character.');
+        $this->assertGreaterThanOrEqual(81, count(self::characterProvider()), 'Every operating firm and trust, all but the holding company, states its character.');
     }
 
     /** @param array<string, mixed> $row */
@@ -115,26 +116,32 @@ class OperatingOpeningBooksTest extends TestCase
     }
 
     /**
-     * Its return is what its business must earn at the opening plus its moat, its capital spans the share of its
-     * market its row states, and half its equity is retained earnings.
+     * Its return is what its business must earn at the opening plus its moat (or the market cap rate for a trust), its
+     * capital spans the share of its market its row states, and its equity carries the retained share its row states
+     * (half by default).
      *
      * @param array<string, mixed> $row
      */
     #[DataProvider('characterProvider')]
-    public function testItEarnsItsMoatOverItsCostOfCapitalOnTheShareOfItsMarketItStates(array $row): void
+    public function testItOpensAtItsModelReturnOnTheShareOfItsMarketItStates(array $row): void
     {
         $stock = $this->open($row);
         $opening = new MacroStateDTO();
-        $costOfCapital = Valuation::calculateCAPM($opening->equityRiskFreeRate, IndustryBetas::seedBetaFor($row), MacroConstants::BASE_EQUITY_RISK_PREMIUM);
+        $strategy = Sectors::strategyFor($row['industry']);
+        $expectedReturn = $strategy instanceof ReitBusinessModel
+            ? ReitBusinessModel::marketCapRate($opening)
+            : Valuation::calculateCAPM($opening->equityRiskFreeRate, IndustryBetas::seedBetaFor($row), MacroConstants::BASE_EQUITY_RISK_PREMIUM)
+                + IndustryMoats::forRow($row)->spread();
 
-        $this->assertEqualsWithDelta($costOfCapital + IndustryMoats::forRow($row)->spread(), (float) $stock->getBaselineRoic(), 1e-4, $row['ticker']);
+        $this->assertEqualsWithDelta($expectedReturn, (float) $stock->getBaselineRoic(), 1e-4, $row['ticker']);
         $this->assertEqualsWithDelta(
             $row['addressable_share'],
             CorporateMetrics::getInstance()->calculateScaleRatio($stock->getInvestedCapital(), 1.0, (float) $stock->getSamRatio()),
             1e-6,
             $row['ticker'],
         );
-        $this->assertEqualsWithDelta(StandardCorporateBusinessModel::OPENING_RETAINED_SHARE, (float) $stock->getRetainedEarnings() / (float) $stock->getTotalEquity(), 1e-6, $row['ticker']);
+        $expectedRetained = (float) ($row['retained_share'] ?? StandardCorporateBusinessModel::OPENING_RETAINED_SHARE);
+        $this->assertEqualsWithDelta($expectedRetained, (float) $stock->getRetainedEarnings() / (float) $stock->getTotalEquity(), 1e-6, $row['ticker']);
     }
 
     /**

@@ -6,7 +6,8 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\DebtExpansionAppetiteDTO;
-
+use App\DTO\DebtHealthDTO;
+use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
 use App\Entity\Stock;
 
@@ -238,15 +239,35 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     /** Interest coverage below which the firm stops repurchasing stock (1.15x). */
     public const BUYBACK_MIN_ICR = 1.15;
 
-    public function getTargetMetrics(Stock $stock, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): array
+    /**
+     * Market cap rate the property book prices on: 10-year yield plus equity risk premium and credit spread drag,
+     * floored at the 10-year yield.
+     */
+    public static function marketCapRate(MacroStateDTO $macroState): float
+    {
+        $yield10y = $macroState->yield10yEma;
+
+        return max($yield10y, $yield10y + $macroState->equityRiskPremium + ($macroState->macroCreditSpreadEma * self::CAP_RATE_SPREAD_SENSITIVITY));
+    }
+
+    /**
+     * The trust's revenue is anchored on the market cap rate (getTargetMetrics()), so it opens there; its moat accrues
+     * through the return's reversion (updateDynamicRoic()).
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function openingReturn(array $seedRow, MacroStateDTO $openingMacro): float
+    {
+        return self::marketCapRate($openingMacro);
+    }
+
+    public function getTargetMetrics(Stock $stock, MacroStateDTO $macroState, MathUtility $mathUtility): array
     {
         $investedCapital = $stock->getInvestedCapital();
         $baselineRoic = max(0.01, (float) $stock->getBaselineRoic());
 
         $yield10y = $macroState->yield10yEma;
-        $realEstateRiskPremium = $macroState->equityRiskPremium;
-        $creditSpreadDrag = $macroState->macroCreditSpreadEma * self::CAP_RATE_SPREAD_SENSITIVITY;
-        $targetCapRate = max($yield10y, $yield10y + $realEstateRiskPremium + $creditSpreadDrag);
+        $targetCapRate = self::marketCapRate($macroState);
 
         $portfolioTurnoverRate = self::PORTFOLIO_TURNOVER_RATE;
         $maxCapRate = max(self::MAX_CAP_RATE_CLAMP, $macroState->yield10yEma + self::CAP_RATE_CEILING_SPREAD);
@@ -269,7 +290,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         ];
     }
 
-    public function getMacroPhysics(Stock $stock, \App\DTO\MacroStateDTO $macroState): array
+    public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array
     {
         $physics = parent::getMacroPhysics($stock, $macroState);
         $physics['pricing_power_multiplier'] = 1.0;
@@ -283,7 +304,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return $physics;
     }
 
-    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, \App\DTO\MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
+    protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::StickyLeaseWeight->value            => 0.85,
@@ -430,7 +451,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             - (self::LEASING_BONUS_SCALE * Distributions::calculateNormalLowerPartialMoment(-self::BENIGN_LEASING_Z_FLOOR));
     }
 
-    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?\App\DTO\MacroStateDTO $macroState = null, float $depreciation = 0.0, float $afterTaxSpecialCharges = 0.0): float
+    public function updateDynamicRoic(Stock $stock, float $actualTotalNetIncome, float $investedCapital, float $ebit, float $corporateTaxRate, float $wacc = 0.08, float $costOfEquity = 0.10, ?MacroStateDTO $macroState = null, float $depreciation = 0.0, float $afterTaxSpecialCharges = 0.0): float
     {
         // Net Operating Income is property income before depreciation, and it is the numerator of the cap rate this
         // return reverts toward below. EBIT is struck after depreciation, so the charge is added back here to recover
@@ -441,13 +462,7 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         $stock->setCurrentRoic((string) max(FinancialConstants::MIN_REPORTED_RETURN, min(FinancialConstants::MAX_REPORTED_RETURN, $truePostTaxReturn)));
 
         // The return a property book is required to earn is the cap rate the market prices it on.
-        $targetYield = $wacc;
-        if ($macroState !== null) {
-            $yield10y = $macroState->yield10yEma;
-            $realEstateRiskPremium = $macroState->equityRiskPremium;
-            $creditSpreadDrag = $macroState->macroCreditSpreadEma * self::CAP_RATE_SPREAD_SENSITIVITY;
-            $targetYield = max($yield10y, $yield10y + $realEstateRiskPremium + $creditSpreadDrag);
-        }
+        $targetYield = $macroState !== null ? self::marketCapRate($macroState) : $wacc;
 
         $stock->setRoicTtm((string) $this->revertTrailingReturn($stock, (float) $stock->getRoicTtm(), $truePostTaxReturn, $targetYield, self::TTM_ROIC_WEIGHT, abs($investedCapital), $macroState));
 
@@ -486,10 +501,14 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         return new DebtExpansionAppetiteDTO(probability: self::DEBT_EXPANSION_BASE_PROB + ($spreadMultiplier * self::DEBT_EXPANSION_PROB_MULT), aggressiveness: self::DEBT_EXPANSION_BASE_AGGR + (self::DEBT_EXPANSION_AGGR_MULT * $spreadMultiplier));
     }
 
-    public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, \App\DTO\DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
+    /**
+     * A trust distributes most of what it earns, so growth borrowed past its manager's target leverage would be funded
+     * by debt alone; past it, it issues shares, as TreasuryEngine::fundPlannedPlant() already does for pass-throughs.
+     */
+    public function calculateDebtExpansionCapacity(float $equity, float $totalDebt, float $wholesaleDebt, DebtHealthDTO $health, float $newBorrowingRate, float $ebit, float $depreciation): float
     {
         $evalDebt = $totalDebt;
-        $evalTolerance = $health->debtTolerance;
+        $evalTolerance = min($health->debtTolerance, $health->leverageTarget);
         $balanceSheetCapacity = max(0.0, ($equity * $evalTolerance) - $evalDebt);
 
         $minimumIcr = $this->getBuybackMinIcr() + 0.5;

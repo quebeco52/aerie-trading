@@ -78,3 +78,12 @@ margin flag (50 -> 43.8) is its row's margin being before credit losses; the fil
 Then TALN wholesale share 6.4 -> 25% and POOL moat very_wide -> moderate, revenue 17.4 -> 8.06bn to hold equity at 55bn
 (`lend2.jsonl`): TALN margin 39.4%, ROE 25.1 -> 26.6 by y10, cash 6.5% of assets; POOL ROE 16.1 -> 18.6 by y5 (P/B 3.1 ->
 1.85), filed margin 34.4% after credit losses against its 50% pre-loss margin (flag).
+
+## REITs built from character and capped at target leverage (11-19)
+SHOR/PLZA/ELDE/KITE state revenue, operating margin, addressable share and retained share; `ReitBusinessModel` opens at
+its market cap rate (10.68%) and caps debt expansion at `min(debtTolerance, leverageTarget)` (`reit_after.jsonl` vs
+`reit_before.jsonl` at 40e61299; the other 99 firms identical). Opening book D/E 1.12-1.30 -> 0.81-1.14, cash 3.4-9.2%
+-> 2.3-2.5% of assets, ELDE equity 25.0 -> 19.3bn. By y10, every REIT tracks its target leverage within 0.015 (SHOR
+1.48 vs 1.48, PLZA 1.20 vs 1.21, ELDE 0.87 vs 0.88, KITE 1.28 vs 1.29; before: SHOR 1.86, PLZA 2.28, ELDE 1.13 vs 0.52),
+with share growth 0.15-0.17%/yr. Flagged 11 -> 10 of 103 (SHOR margin flag gone; PLZA and ELDE keep margin flags; zero
+REIT leverage flags).
