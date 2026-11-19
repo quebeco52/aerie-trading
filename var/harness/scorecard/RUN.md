@@ -90,4 +90,10 @@ that real economies span, so a change is judged on the board, not on one firm.
   firm the move is -2..+2pp (p10..p90) with median -0.1pp.
 - Noise: >80% drawdowns 7.0 -> 9.8 (+1.8; SKUA -0.42 -> -0.72, the largest return fall -3.7pp, SHOR, PTRL), defaulters
   0.2 -> 0.5, deaths 0.2 -> 0. An 8-16 seed stage would settle the drawdown count.
+- 16 seeds (11-19, moat = 12eb81f7, base tree rebuilt; seeds 1-4 reproduce exactly; 32 runs, 539 s wall):
+  `... run_moat.sh 1-16 base moat`, plus `python3 moat_dd.py base moat` (paired counts, per-firm attribution) ->
+  `moat_ladder_16s.out`. >80% drawdowns 5.94 -> 7.25, +1.31 (se 0.79) t +1.7: heavy-tailed (s16 33/29, s15 7/16),
+  scattered across ~35 firms (WING +4, SKUA +3 net seeds; SKUA worst dd -0.57 -> -0.66, t -1.1, deeper in 8/16).
+  Defaulters 0.94 both (t 0), deaths 0.06 -> 0. Margin sd >10pp 5.0 -> 5.6 (t +2.3, both already out of range).
+  Not settled at 16; 48 seeds would be the last stage (64 more runs, ~18 min).
 
