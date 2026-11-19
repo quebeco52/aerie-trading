@@ -149,6 +149,7 @@ class CorporateActionEngine
 
         $stock->setLastDividend((string) ($oldDiv / $splitFactor));
         $stock->setFreeCashFlowPerShare((string) ($oldFcf / $splitFactor));
+        CapitalAllocationEngine::restateDividendRecordForSplit($stock, 1.0 / $splitFactor);
 
         $desc = "{$stock->getName()} has executed a {$splitFactor}-for-1 stock split.";
         $splitEvent = $this->marketEvent->publish($stock, 'SPLIT', $desc, 0.00);
@@ -205,6 +206,7 @@ class CorporateActionEngine
 
         $stock->setLastDividend((string) ($oldDiv * $splitFactor));
         $stock->setFreeCashFlowPerShare((string) ($oldFcf * $splitFactor));
+        CapitalAllocationEngine::restateDividendRecordForSplit($stock, (float) $splitFactor);
 
         $desc = "{$stock->getName()} has executed a 1-for-{$splitFactor} reverse stock split.";
         $splitEvent = $this->marketEvent->publish($stock, 'REVERSE_SPLIT', $desc, 0.00);

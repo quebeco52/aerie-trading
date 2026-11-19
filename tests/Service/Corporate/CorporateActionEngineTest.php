@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Service\Corporate;
 
 use App\Entity\Stock;
+use App\Service\Corporate\CapitalAllocationEngine;
 use App\Service\Corporate\CorporateActionEngine;
 use App\Service\News\MarketEventPublisher;
 use PHPUnit\Framework\TestCase;
@@ -90,6 +91,27 @@ class CorporateActionEngineTest extends TestCase
         // CRITICAL: Net worth must remain exactly $10,000,000
         $newNetWorth = $result['price'] * $result['shares'];
         $this->assertEquals($startingNetWorth, $newNetWorth, 'The reverse split destroyed player wealth!');
+    }
+
+    /**
+     * The dividend record is per share like the dividend: a split restates both, so the year after a 4-for-1 split is
+     * not read as a cut against last year's pre-split dividend, nor a 1-for-100 as a raise.
+     */
+    public function testASplitRestatesTheDividendRecordWithTheDividend(): void
+    {
+        $forward = $this->stock('HYPR', '1000', '40.0');
+        $forward->setLastDividend('8.00');
+        $forward->setEarningsMomentumZ([CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND => 7.60]);
+        $this->engine->processSplits($forward, 1000.0, 1000, 5.0);
+        $this->assertEqualsWithDelta(2.00, (float) $forward->getLastDividend(), 1e-9);
+        $this->assertEqualsWithDelta(1.90, ($forward->getEarningsMomentumZ() ?? [])[CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND], 1e-9);
+
+        $reverse = $this->stock('DEAD', '100000000', '0.01');
+        $reverse->setLastDividend('0.0010');
+        $reverse->setEarningsMomentumZ([CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND => 0.0009]);
+        $this->engine->processSplits($reverse, 0.10, 100000000, 5.0);
+        $this->assertEqualsWithDelta(0.10, (float) $reverse->getLastDividend(), 1e-9);
+        $this->assertEqualsWithDelta(0.09, ($reverse->getEarningsMomentumZ() ?? [])[CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND], 1e-9);
     }
 
     public function testForwardSplitDelegatesToCorporateLedgerService(): void

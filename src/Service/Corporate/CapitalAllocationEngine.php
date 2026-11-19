@@ -405,6 +405,20 @@ class CapitalAllocationEngine
     }
 
     /**
+     * Restates the per-share dividend record for a split: a 4-for-1 split takes last year's dividend to a quarter of
+     * itself, as it does the dividend, so the year after a split is judged against the same dollars.
+     */
+    public static function restateDividendRecordForSplit(Stock $stock, float $perShareFactor): void
+    {
+        $state = $stock->getEarningsMomentumZ() ?? [];
+        if (!isset($state[self::STATE_YEAR_END_DIVIDEND])) {
+            return;
+        }
+        $state[self::STATE_YEAR_END_DIVIDEND] = round((float) $state[self::STATE_YEAR_END_DIVIDEND] * $perShareFactor, 4);
+        $stock->setEarningsMomentumZ($state);
+    }
+
+    /**
      * Records the quarter's net reinvestment and earnings the annual payout review reads, each smoothed over the same
      * window so their ratio is the share of earnings the firm has been putting back into the business.
      */

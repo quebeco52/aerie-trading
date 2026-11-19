@@ -144,3 +144,17 @@ token raise only when covered by quarterly EPS)
 - vs pbase: DPS falls >10% 116.5 -> 104.3 (t -2.3), >0.5% 568 -> 588 (t 3.3), median payout 0.367 -> 0.373 (t 1.2).
   The pay2 rise in large falls was the 11 seeded champions: 0.75 (pbase) -> 12.5 (pay2) -> 3.25 (pay3) a run.
 - Scorecard: STRK (credit services) fails in seed 1 at y13.4; distressed and paying nothing from y11 in every arm.
+
+### pay4 (pay3 + split restates `carry:year_end_dividend`, CapitalAllocationEngine::restateDividendRecordForSplit)
+- Run: `HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 pay4`, then `python3 champs.py pay3 pay4`
+  (seeded champions: survival of the unbroken opening record, each on-roll break with cause), `python3 pay2.py pay4`,
+  `python3 payout.py pbase pay4`, `python3 payout.py pay3 pay4`, `python3 cuts.py pay4 pbase pay3 pay4`,
+  `python3 scorecard.py pbase pay4` -> `payout_pay4_4s.out`.
+- Seeded champions (44 firm-runs) unbroken y5/10/20: pay3 66/41/9% (11.3%/y) -> pay4 91/82/73% (1.6%/y). On-roll
+  breaks 49 -> 14: cut with no crisis/covenant flag 7 (DOVE, WELL, MAGP, GRIP), covenant cut 3 (GRIP y2-3, PINT),
+  flat and uncovered 3 (GRIP, SWFT, WELL), flat but covered 1 (PINT s3 y10).
+- Roll, share of payers y5/10/20: 35.5/62.5/73.1% (all firms 33.7/59.0/70.6%); champion+king 10.2/9.3/8.0%.
+  Token 195 of 893 streak years (22%). Breaks 6.6/y, joins 7.8/y. Div > TTM NI 4q on the roll: 0.
+- vs pbase: DPS falls >10% 116.5 -> 87.0 (t -4.9), >0.5% 568 -> 540 (t -3.7), payout 0.367 -> 0.354 (t -1.9).
+  Opening champions' >10% falls 0.75 -> 1.25 (t 0.8). Scorecard: nothing newly out of range; vs pay3, board cap/GDP
+  at end 4.04 -> 4.20 (t 7.6, inside 1-5).
