@@ -277,3 +277,35 @@ flat under MIN_ANNOUNCED_DIVIDEND_RAISE 3%; cuts any quarter)
   policy): broken in s2/s3/s4 at y4/y10/y2 (pbase3 s1 only), each a flat year, covered (DPS 0.67-0.76 of EPS/4),
   cash at the treasury target (1.01x), headroom true, icr 30-40: the hold is funded by debt, the raise is not
   (CapitalAllocationEngine:303-308).
+
+### raise1 (covered year-end raise borrowed like a held dividend, `$isCoveredRaise`) and lend1 (lender rows only)
+- Arms: `books1` = HEAD b42f6757 (runs reused: no src file but the five now modified is newer than them); `lend1` =
+  BASE tree in the session scratchpad (git archive HEAD + the five modified src files, `$isCoveredRaise` reverted),
+  `raise1` = working tree. `run_payout.sh` now also runs the BASE tree for the arm named in `PAY_BASE_ARM`. Run:
+  `PAY_BASE=<tree> PAY_BASE_ARM=lend1 HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 lend1 &&
+  HEALTH=1 bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 raise1` (131 s per arm at 4 slots), then new
+  `python3 lend.py <a> <b> [--firms]` (roll and champion+ share of payers, opening champions, breaks flat/cut,
+  dividend-borrowing events, SHRK; `--firms` TALN/STRK/POOL ROE, margin, eq/GDP, D/E, breaches), plus sticky, payout,
+  books, scorecard -> `payout_raise1_4s.out`.
+- raise1 - lend1 (4 seeds, 20y, TPY 360): champion+ % payers y0/5/10/20 7.2/2.9/2.1/2.8 -> 7.0/5.2/3.2/4.0 (t -1.0/
+  2.1/2.4/1.0); roll % 28.9/19.6/28.0/33.5 -> 28.4/23.1/30.0/34.6 (t <= 1.1). Opening champions unbroken y5 22 -> 44%
+  (t 1.7), y20 9 -> 6% (t -1.0); breaks flat 7.0 -> 7.25, cut 1.0 -> 1.75 a run. Fiscal-year raise share .671 -> .693
+  (t 4.8), flat .281 -> .261 (t -8.0); token share of streak years .043 -> .070 (t 3.7).
+- SHRK: unbroken through y20 in 4/4 seeds (streak y20 10.8 -> 40, t 8.0), net D/E y20 0.20 both.
+- Debt: logged dividend borrowing 12.5 -> 17.3 events, $13.4 -> 17.6bn a run (t 1.3/1.5); net D/E (77) unchanged at
+  every year (|t| <= 1.1); covenant breach firms y1-3 4.75 -> 6.5 (t 2.0), firm-quarters 11.5 -> 20.3 (t 3.0), of the
+  new breach firms only LOON, OSPR (6q, 3.0x covL), FIRE logged a dividend borrowing in y1-3; GRIP 0 -> 0.5.
+- Dividends: DPS falls >10% 94.8 -> 96.8, >0.5% 284 -> 279, payout .353 -> .352 (all |t| < 0.5). Scorecard: nothing
+  newly out; acquisitions 186 -> 183.
+- lend1 - books1, lenders: TALN ROE y0 27 -> 29%, eq/GDP 1.06 -> 0.95%, D/E 6.0 -> 6.3, y20 ROE 16 -> 20%; STRK ~same
+  (ROE y0 32%); POOL ROE y0/5/10/20 30/28/23/29 -> 19/18/15/17%, eq/GDP 0.92/0.97/1.04/1.09 -> 0.92/0.84/0.77/0.61%,
+  D/E ~3.9. No death, default, covenant quarter; ratings A/A/BBB unchanged.
+- raise2 (raise1 + `&& debtToEquity < leverageTarget`; POOL row drops `moat`, same default): `HEALTH=1
+  bin/harness-batch var/harness/scorecard/run_payout.sh 1-4 raise2` -> `payout_raise2_4s.out`. vs lend1 / vs raise1:
+  covenant breach firms y1-3 5.25 (t 1.7 / -2.0), firm-quarters 13.5 (t 1.4 / -2.2); LOON, FIRE out, OSPR 2q at 1.04x
+  (s2), GRIP still 1q in s1 and s2 (no dividend borrowing logged for any of them in y1-3). Champion+ % y5/10/20
+  4.1/2.9/3.5 (vs lend1 t 1.2/3.1/0.8; vs raise1 t -3.0/-0.5/-0.8); opening champions unbroken y5/y20 34/6% (lend1
+  22/9, raise1 44/6). SHRK unbroken in s3, s4 only (s2 breaks y3 and y9 at net D/E 0.57-0.65, s1 streak 16 at y20);
+  streak y20 26.5 (lend1 10.8, raise1 40). Dividend borrowing 18.5 events, $18.6bn a run (lend1 12.5 t 2.1, raise1
+  17.3 t 0.2). Raise share .677 (lend1 .671 t 1.5, raise1 .693 t -3.2); token share .043 = lend1. Scorecard: nothing
+  newly out (largest revenue/GDP 0.17, out in all arms).

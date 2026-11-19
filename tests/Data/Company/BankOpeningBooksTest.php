@@ -21,6 +21,7 @@ use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
+use App\Service\Model\Sector\ShadowBankBusinessModel;
 use App\Tests\Support\CorporateEngineFactory;
 use App\Tests\Support\ScriptedDraws;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -47,13 +48,21 @@ class BankOpeningBooksTest extends TestCase
      */
     private const FIRST_REPORT_MARGIN_TOLERANCE = 0.015;
 
+    /**
+     * Most of a lender's through-the-cycle credit charge its first, median year may spare (15%): the loss
+     * distribution is right-skewed (Vasicek), so its median year loses less than its mean. Measured 8-9% on every book.
+     */
+    private const MEDIAN_YEAR_LOSS_SPARED = 0.15;
+
+    private DebtEngine $debtEngine;
     private OpeningBoardBuilder $builder;
 
     protected function setUp(): void
     {
         mt_srand(20261119);
         $math = new MathUtility();
-        $this->builder = new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance()), new MarketEngine($math), new AnchorStakeLedger());
+        $this->debtEngine = new DebtEngine($math, CorporateMetrics::getInstance());
+        $this->builder = new OpeningBoardBuilder($math, $this->debtEngine, new MarketEngine($math), new AnchorStakeLedger());
     }
 
     /** @return array<string, array{array<string, mixed>}> Every lender whose row states its character, by ticker. */
@@ -71,7 +80,7 @@ class BankOpeningBooksTest extends TestCase
 
     public function testTheBoardCarriesLendersBuiltFromTheirCharacter(): void
     {
-        $this->assertGreaterThanOrEqual(5, count(self::characterProvider()), 'LAKE, RIVR, PLVR, EGRT and BNTH state their character.');
+        $this->assertGreaterThanOrEqual(8, count(self::characterProvider()), 'Every lender, card lender and shadow bank states its character.');
     }
 
     /** @param array<string, mixed> $row */
@@ -84,20 +93,43 @@ class BankOpeningBooksTest extends TestCase
     }
 
     /**
-     * Its equity over equity and funding is the capital ratio it steers to, and its wholesale share of funding the one
-     * its row states.
+     * Its equity over equity and funding is the capital ratio it steers to; a lender with none (a card lender) opens at
+     * the debt and leases over equity its manager recapitalises toward, inside its covenant.
      *
      * @param array<string, mixed> $row
      */
     #[DataProvider('characterProvider')]
-    public function testItOpensAtItsCapitalRatioAndFundingMix(array $row): void
+    public function testItOpensAtItsCapitalRatioOrItsLeverageTarget(array $row): void
     {
         $books = SeedRows::for($row['ticker']);
-        $funding = $books['customer_deposits'] + $books['wholesale_debt'];
         $target = Sectors::strategyFor($row['industry'])->getTargetCapitalRatio((new Stock())->setTicker($row['ticker']));
+        if ($target !== null) {
+            $funding = $books['customer_deposits'] + $books['wholesale_debt'];
+            $this->assertEqualsWithDelta($target, $books['total_equity'] / ($books['total_equity'] + $funding), 1e-9, $row['ticker']);
 
-        $this->assertEqualsWithDelta($target, $books['total_equity'] / ($books['total_equity'] + $funding), 1e-9, $row['ticker']);
-        $this->assertEqualsWithDelta($row['wholesale_funding_share'], $books['wholesale_debt'] / $funding, 1e-9, $row['ticker']);
+            return;
+        }
+
+        $stock = $this->open($books);
+        // The manager the target is struck for: its style at the typical intensity, not this run's draw.
+        $stock->setManagementIntensity(1.0);
+        $health = $this->debtEngine->analyzeDebtHealth($stock, new MacroStateDTO(), (float) $stock->getTotalRevenue(), (float) $stock->getOperatingMargin());
+        $this->assertEqualsWithDelta($health->leverageTarget, $health->debtToEquity, 0.01, $row['ticker']);
+        $this->assertTrue($health->hasLeverageHeadroom, "{$row['ticker']} opens inside its covenant.");
+    }
+
+    /**
+     * Its wholesale share of funding is the one its row states; a shadow bank takes no deposits, so all of it.
+     *
+     * @param array<string, mixed> $row
+     */
+    #[DataProvider('characterProvider')]
+    public function testItOpensOnItsFundingMix(array $row): void
+    {
+        $books = SeedRows::for($row['ticker']);
+        $expected = Sectors::strategyFor($row['industry']) instanceof ShadowBankBusinessModel ? 1.0 : $row['wholesale_funding_share'];
+
+        $this->assertEqualsWithDelta($expected, $books['wholesale_debt'] / ($books['customer_deposits'] + $books['wholesale_debt']), 1e-9, $row['ticker']);
     }
 
     /** @param array<string, mixed> $row */
@@ -140,7 +172,9 @@ class BankOpeningBooksTest extends TestCase
     /**
      * Its first report, with no shock in it and the economy where it opened, files the operating margin it opened at:
      * the margin is the one its cost base and through-the-cycle losses leave on its revenue, not a number typed beside
-     * them.
+     * them. A median year loses less than the cycle's mean, so the margin may run above it by the share of that charge
+     * the year spares. A shadow bank's row states its margin before credit losses, which its fee yield is struck on, so
+     * its report is read against that margin less its through-the-cycle charge.
      *
      * @param array<string, mixed> $row
      */
@@ -148,7 +182,10 @@ class BankOpeningBooksTest extends TestCase
     public function testItsFirstReportFilesTheMarginItOpenedAt(array $row): void
     {
         $stock = $this->open($row);
-        $opened = (float) $stock->getOperatingMargin();
+        $strategy = Sectors::strategyFor($row['industry']);
+        self::assertInstanceOf(CommercialBankBusinessModel::class, $strategy);
+        $creditCharge = $strategy->resolveThroughTheCycleCreditProvision($stock, $strategy->resolveEarningAssets($stock)) / (float) $stock->getTotalRevenue();
+        $opened = (float) $stock->getOperatingMargin() - ($strategy instanceof ShadowBankBusinessModel ? $creditCharge : 0.0);
         $math = new ScriptedDraws(generateUniform: 0.5, generateUniformBetween: static fn(float $min, float $max): float => ($min + $max) / 2.0);
         $engine = self::earningsEngine($math);
         $ticksPerYear = 360;
@@ -156,7 +193,9 @@ class BankOpeningBooksTest extends TestCase
         $report = $engine->calculate($stock, new MacroStateDTO(), EarningsEngine::resolveReportingTick($row['ticker'], $ticksPerYear), $ticksPerYear);
 
         $this->assertNotNull($report, "{$row['ticker']} reports on its reporting tick.");
-        $this->assertEqualsWithDelta($opened, (float) $stock->getReportedOperatingMargin(), self::FIRST_REPORT_MARGIN_TOLERANCE, $row['ticker']);
+        $filed = (float) $stock->getReportedOperatingMargin();
+        $this->assertGreaterThanOrEqual($opened - self::FIRST_REPORT_MARGIN_TOLERANCE, $filed, $row['ticker']);
+        $this->assertLessThanOrEqual($opened + self::FIRST_REPORT_MARGIN_TOLERANCE + (self::MEDIAN_YEAR_LOSS_SPARED * $creditCharge), $filed, $row['ticker']);
     }
 
     /**
@@ -167,13 +206,13 @@ class BankOpeningBooksTest extends TestCase
      */
     public static function refusedCharacterProvider(): array
     {
-        $lake = null;
+        $lake = $pool = null;
         foreach (InitialMarket::STOCKS as $row) {
-            if ($row['ticker'] === 'LAKE') {
-                $lake = $row;
-            }
+            $lake = $row['ticker'] === 'LAKE' ? $row : $lake;
+            $pool = $row['ticker'] === 'POOL' ? $row : $pool;
         }
         self::assertNotNull($lake);
+        self::assertNotNull($pool);
         $missing = $lake;
         unset($missing['retained_share']);
 
@@ -184,6 +223,8 @@ class BankOpeningBooksTest extends TestCase
             'retained earnings past its equity' => [['retained_share' => 1.5] + $lake],
             'no revenue' => [['revenue' => 0.0] + $lake],
             'a moat off the ladder' => [['moat' => 'impregnable'] + $lake],
+            'a funding mix beside a shadow bank' => [['wholesale_funding_share' => 0.5] + $pool],
+            'a shadow bank margin past its revenue' => [['operating_margin' => 1.2] + $pool],
         ];
     }
 

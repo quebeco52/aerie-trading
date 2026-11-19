@@ -66,3 +66,15 @@ Medians over the 77, q0/q4/q8/q20/q40:
 - opening return gap to required + moat median +0.52 -> +0.08pp, max 11.4 -> 0.3pp; 10y drift IQR -0.47..+0.51 ->
   -0.18..+0.50pp. Shares -9.8% -> -9.6% by y5: the buybacks are the ordinary payout, not the seed's cash surplus.
 - flagged 38 -> 13 of 103; among the 77, 30 -> 5 (BIRD, WADE margin; SKYL ret/margin; TICK rev/eq/margin; IBIS eq/lev).
+
+## Card lenders and the shadow bank built from character (11-19)
+TALN/STRK state revenue, wholesale funding share, addressable and retained share; POOL states revenue, its
+pre-credit-loss operating margin, addressable and retained share (all wholesale by construction). With no capital
+target a lender opens at its manager's leverage target, debt and leases over equity (`lend_after.jsonl` vs
+`lend_before.jsonl`; the other 100 firms identical). TALN margin 45.0 -> 37.5 opening (files 37.7-37.9 either way; flag
+gone); STRK 32.0 -> 32.9. POOL ROE 29.0 -> 25.1 (top of the moat ladder; was drifting to 32.1, flag gone), revenue
+24.0 -> 17.4bn to hold its equity at 55bn, cash 9.8 -> 4.0% of assets (it fell to 4.8% by y5 either way). POOL's
+margin flag (50 -> 43.8) is its row's margin being before credit losses; the filed margin is after them.
+Then TALN wholesale share 6.4 -> 25% and POOL moat very_wide -> moderate, revenue 17.4 -> 8.06bn to hold equity at 55bn
+(`lend2.jsonl`): TALN margin 39.4%, ROE 25.1 -> 26.6 by y10, cash 6.5% of assets; POOL ROE 16.1 -> 18.6 by y5 (P/B 3.1 ->
+1.85), filed margin 34.4% after credit losses against its 50% pre-loss margin (flag).

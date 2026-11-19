@@ -790,24 +790,53 @@ class CapitalAllocationEngineTest extends TestCase
     }
 
     /**
+     * A board raising its dividend at its annual review borrows the raise its cash cannot pay, when the year's earnings
+     * cover it within its policy and it sits below the leverage its manager targets: cash short of a raise is met with
+     * debt, not a flat year that ends its record. At its target it borrows only to hold. A variable payer, paying a
+     * share of each year's earnings, borrows nothing for a raise.
+     */
+    public function testASmoothingPayerBorrowsTheCoveredRaiseItsCashCannotPay(): void
+    {
+        $belowTarget = DebtHealthBuilder::from($this->buildHealth())->withRecapitalization(0.3, 0.5)->build();
+        $atTarget = DebtHealthBuilder::from($this->buildHealth())->withRecapitalization(0.5, 0.5)->build();
+        // $4.00 a share a year is $1.00 a quarter: a 30% policy pays $0.30, so from $0.20 the year's step is a raise.
+        [$payer, , $borrowed] = $this->payDividendShortOfCash(false, lastDividend: '0.20', isFiscalYearEnd: true, health: $belowTarget);
+        [$levered, , $leveredBorrowed] = $this->payDividendShortOfCash(false, lastDividend: '0.20', isFiscalYearEnd: true, health: $atTarget);
+        [$midYear, , $midYearBorrowed] = $this->payDividendShortOfCash(false, lastDividend: '0.20', health: $belowTarget);
+        [$miner, , $minerBorrowed] = $this->payDividendShortOfCash(false, lastDividend: '0.20', isFiscalYearEnd: true, industry: 'Copper', health: $belowTarget);
+
+        $this->assertGreaterThan(0.20 * (1.0 + CapitalAllocationEngine::MIN_ANNOUNCED_DIVIDEND_RAISE), $payer['dividend_paid'], 'The raise is paid.');
+        $this->assertLessThanOrEqual(0.30, $payer['dividend_paid'], 'No further than its policy.');
+        $this->assertCount(1, $borrowed);
+        $this->assertEqualsWithDelta($payer['dividend_paid'] * 1_000_000, $borrowed[0], 1.0, 'It borrows the raised dividend its cash cannot pay.');
+
+        $this->assertSame(0.20, $levered['dividend_paid'], 'At its leverage target it holds rather than borrow for a raise.');
+        $this->assertEqualsWithDelta(200_000.0, $leveredBorrowed[0] ?? 0.0, 1.0);
+        $this->assertSame(0.20, $midYear['dividend_paid'], 'Control: mid-year a smoothing payer holds, and borrows only to hold.');
+        $this->assertEqualsWithDelta(200_000.0, $midYearBorrowed[0] ?? 0.0, 1.0);
+        $this->assertSame([], $minerBorrowed, 'A variable payer borrows nothing for a raise.');
+        $this->assertLessThan(0.20, $miner['dividend_paid'], 'Control: its cash caps the raise it would have paid.');
+    }
+
+    /**
      * A firm that pays out $1.00 a quarter from a $0.5m treasury in a quarter whose free cash flow is -$1.00 a share;
      * the trailing year earned $4.00 a share unless a loss year is given.
      *
      * @return array{0: array<string, mixed>, 1: Stock, 2: list<float>} The allocation, the firm, and each amount
      *                                                                  borrowed.
      */
-    private function payDividendShortOfCash(bool $aristocrat, string $trailingNetIncome = '4000000.00'): array
+    private function payDividendShortOfCash(bool $aristocrat, string $trailingNetIncome = '4000000.00', string $lastDividend = '1.00', bool $isFiscalYearEnd = false, string $industry = 'Software - Infrastructure', ?DebtHealthDTO $health = null): array
     {
         $stock = new Stock();
         $stock->setTicker($aristocrat ? 'ARIS' : 'PEER');
-        $stock->setIndustry('Software - Infrastructure');
+        $stock->setIndustry($industry);
         $stock->setSharesOutstanding('1000000');
         $stock->setPrice('100.00');
         $stock->setTotalEquity('100000000');
         $stock->setCorporateTreasury('500000');
         $stock->setTargetPayoutRatio('0.30');
         $stock->setDividendSpeed('0.10');
-        $stock->setLastDividend('1.00');
+        $stock->setLastDividend($lastDividend);
         $stock->setDividendStreakYears($aristocrat ? 30 : 0);
         $stock->setRetainedEarnings('50000000.00');
         $stock->setTotalRevenue('10000000.00');
@@ -819,12 +848,12 @@ class CapitalAllocationEngineTest extends TestCase
 
         $borrowed = [];
         $lender = $this->createStub(DebtEngine::class);
-        $lender->method('analyzeTrailingDebtHealth')->willReturn($this->buildHealth());
+        $lender->method('analyzeTrailingDebtHealth')->willReturn($health ?? $this->buildHealth());
         $lender->method('issueDebt')->willReturnCallback(static function (Stock $issuer, float $amount) use (&$borrowed): void {
             $borrowed[] = $amount;
         });
 
-        $result = $this->buildEngineWith($lender)->allocateCapital($stock, 4.00, -1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21));
+        $result = $this->buildEngineWith($lender)->allocateCapital($stock, 4.00, -1.00, 100.00, 1000000.0, new MacroStateDTO(corporateTaxRate: 0.21), isFiscalYearEnd: $isFiscalYearEnd);
 
         return [$result, $stock, $borrowed];
     }

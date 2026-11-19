@@ -299,9 +299,15 @@ class CapitalAllocationEngine
         // the book charge the trust owes a distribution its cash flow does not cover. It borrows the gap at its
         // market rate while its lenders will fund it, as REITs draw their lines to pay required distributions.
         // A payer holding its dividend does the same: managers raise external funds before they cut (Brav, Graham,
-        // Harvey & Michaely 2005), so a quarter's cash shortfall is not a cut while lenders will fund it.
+        // Harvey & Michaely 2005), so a quarter's cash shortfall is not a cut while lenders will fund it. A smoothing
+        // board funds its annual raise the same way when the year's earnings cover it within its policy's share of
+        // them: cash short of the raise is met half by debt (Daniel, Denis & Naveen 2008), not by a flat year. A raise
+        // is a choice where a hold is a defence, so it is borrowed for only below the leverage the manager targets.
         $heldDividend = $holdsDividend ? min($ctx->newDividend, $lastDividend) : 0.0;
-        $fundedDividend = max($requiredDividend, $heldDividend);
+        $isCoveredRaise = $ctx->isFiscalYearEnd && $ctx->strategy->holdsDividendThroughDownturns() && $earningsBase > 0.0
+            && $ctx->newDividend > $lastDividend && $ctx->newDividend <= $calculatedTarget
+            && $ctx->health->debtToEquity < $ctx->health->leverageTarget;
+        $fundedDividend = max($requiredDividend, $heldDividend, $isCoveredRaise ? $ctx->newDividend : 0.0);
         // It borrows what the dividend is short of the cash above its operating floor, and no more: a treasury below
         // the floor is refilled by the liquidity pass, revolver first and on its own refusal gates, not by debt raised
         // in the dividend's name. The cash cap below counts what was borrowed for the dividend.

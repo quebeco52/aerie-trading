@@ -159,8 +159,8 @@ class StockModelTuning
         'POOL' => [
             ModelParam::MortgageOriginationWeight->value => 0.60,
             ModelParam::DirectLendingWeight->value       => 0.40,
-            // Its seeded book equity/assets: the haircuts its repo and warehouse lenders set hold it there, and what it
-            // earns above that is handed back rather than lent into a book that outgrows its borrowers.
+            // Its opening equity is built on it: the haircuts its repo and warehouse lenders set hold it there, and
+            // what it earns above that is handed back rather than lent into a book that outgrows its borrowers.
             ModelParam::TargetCapitalRatio->value        => 0.1964,
         ],
 

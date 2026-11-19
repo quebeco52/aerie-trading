@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Company\IndustryMoats;
+use App\Data\Company\ManagementStyle;
+use App\Data\Company\Sectors;
 use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\InterestExpenseDTO;
 
@@ -19,6 +21,7 @@ use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\CreditRisk;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MacroTransmission;
@@ -457,13 +460,14 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     ];
 
     /**
-     * A lender's opening books from its character: the revenue it earns, its capital ratio (its TargetCapitalRatio),
-     * the share of its funding that is wholesale, its moat (IndustryMoats) over the cost of equity, the share of its
-     * addressable market its equity fills and the share of it that is retained earnings. The balance sheet is built on
-     * those ratios, holding the cash its treasury targets; its loan spread is struck on it as the model strikes it, and
-     * the whole is scaled until it earns the stated revenue. Its operating margin is the one its cost base and
-     * through-the-cycle losses leave on that revenue. A row that states its books (no revenue key) is handed back as it
-     * is.
+     * A lender's opening books from its character: the revenue it earns, the share of its funding that is wholesale,
+     * its moat (IndustryMoats) over the cost of equity, the share of its addressable market its equity fills and the
+     * share of it that is retained earnings. Its equity is the capital ratio it steers to (its TargetCapitalRatio), or,
+     * with none, the leverage its manager recapitalises toward (openingEquity()). The balance sheet is built on those
+     * ratios, holding the cash its treasury targets; its pricing is struck on it as the model strikes it, and the whole
+     * is scaled until it earns the stated revenue. Its operating margin is the one its cost base and through-the-cycle
+     * losses leave on that revenue (openingOperatingMargin()). A row that states its books (no revenue key) is handed
+     * back as it is.
      */
     public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
     {
@@ -472,14 +476,10 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         }
 
         $ticker = (string) $seedRow['ticker'];
-        self::assertOpeningCharacter($seedRow);
-        $capitalRatio = $this->getTargetCapitalRatio((new Stock())->setTicker($ticker));
-        if ($capitalRatio === null || $capitalRatio <= 0.0 || $capitalRatio >= 1.0) {
-            throw new \DomainException("{$ticker} builds its books on its capital ratio: set TargetCapitalRatio in StockModelTuning.");
-        }
+        $this->assertOpeningCharacter($seedRow);
 
         $revenue = (float) $seedRow['revenue'];
-        $wholesaleShare = (float) $seedRow['wholesale_funding_share'];
+        $wholesaleShare = $this->openingWholesaleShare($seedRow);
         $addressableShare = (float) $seedRow['addressable_share'];
         $books = [
             'baseline_roe' => $this->openingCostOfEquity($seedRow, $openingMacro) + IndustryMoats::forRow($seedRow)->spread(),
@@ -488,18 +488,22 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $stock = (new Stock())
             ->setTicker($ticker)
             ->setIndustry($seedRow['industry'] ?? null)
+            ->setManagementStyle(ManagementStyle::tryFromNullable($seedRow['management_style'] ?? null))
             ->setSystemicImportance($seedRow['systemic_importance'] ?? 'none')
             ->setFloatingDebtRatio((string) $seedRow['floating_debt_ratio'])
             ->setHistoricalFixedRate((string) $seedRow['historical_fixed_rate'])
             ->setCreditSpread((string) $seedRow['credit_spread'])
             ->setBaselineRoe((string) $books['baseline_roe']);
+        if (isset($seedRow['operating_margin'])) {
+            $stock->setOperatingMargin((string) $seedRow['operating_margin']);
+        }
 
         $assets = self::OPENING_BOOK_TRIAL_ASSETS;
         $converged = false;
         for ($pass = 0; $pass < self::MAX_OPENING_BOOK_PASSES; $pass++) {
-            $equity = $capitalRatio * $assets;
-            $deposits = (1.0 - $capitalRatio) * (1.0 - $wholesaleShare) * $assets;
-            $wholesale = (1.0 - $capitalRatio) * $wholesaleShare * $assets;
+            $equity = $this->openingEquity($stock, $assets, $revenue);
+            $deposits = ($assets - $equity) * (1.0 - $wholesaleShare);
+            $wholesale = ($assets - $equity) * $wholesaleShare;
             $stock->setTotalEquity(Decimal::format($equity))
                 ->setCustomerDeposits(Decimal::format($deposits))
                 ->setWholesaleDebt(Decimal::format($wholesale))
@@ -509,7 +513,8 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             $stock->setCorporateTreasury(Decimal::format($this->calculateTargetOperatingCash($operatingBase, $deposits, $wholesale)));
 
             // What the book earns as the opening strikes it (OpeningBoardBuilder: invested capital at its turnover).
-            $earned = $this->resolveEarningAssets($stock) * max(0.0, $this->resolveInterestYield($stock, $openingMacro) + $this->resolveFranchisePricing($stock)['fee_yield']);
+            $metrics = $this->getTargetMetrics($stock, $openingMacro, new MathUtility());
+            $earned = $metrics['invested_capital'] * FirmEconomics::structuralAssetTurnover($metrics['baseline_roic'], (float) $stock->getOperatingMargin(), $openingMacro->corporateTaxRate);
             if ($earned <= 0.0) {
                 throw new \DomainException("{$ticker} earns nothing on the books its character builds.");
             }
@@ -523,9 +528,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             throw new \DomainException("{$ticker}'s books do not settle on its stated revenue in " . self::MAX_OPENING_BOOK_PASSES . ' passes.');
         }
 
-        $earningAssets = $this->resolveEarningAssets($stock);
-        $operatingCost = ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock)) + $this->resolveThroughTheCycleCreditProvision($stock, $earningAssets);
-
         return array_merge($seedRow, $books, [
             'total_equity' => (float) $stock->getTotalEquity(),
             'customer_deposits' => (float) $stock->getCustomerDeposits(),
@@ -533,8 +535,49 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             'corporate_treasury' => (float) $stock->getCorporateTreasury(),
             'retained_earnings' => (float) $seedRow['retained_share'] * (float) $stock->getTotalEquity(),
             'sam_ratio' => (float) $stock->getSamRatio(),
-            'operating_margin' => 1.0 - ($operatingCost / $revenue),
+            'operating_margin' => $this->openingOperatingMargin($stock, $revenue),
         ]);
+    }
+
+    /**
+     * The equity a lender opens with on a balance sheet of equity and funding: its capital ratio where it steers to
+     * one; otherwise the leverage its manager recapitalises toward, debt and leases over equity, at the typical
+     * intensity of its style (DebtEngine::analyzeDebtHealth()).
+     */
+    protected function openingEquity(Stock $stock, float $assets, float $revenue): float
+    {
+        $capitalRatio = $this->getTargetCapitalRatio($stock);
+        if ($capitalRatio !== null) {
+            if ($capitalRatio <= 0.0 || $capitalRatio >= 1.0) {
+                throw new \DomainException("{$stock->getTicker()} opens on a capital ratio outside (0, 1).");
+            }
+
+            return $capitalRatio * $assets;
+        }
+
+        $leverageTarget = $this->getLeverageTarget(Sectors::metricsFor($stock->getIndustry())['equity_limit'] * min(1.0, $stock->getManagementProfile()->leverageBias()));
+        $leaseLiability = CorporateMetrics::getInstance()->calculateLeaseLiability($revenue, $this->getLeaseIntensity($stock));
+
+        return ($assets + $leaseLiability) / (1.0 + $leverageTarget);
+    }
+
+    /**
+     * The share of its funding a lender raises wholesale, the rest from depositors, as its row states it.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function openingWholesaleShare(array $seedRow): float
+    {
+        return (float) $seedRow['wholesale_funding_share'];
+    }
+
+    /** The operating margin its cost base and through-the-cycle credit losses leave on the revenue it opens on. */
+    protected function openingOperatingMargin(Stock $stock, float $revenue): float
+    {
+        $earningAssets = $this->resolveEarningAssets($stock);
+        $operatingCost = ($earningAssets * $this->resolveOperatingCostToEarningAssets($stock)) + $this->resolveThroughTheCycleCreditProvision($stock, $earningAssets);
+
+        return 1.0 - ($operatingCost / $revenue);
     }
 
     /**
@@ -542,14 +585,18 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
      *
      * @param array<string, mixed> $seedRow
      */
-    private static function assertOpeningCharacter(array $seedRow): void
+    protected function assertOpeningCharacter(array $seedRow): void
     {
-        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
+        $margin = (float) ($seedRow['operating_margin'] ?? 0.0);
+        $inRange = array_intersect_key([
             'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
             'wholesale_funding_share' => (float) ($seedRow['wholesale_funding_share'] ?? -1.0) >= 0.0 && (float) ($seedRow['wholesale_funding_share'] ?? 1.0) < 1.0,
             'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
             'retained_share' => (float) ($seedRow['retained_share'] ?? -1.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 2.0) <= 1.0,
-        ]);
+            'operating_margin' => $margin > 0.0 && $margin < 1.0,
+        ], array_flip(static::OPENING_CHARACTER_KEYS));
+
+        SeedRows::assertCharacter($seedRow, static::OPENING_CHARACTER_KEYS, static::OPENING_BOOK_KEYS, $inRange);
     }
 
     /**

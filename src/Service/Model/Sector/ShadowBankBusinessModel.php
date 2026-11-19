@@ -136,6 +136,18 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
     /** Most wholesale debt the model carries per unit of equity (8x equity). */
     public const WHOLESALE_LEVERAGE_LIMIT = 8.0;
 
+    // --- Opening Books ---
+    /**
+     * A shadow bank's seed row states its operating margin, which its fee yield is struck on: it has no cost base per
+     * unit of book to leave one (getOperatingCostToEarningAssets()). It takes no deposits, so it states no funding mix.
+     */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share', 'retained_share'];
+    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio', 'wholesale_funding_share',
+    ];
+
     /**
      * The book is the two portfolios the revenue streams earn on: mortgages, secured on homes, and direct loans to
      * middle-market firms, charged off at the bank segment rates.
@@ -349,6 +361,18 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
             streamRevenue: $streamRevenues,
             netChargeOffs: $netChargeOffs,
         );
+    }
+
+    /** It takes no deposits: all its funding is wholesale. */
+    protected function openingWholesaleShare(array $seedRow): float
+    {
+        return 1.0;
+    }
+
+    /** The operating margin its row states, which its fee yield is struck on. */
+    protected function openingOperatingMargin(Stock $stock, float $revenue): float
+    {
+        return (float) $stock->getOperatingMargin();
     }
 
     /**
