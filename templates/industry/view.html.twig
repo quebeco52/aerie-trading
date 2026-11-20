@@ -40,6 +40,18 @@
 			{% endblock %}
 		{% endembed %}
 
+		{% if industry.sharedMarket %}
+			<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+				{% set marketSizeNote = industry.marketGdpShare is not null ? industry.marketGdpShare|pct(1) ~ ' of District GDP' : 'total annual market' %}
+				{% set peersNote = industry.companies|length ~ (industry.companies|length == 1 ? ' listed company' : ' listed companies') ~ (industry.entrants is not empty ? ' · ' ~ industry.entrants|length ~ (industry.entrants|length == 1 ? ' entrant' : ' entrants') : '') %}
+				{% set hhiNote = industry.highlyConcentrated ? 'highly concentrated · above ' ~ industry.concentrationLine|hhi : 'below ' ~ industry.concentrationLine|hhi %}
+				{{ ui.tile('Market size', industry.marketSize|format_large('$'), marketSizeNote, {tone: industry.marketSize is null ? 'text-on-surface-faint' : 'text-on-surface'}) }}
+				{{ ui.tile('Listed share', industry.listedShare|pct(1), peersNote) }}
+				{{ ui.tile('Unlisted fringe', industry.fringeShare|pct(1), 'private and unlisted competitors') }}
+				{{ ui.tile('Concentration (HHI)', industry.herfindahl|hhi, hhiNote, {position: 'right', tone: industry.highlyConcentrated ? 'text-warning' : 'text-on-surface', tip: 'Sum of listed sellers\' squared market shares on the 0–10,000 scale. Above ' ~ industry.concentrationLine|hhi ~ ', the Fair Trading Board treats the market as highly concentrated.'}) }}
+			</div>
+		{% endif %}
+
 		{# The story so far: the page's figures read as sentences, each only when it has something to say. #}
 		<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 			<h2 class="text-sm font-semibold text-on-surface mb-2">Where the industry stands</h2>
@@ -52,6 +64,10 @@
 					{% else %}
 						<li>Prices are close to a balanced industry's: plant and demand are roughly matched.</li>
 					{% endif %}
+				{% elseif industry.isFinancial %}
+					<li>Financial firms sell a yield on capital rather than a physical unit of output, so there is no plant to overbuild against demand.</li>
+				{% elseif not industry.sharedMarket and industry.companies is not empty %}
+					<li>Its listed companies sell into different markets, so no company's plant or revenue moves the price the others get.</li>
 				{% elseif not industry.pricesCapacity %}
 					<li>Its companies do not sell a common product, so no rival's plant moves the price the others get.</li>
 				{% endif %}
@@ -74,6 +90,7 @@
 		</section>
 
 		<div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+			{% set showShareChange = industry.companies|length > 1 and industry.sharedMarket %}
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 				<h2 class="text-sm font-semibold text-on-surface mb-3">Companies</h2>
 				<div class="overflow-x-auto">
@@ -82,8 +99,10 @@
 							<tr class="table-head">
 								<th scope="col" class="text-left font-semibold pb-2">Company</th>
 								<th scope="col" class="text-right font-semibold pb-2">Market value</th>
-								<th scope="col" class="text-right font-semibold pb-2" title="Share of what the industry's listed sellers sell">Share</th>
-								<th scope="col" class="text-right font-semibold pb-2" title="Change in its share of listed sales over three years">3-year change</th>
+								<th scope="col" class="text-right font-semibold pb-2" title="Share of the industry's total market, listed and unlisted sellers together">Market share</th>
+								{% if showShareChange %}
+									<th scope="col" class="text-right font-semibold pb-2" title="Change in its share of the listed companies' reported sales over three years">3-year change</th>
+								{% endif %}
 							</tr>
 						</thead>
 						<tbody class="divide-y divide-outline-variant/10">
@@ -92,7 +111,9 @@
 									<th scope="row" class="py-1.5 text-left font-normal"><a href="/stock/{{ company.ticker }}" class="hover:text-primary"><span class="font-mono font-semibold text-on-surface">{{ company.ticker }}</span> <span class="text-on-surface-variant">{{ company.name }}</span></a></th>
 									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ company.marketValue|format_large('$') }}</td>
 									<td class="py-1.5 text-right font-mono tabular-nums {{ company.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ company.share is null ? '—' : company.share|pct(1) }}</td>
-									<td class="py-1.5 text-right font-mono tabular-nums {{ company.shareChange is null ? 'text-on-surface-faint' : company.shareChange|round(3)|signed_class }}">{{ company.shareChange is null ? '—' : company.shareChange|pp(1, true) }}</td>
+									{% if showShareChange %}
+										<td class="py-1.5 text-right font-mono tabular-nums {{ company.shareChange is null ? 'text-on-surface-faint' : company.shareChange|round(3)|signed_class }}">{{ company.shareChange is null ? '—' : company.shareChange|pp(1, true) }}</td>
+									{% endif %}
 								</tr>
 							{% endfor %}
 						</tbody>
@@ -108,6 +129,12 @@
 							</li>
 						{% endfor %}
 					</ul>
+				{% endif %}
+				{% if industry.sharedMarket and industry.fringeShare is not null %}
+					<div class="mt-4 pt-3 border-t border-outline-variant/15 flex items-center justify-between gap-3 text-xs">
+						<span class="text-on-surface-variant">Unlisted competitors</span>
+						<span class="font-mono tabular-nums text-on-surface">{{ industry.fringeShare|pct(1) }} <span class="font-sans text-on-surface-faint">of the market</span></span>
+					</div>
 				{% endif %}
 			</section>
 
@@ -142,7 +169,7 @@
 			{% if industry.charts.shares %}
 				<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 					<h2 class="text-sm font-semibold text-on-surface">Who sells its output</h2>
-					<p class="text-xs text-on-surface-variant mt-1 mb-3">Each listed company's share of the sales the listed companies report, largest first.</p>
+					<p class="text-xs text-on-surface-variant mt-1 mb-3">Each listed company's share of the sales the listed companies report, largest first.{% if industry.entrants is not empty %} Companies selling here from another industry are excluded from the quarterly report series.{% endif %}</p>
 					{{ charts.line_chart(industry.charts.shares, 'Share of listed sales by company, by quarter') }}
 				</section>
 			{% endif %}

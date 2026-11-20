@@ -952,7 +952,7 @@ class IndustryShareLedger
      * bank mergers under the same 2023 Guidelines, so a firm is not exempt from review because its industry
      * has no capacity to count.
      *
-     * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float}|null
+     * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float, shares: array<string, float>}|null
      */
     public function describeMergerMarket(Stock $stock, MacroStateDTO $macroState, float $secularExcessGrowth, int $tick, int $ticksPerYear, string $segment = Segments::MAIN): ?array
     {
@@ -975,6 +975,7 @@ class IndustryShareLedger
             'acquirer_share' => min(1.0, $shares[$ticker] ?? 0.0),
             'herfindahl'     => min(1.0, array_sum(array_map(static fn(float $share): float => $share * $share, $shares))),
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
+            'shares'         => $shares,
         ];
     }
 
@@ -984,7 +985,7 @@ class IndustryShareLedger
      * rival drain reads, fringeRevenue). Null until the firm has reported a share and a revenue.
      *
      * @param ShareRecord $own
-     * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float}|null
+     * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float, shares: array<string, float>}|null
      */
     private function describeRevenueMarket(string $industry, string $ticker, array $own, int $tick, int $ticksPerYear): ?array
     {
@@ -1009,6 +1010,7 @@ class IndustryShareLedger
             'acquirer_share' => $ownShare,
             'herfindahl'     => min(1.0, array_sum(array_map(static fn(float $share): float => $share * $share, $shares))),
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
+            'shares'         => $shares,
         ];
     }
 

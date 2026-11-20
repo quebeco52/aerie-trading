@@ -8,8 +8,10 @@
 		{{ ui.tile('Sector', asset.sector, null, {mono: false}) }}
 		{% set industryLink %}<a href="{{ path('app_industry', {slug: industry_slug(asset.industry|default('General'))}) }}" class="text-primary hover:underline">{{ asset.industry|default('General') }}</a>{% endset %}
 		{{ ui.tile('Industry', industryLink, null, {mono: false}) }}
-		{% set reach %}of its addressable market{% if industry and industry.rosterShare is not null %} · {{ industry.rosterShare|pct(1) }} of sales among {{ industry.rosterSize }} listed peers{% endif %}{% endset %}
-		{{ ui.tile('Market share', marketShare|pct(2), reach, {id: 'stat-market-share'}) }}
+		{% set sat = industry ? industry.saturation : null %}
+		{% set saturated = sat ? marketShare > sat.threshold : false %}
+		{% set shareNote = sat ? ((saturated ? 'past' : 'under') ~ ' the ' ~ sat.threshold|pct(0) ~ ' saturation line') : 'of its addressable market' %}
+		{{ ui.tile('Market share', marketShare|pct(2), shareNote, {id: 'stat-market-share', tone: saturated ? 'text-warning' : 'text-on-surface'}) }}
 	</div>
 </div>
 
@@ -157,11 +159,11 @@
 			{% endif %}
 		</div>
 
-		{# Scale & saturation: the addressable share the physics is struck on, and the penalty it carries #}
+		{# Market scale & saturation: total market size alongside the penalty carried past the saturation line #}
 		{% set sat = industry.saturation %}
-		{% set saturated = industry.addressableShare > sat.threshold %}
+		{% set marketSizeNote = industry.sharedMarket ? (industry.marketGdpShare is not null ? industry.marketGdpShare|pct(1) ~ ' of District GDP' : 'total annual market') : 'sells across several markets' %}
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs mb-3">
-			{{ ui.tile('Addressable share', industry.addressableShare|pct(2), (saturated ? 'past' : 'under') ~ ' the ' ~ sat.threshold|pct(0) ~ ' saturation line', {tone: saturated ? 'text-warning' : 'text-on-surface'}) }}
+			{{ ui.tile('Market size', industry.marketSize|format_large('$'), marketSizeNote, {tone: industry.marketSize is null ? 'text-on-surface-faint' : 'text-on-surface'}) }}
 			{{ ui.tile('Drag from size', (-sat.penalty)|pp(2), 'margin lost to the friction of size · ' ~ sat.severity|pct(0) ~ ' of return', {tone: sat.penalty > 0.0005 ? 'text-warning' : 'text-on-surface'}) }}
 			{{ ui.tile('Marginal return', sat.marginalReturn|pct(2), 'next dollar of capital' ~ (sat.trailingReturn is null ? '' : ' · trailing ' ~ sat.trailingReturn|pct(2)), {tone: sat.marginalReturn < sat.trueReturn - 0.0005 ? 'text-warning' : 'text-on-surface'}) }}
 			{{ ui.tile('Moat', sat.moat.label, 'the edge its franchise keeps over its cost of capital · ' ~ sat.moat.spread|pp(0, true), {mono: false}) }}
@@ -194,24 +196,32 @@
 			</div>
 		{% endif %}
 
-		{% if industry.rosterShare is not null %}
+		{% if industry.sharedMarket and industry.marketShares is not empty %}
 			<div class="mt-4 pt-4 border-t border-outline-variant/15">
-				<p class="text-xs font-semibold text-on-surface-variant mb-2">Share of industry sales among listed peers</p>
-				<ul class="space-y-1.5" aria-label="Industry revenue shares">
-					{% for peerTicker, share in industry.peerShares %}
+				<p class="text-xs font-semibold text-on-surface-variant mb-2">Share of the total market</p>
+				<ul class="space-y-1.5" aria-label="Whole-market shares">
+					{% for peerTicker, share in industry.marketShares %}
 						{% set isSelf = peerTicker == asset.ticker %}
 						<li class="flex items-center gap-3 text-xs">
-							<span class="w-14 shrink-0 font-mono {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{% if isSelf %}{{ peerTicker }}{% else %}<a href="/stock/{{ peerTicker }}" class="hover:underline">{{ peerTicker }}</a>{% endif %}</span>
-							<span class="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><span class="block h-full rounded-full {{ isSelf ? 'bg-primary' : 'bg-outline-variant' }}" style="width: {{ (share * 100)|round(1) }}%"></span></span>
+							<span class="w-16 shrink-0 font-mono {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{% if isSelf %}{{ peerTicker }}{% else %}<a href="/stock/{{ peerTicker }}" class="hover:underline">{{ peerTicker }}</a>{% endif %}</span>
+							<span class="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><span class="block h-full rounded-full {{ isSelf ? 'bg-primary' : 'bg-on-surface-faint' }}" style="width: {{ (min(1, share) * 100)|round(1) }}%"></span></span>
 							<span class="w-14 shrink-0 text-right font-mono tabular-nums {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{{ share|pct(1) }}</span>
 						</li>
 					{% endfor %}
+					{% if industry.fringeShare is not null and industry.fringeShare >= 0.0005 %}
+						<li class="flex items-center gap-3 text-xs">
+							<span class="w-16 shrink-0 text-on-surface-faint">Unlisted</span>
+							<span class="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><span class="block h-full rounded-full bg-outline-variant" style="width: {{ (min(1, industry.fringeShare) * 100)|round(1) }}%"></span></span>
+							<span class="w-14 shrink-0 text-right font-mono tabular-nums text-on-surface-faint">{{ industry.fringeShare|pct(1) }}</span>
+						</li>
+					{% endif %}
 				</ul>
+				{% if industry.listedCount == 1 and industry.pricesCapacity %}
+					<p class="mt-2.5 text-xs text-on-surface-variant leading-relaxed">The only listed company in its industry; the capacity figures above take unlisted competitors as building toward the same outlook.</p>
+				{% endif %}
 			</div>
-		{% elseif industry.rosterSize > 1 %}
+		{% elseif not industry.sharedMarket and industry.listedCount > 1 %}
 			<p class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">Its listed peers sell into different markets, so no share among them is shown.</p>
-		{% elseif industry.tracked %}
-			<p class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">The only listed company in its industry, so no peer share is shown. The capacity figures above take the unlisted rest of the industry as building toward the same outlook.</p>
 		{% endif %}
 
 		{# Merger review: the same ledger reading the M&A engine sizes this firm's deals on. #}
@@ -288,7 +298,7 @@
 					<th class="py-2.5 text-right">Market cap</th>
 					<th class="py-2.5 text-right">P/E ratio</th>
 					<th class="py-2.5 text-right">ROIC / ROE</th>
-					<th class="py-2.5 text-right">Ind. share</th>
+					<th class="py-2.5 text-right">Market share</th>
 					<th class="py-2.5 text-right">Total equity</th>
 					<th class="py-2.5 text-right">Action</th>
 				</tr>
@@ -306,7 +316,7 @@
 					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ marketCap|format_large('$') }}</td>
 					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (peRatio ?: null)|multiple }}</td>
 					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ displayReturn|pct(2) }}</td>
-					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (industry ? industry.rosterShare : null)|pct(1) }}</td>
+					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (industry and industry.sharedMarket ? industry.marketShares[asset.ticker] ?? null : null)|pct(1) }}</td>
 					<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ asset.totalEquity|format_large('$') }}</td>
 					<td class="py-2.5 text-right text-xs text-on-surface-variant">—</td>
 				</tr>
@@ -328,7 +338,7 @@
 						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.marketCap|format_large('$') }}</td>
 						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ (peer.peRatio ?: null)|multiple }}</td>
 						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.roic|pct(2) }}</td>
-						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ (industry ? industry.peerShares[peer.ticker] ?? null : null)|pct(1) }}</td>
+						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface-variant">{{ (industry and industry.sharedMarket ? industry.marketShares[peer.ticker] ?? null : null)|pct(1) }}</td>
 						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.totalEquity|format_large('$') }}</td>
 						<td class="py-2.5 text-right">
 							{# The row's ticker already links here; this button is for the pointer only. #}

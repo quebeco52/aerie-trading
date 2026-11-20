@@ -542,13 +542,14 @@ final class PagesRenderTest extends KernelTestCase
                 'interestCoverage' => -0.4, 'distanceToDefault' => 0.8, 'investmentGradeDistance' => \App\Service\Market\Bond\CreditRatingAgency::THRESHOLD_BBB, 'coverageState' => 'negative',
             ],
             'industry' => [
-                'tracked' => true, 'pricesCapacity' => true, 'addressableShare' => 0.31,
+                'tracked' => true, 'pricesCapacity' => true, 'isFinancial' => false, 'sharedMarket' => true, 'addressableShare' => 0.31,
                 'saturation' => ['threshold' => 0.25, 'penalty' => 0.0021, 'severity' => 0.12, 'trueReturn' => 0.11, 'trailingReturn' => 0.094, 'marginalReturn' => 0.072, 'moat' => ['label' => 'Wide', 'spread' => 0.10]],
-                'rosterShare' => 0.38, 'peerShares' => ['SINK' => 0.41, 'FNCH' => 0.38, 'DRLL' => 0.21], 'rosterSize' => 3,
+                'marketSize' => 7.8e10, 'marketGdpShare' => 0.013, 'marketShares' => ['SINK' => 0.39, 'FNCH' => 0.31, 'DRLL' => 0.18],
+                'listedShare' => 0.88, 'fringeShare' => 0.12, 'herfindahl' => 0.2806, 'highlyConcentrated' => true, 'concentrationLine' => 0.25, 'listedCount' => 3,
                 'capacityRatio' => 1.08, 'installedCapacity' => 4.2e10, 'trendCapacity' => 3.9e10, 'balance' => 'overbuilt', 'balanceTone' => 'warn',
                 'priceMove' => 0.93 - 1.0, 'rivalShareDrain' => 0.0042, 'ownPriceVolumeShift' => -0.0011, 'idlePlant' => 0.064,
                 'outlook' => ['level' => 0.912, 'doubt' => 0.088, 'revision' => -0.061],
-                'mergerReview' => ['herfindahl' => 0.3266, 'highlyConcentrated' => true, 'acquirerShare' => 0.38, 'fringeShare' => 0.12, 'clearedShare' => 0.003, 'reviewBinds' => true, 'screens' => ['delta' => 0.02, 'concentrated' => 0.25, 'shareCeiling' => 0.35]],
+                'mergerReview' => ['herfindahl' => 0.2806, 'highlyConcentrated' => true, 'acquirerShare' => 0.31, 'fringeShare' => 0.12, 'clearedShare' => 0.003, 'reviewBinds' => true, 'screens' => ['delta' => 0.02, 'concentrated' => 0.25, 'shareCeiling' => 0.35]],
             ],
             'segments' => [
                 ['label' => 'Gold and copper mining', 'industry' => 'Gold', 'outlook' => null, 'revenue' => 5.8e9, 'share' => 0.86, 'margin' => 0.142, 'assets' => 0.78],
@@ -610,16 +611,18 @@ final class PagesRenderTest extends KernelTestCase
         ];
 
         $industry = [
-            'name' => 'Auto Manufacturers', 'sector' => 'Consumer Cyclical', 'pricesCapacity' => true, 'latest' => $latest,
+            'name' => 'Auto Manufacturers', 'sector' => 'Consumer Cyclical', 'pricesCapacity' => true, 'isFinancial' => false, 'sharedMarket' => true,
+            'marketSize' => 9.0e11, 'marketGdpShare' => 0.15, 'listedShare' => 0.62, 'fringeShare' => 0.38,
+            'herfindahl' => 0.1258, 'highlyConcentrated' => false, 'concentrationLine' => 0.18, 'latest' => $latest,
             'buildingYearAgo' => $quarters[43]['building'], 'balance' => 'overbuilt', 'balanceTone' => 'warn', 'capacityRatio' => 1.07,
             'mover' => ['ticker' => 'FALC', 'name' => 'Falcon Motors', 'shareChange' => 0.048],
             'outlook' => ['level' => 1.12, 'doubt' => 0.08, 'revision' => -0.081],
             'companies' => [
-                ['ticker' => 'FALC', 'name' => 'Falcon Motors', 'marketValue' => 2.1e11, 'share' => 0.46, 'shareChange' => 0.048],
-                ['ticker' => 'EIDR', 'name' => 'Eider Automotive', 'marketValue' => 9.0e10, 'share' => 0.27, 'shareChange' => -0.036],
-                ['ticker' => 'MOTO', 'name' => 'Moto Works', 'marketValue' => 4.0e10, 'share' => 0.21, 'shareChange' => -0.012],
+                ['ticker' => 'FALC', 'name' => 'Falcon Motors', 'marketValue' => 2.1e11, 'share' => 0.28, 'shareChange' => 0.048],
+                ['ticker' => 'EIDR', 'name' => 'Eider Automotive', 'marketValue' => 9.0e10, 'share' => 0.17, 'shareChange' => -0.036],
+                ['ticker' => 'MOTO', 'name' => 'Moto Works', 'marketValue' => 4.0e10, 'share' => 0.13, 'shareChange' => -0.012],
             ],
-            'entrants' => [['ticker' => 'SHRK', 'name' => 'Shrike Industries', 'home' => 'Auto Parts', 'homeSlug' => 'auto-parts', 'share' => 0.06]],
+            'entrants' => [['ticker' => 'SHRK', 'name' => 'Shrike Industries', 'home' => 'Auto Parts', 'homeSlug' => 'auto-parts', 'share' => 0.04]],
             'failed' => 1,
             'charts' => \App\Service\View\IndustryPageBuilder::charts($quarters),
             'stories' => [
@@ -629,9 +632,9 @@ final class PagesRenderTest extends KernelTestCase
             ],
         ];
         $index = [
-            ['name' => 'Airlines', 'slug' => 'airlines', 'sector' => 'Industrials', 'companies' => 1, 'priceGap' => 0.004, 'idle' => 0.0, 'outlook' => ['level' => 1.03, 'doubt' => 0.1, 'revision' => 0.012]],
-            ['name' => 'Auto Manufacturers', 'slug' => 'auto-manufacturers', 'sector' => 'Consumer Cyclical', 'companies' => 3, 'priceGap' => $latest['priceGap'], 'idle' => $latest['idle'], 'outlook' => $industry['outlook']],
-            ['name' => 'Banks - Regional', 'slug' => 'banks-regional', 'sector' => 'Financial Services', 'companies' => 2, 'priceGap' => null, 'idle' => null, 'outlook' => null],
+            ['name' => 'Airlines', 'slug' => 'airlines', 'sector' => 'Industrials', 'companies' => 1, 'marketSize' => 2.16e11, 'listedShare' => 0.22, 'herfindahl' => 0.0484, 'highlyConcentrated' => false, 'priceGap' => 0.004, 'idle' => 0.0, 'outlook' => ['level' => 1.03, 'doubt' => 0.1, 'revision' => 0.012]],
+            ['name' => 'Auto Manufacturers', 'slug' => 'auto-manufacturers', 'sector' => 'Consumer Cyclical', 'companies' => 3, 'marketSize' => 9.0e11, 'listedShare' => 0.62, 'herfindahl' => 0.1258, 'highlyConcentrated' => false, 'priceGap' => $latest['priceGap'], 'idle' => $latest['idle'], 'outlook' => $industry['outlook']],
+            ['name' => 'Banks - Regional', 'slug' => 'banks-regional', 'sector' => 'Financial Services', 'companies' => 2, 'marketSize' => 3.9e11, 'listedShare' => 0.57, 'herfindahl' => 0.1714, 'highlyConcentrated' => false, 'priceGap' => null, 'idle' => null, 'outlook' => null],
         ];
 
         return [

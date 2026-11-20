@@ -4,17 +4,21 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
+use App\Data\Company\IndustryMarkets;
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
+use App\Repository\StockRepository;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
 use App\Service\Math\FinancialConstants;
 use App\Service\View\IndustryPositionBuilder;
+use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
+#[Group('unit')]
 class IndustryPositionBuilderTest extends TestCase
 {
     private InMemoryIndustryShareStore $store;
@@ -45,7 +49,7 @@ class IndustryPositionBuilderTest extends TestCase
     /**
      * @param array<string, float>|null $kpis
      */
-    private function builder(?array $kpis, int $tick = 100): IndustryPositionBuilder
+    private function builder(?array $kpis, int $tick = 100, ?StockRepository $stocks = null): IndustryPositionBuilder
     {
         $report = null;
         if ($kpis !== null) {
@@ -59,7 +63,25 @@ class IndustryPositionBuilderTest extends TestCase
         $redis = $this->createStub(\Redis::class);
         $redis->method('get')->willReturn((string) $tick);
 
-        return new IndustryPositionBuilder($this->ledger, new CorporateMetrics(), $reports, $redis, 252);
+        return new IndustryPositionBuilder($this->ledger, new CorporateMetrics(), $reports, $redis, 252, $stocks);
+    }
+
+    /** @param list<Stock> $allStocks */
+    private function stockRepository(array $allStocks): StockRepository
+    {
+        $repo = $this->createStub(StockRepository::class);
+        $repo->method('findBy')->willReturnCallback(static function (array $criteria) use ($allStocks): array {
+            if (!isset($criteria['industry'])) {
+                return $allStocks;
+            }
+
+            return array_values(array_filter(
+                $allStocks,
+                static fn(Stock $s): bool => $s->getIndustry() === $criteria['industry'],
+            ));
+        });
+
+        return $repo;
     }
 
     public function testAnIndustrialReadsItsShareTheBalanceAndTheLastReportsPriceResponse(): void
@@ -74,11 +96,17 @@ class IndustryPositionBuilderTest extends TestCase
         $view = $this->builder(['industry_price_level' => 0.93, 'rival_share_drain' => -0.012, 'own_price_volume_shift' => 0.004])
             ->build($firm, new MacroStateDTO());
 
-        // Headline: $100B of capital against a $1T addressable market. The roster share is a separate reading.
+        // Headline: $100B of capital against a $1T addressable market. Whole-market shares come from the ledger.
         $this->assertEqualsWithDelta(0.10, $view['marketShare'], 1e-9);
         $industry = $view['industry'];
         $this->assertEqualsWithDelta(0.10, $industry['addressableShare'], 1e-9);
-        $this->assertEqualsWithDelta(0.5, $industry['rosterShare'], 1e-9);
+        $this->assertTrue($industry['sharedMarket']);
+        $this->assertEqualsWithDelta(4_000.0, $industry['marketSize'], 1e-6);
+        $this->assertEqualsWithDelta(0.5, $industry['marketShares']['STL'], 1e-9);
+        $this->assertEqualsWithDelta(0.5, $industry['marketShares']['RVL'], 1e-9);
+        $this->assertEqualsWithDelta(1.0, $industry['listedShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.0, $industry['fringeShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.5, $industry['herfindahl'], 1e-9);
         $this->assertSame(0.0, $industry['saturation']['penalty'], 'well under the saturation line');
         $this->assertEqualsWithDelta(0.20, $industry['saturation']['marginalReturn'], 1e-9);
         $this->assertTrue($industry['tracked']);
@@ -86,8 +114,7 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertEqualsWithDelta(1.25, $industry['capacityRatio'], 1e-9);
         $this->assertSame('overbuilt', $industry['balance']);
         $this->assertSame('warn', $industry['balanceTone'], 'an overbuilt industry is a caution, not a fall');
-        $this->assertSame(2, $industry['rosterSize']);
-        $this->assertEqualsWithDelta(0.5, $industry['peerShares']['RVL'], 1e-9);
+        $this->assertSame(2, $industry['listedCount']);
         $this->assertEqualsWithDelta(-0.07, $industry['priceMove'], 1e-9);
         $this->assertEqualsWithDelta(-0.012, $industry['rivalShareDrain'], 1e-9);
         $this->assertEqualsWithDelta(0.004, $industry['ownPriceVolumeShift'], 1e-9);
@@ -119,21 +146,29 @@ class IndustryPositionBuilderTest extends TestCase
     {
         $bank = $this->stock('BNK', 'Banks - Regional', 500.0);
         $peer = $this->stock('BNQ', 'Banks - Regional', 1_500.0);
-        $this->ledger->recordIdiosyncraticGain($peer, 1_500.0, 0.0, 0.5, 10);
+        $this->ledger->recordIdiosyncraticGain($bank, 500.0, 0.0, 0.10, 10);
+        $this->ledger->recordIdiosyncraticGain($peer, 1_500.0, 0.0, 0.30, 10);
 
         $view = $this->builder(null)->build($bank, new MacroStateDTO());
 
         $this->assertEqualsWithDelta(0.10, $view['marketShare'], 1e-9);
-        $this->assertEqualsWithDelta(0.25, $view['industry']['rosterShare'], 1e-9);
+        $this->assertTrue($view['industry']['isFinancial']);
+        $this->assertTrue($view['industry']['sharedMarket']);
         $this->assertFalse($view['industry']['pricesCapacity']);
         $this->assertNull($view['industry']['capacityRatio']);
         $this->assertSame('unknown', $view['industry']['balance']);
-        $this->assertSame(['BNQ', 'BNK'], array_keys($view['industry']['peerShares']), 'largest seller first');
+        $this->assertSame(['BNQ', 'BNK'], array_keys($view['industry']['marketShares']), 'largest seller first');
+        $this->assertEqualsWithDelta(0.10, $view['industry']['marketShares']['BNK'], 1e-9);
+        $this->assertEqualsWithDelta(0.30, $view['industry']['marketShares']['BNQ'], 1e-9);
+        $this->assertEqualsWithDelta(0.40, $view['industry']['listedShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.60, $view['industry']['fringeShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.10, $view['industry']['herfindahl'], 1e-9);
+        $this->assertEqualsWithDelta(5_000.0, $view['industry']['marketSize'], 1e-6);
         $this->assertNull($view['industry']['priceMove'], 'no report has been filed yet');
     }
 
     /**
-     * Conglomerates is a listing label: its members sell nothing the others buy, so their revenue is no one's share.
+     * Conglomerates is a listing label: its members sell nothing the others buy, so no shared market share is shown.
      */
     public function testListedPeersThatSellIntoDifferentMarketsShowNoShareAmongThem(): void
     {
@@ -141,10 +176,15 @@ class IndustryPositionBuilderTest extends TestCase
         $other = $this->stock('OTH', 'Conglomerates', 3_000.0);
         $this->ledger->recordIdiosyncraticGain($other, 3_000.0, 0.0, 0.5, 10);
 
-        $industry = $this->builder(null)->build($group, new MacroStateDTO())['industry'];
+        $industry = $this->builder(null, 100, $this->stockRepository([$group, $other]))
+            ->build($group, new MacroStateDTO())['industry'];
 
-        $this->assertSame(2, $industry['rosterSize'], 'the roster is still there');
-        $this->assertNull($industry['rosterShare']);
+        $this->assertSame(2, $industry['listedCount']);
+        $this->assertFalse($industry['sharedMarket']);
+        $this->assertSame([], $industry['marketShares']);
+        $this->assertNull($industry['marketSize']);
+        $this->assertNull($industry['fringeShare']);
+        $this->assertNull($industry['herfindahl']);
     }
 
     /**
@@ -199,14 +239,18 @@ class IndustryPositionBuilderTest extends TestCase
 
         $this->assertSame(0.0, $view['marketShare']);
         $this->assertFalse($view['industry']['tracked']);
-        $this->assertSame([], $view['industry']['peerShares']);
-        $this->assertNull($view['industry']['rosterShare']);
+        $this->assertFalse($view['industry']['sharedMarket']);
+        $this->assertSame([], $view['industry']['marketShares']);
+        $this->assertNull($view['industry']['marketSize']);
+        $this->assertNull($view['industry']['fringeShare']);
+        $this->assertNull($view['industry']['herfindahl']);
+        $this->assertSame(0, $view['industry']['listedCount']);
     }
 
-    public function testALoneFirmShowsNoRosterShareButItsSaturationPenaltyIsVisible(): void
+    public function testALoneFirmShowsItsWholeMarketShareAndSaturationPenalty(): void
     {
         // $750B of capital against a $1T market: past the 50% line, so the Penrose friction and the
-        // Cobb-Douglas decay both bite, and the page has to say so rather than print a meaningless 100%.
+        // Cobb-Douglas decay both bite, while its share bar reflects the 25% unlisted fringe rather than 100%.
         $giant = $this->stock('GNT', 'Railroads', 5_000.0, 750_000_000_000.0);
         $this->ledger->resolveIndustryCapacityRatio($giant, 5_000.0, 0.75, 1.0, 0.0, 0.0, 10, 252);
 
@@ -214,13 +258,69 @@ class IndustryPositionBuilderTest extends TestCase
         $industry = $view['industry'];
 
         $this->assertEqualsWithDelta(0.75, $view['marketShare'], 1e-9);
-        $this->assertNull($industry['rosterShare'], 'alone in its industry: a roster share of 100% says nothing');
-        $this->assertSame(1, $industry['rosterSize']);
+        $this->assertTrue($industry['sharedMarket']);
+        $this->assertEqualsWithDelta(['GNT' => 0.75], $industry['marketShares'], 1e-9);
+        $this->assertEqualsWithDelta(0.25, $industry['fringeShare'], 1e-9);
+        $this->assertSame(1, $industry['listedCount']);
         $this->assertGreaterThan(0.0, $industry['saturation']['penalty']);
         $this->assertGreaterThan(0.0, $industry['saturation']['severity']);
         $this->assertLessThan($industry['saturation']['trueReturn'], $industry['saturation']['marginalReturn']);
         $this->assertSame(FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD, $industry['saturation']['threshold']);
         // Its own plant against trend, weighed by its share, is still a balance worth showing.
         $this->assertEqualsWithDelta(1.0, $industry['capacityRatio'], 1e-9);
+    }
+
+    public function testPreFirstFilingMultiFirmIndustryReadsIndustryMarketsAndEquityShares(): void
+    {
+        $plvr = $this->stock('PLVR', 'Banks - Regional', 100.0, 350_000_000_000.0);
+        $rivr = $this->stock('RIVR', 'Banks - Regional', 80.0, 200_000_000_000.0);
+        $repo = $this->stockRepository([$plvr, $rivr]);
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        $view = $this->builder(null, 0, $repo)->build($plvr, $macro);
+        $industry = $view['industry'];
+
+        $this->assertTrue($industry['sharedMarket']);
+        $this->assertSame(2, $industry['listedCount']);
+        $this->assertEqualsWithDelta(['PLVR' => 0.35, 'RIVR' => 0.20], $industry['marketShares'], 1e-9);
+        $this->assertEqualsWithDelta(0.55, $industry['listedShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.45, $industry['fringeShare'], 1e-9);
+        $this->assertEqualsWithDelta((0.35 ** 2) + (0.20 ** 2), $industry['herfindahl'], 1e-12);
+        $this->assertEqualsWithDelta(IndustryMarkets::openingMarket('Banks - Regional'), $industry['marketSize'], 1e-3);
+        $this->assertEqualsWithDelta(IndustryMarkets::gdpShare('Banks - Regional'), $industry['marketGdpShare'], 1e-9);
+        $this->assertNull($industry['mergerReview'], 'merger review remains absent before the ledger prices the firm');
+    }
+
+    public function testPreFirstFilingSingleFirmIndustryShowsUnlistedFringeInsteadOfFullMonopoly(): void
+    {
+        $firm = $this->stock('STL', 'Steel', 100.0, 120_000_000_000.0);
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        $industry = $this->builder(null, 0, $this->stockRepository([$firm]))->build($firm, $macro)['industry'];
+
+        $this->assertTrue($industry['sharedMarket']);
+        $this->assertSame(1, $industry['listedCount']);
+        $this->assertEqualsWithDelta(['STL' => 0.12], $industry['marketShares'], 1e-9);
+        $this->assertEqualsWithDelta(0.12, $industry['listedShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.88, $industry['fringeShare'], 1e-9);
+        $this->assertEqualsWithDelta(IndustryMarkets::openingMarket('Steel'), $industry['marketSize'], 1e-3);
+    }
+
+    public function testNonIndustryMarketsSingleFirmImpliesSizeFromRevenueOrLeavesNullWithoutOperatingSales(): void
+    {
+        $fund = $this->stock('SWAN', 'Hedge Fund', 383_000_000_000.0, 400_000_000_000.0);
+        $holding = $this->stock('BRKW', 'Investment Companies', 0.0, 700_000_000_000.0);
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        $fundIndustry = $this->builder(null, 0, $this->stockRepository([$fund]))->build($fund, $macro)['industry'];
+        $holdingIndustry = $this->builder(null, 0, $this->stockRepository([$holding]))->build($holding, $macro)['industry'];
+
+        $this->assertTrue($fundIndustry['sharedMarket']);
+        $this->assertEqualsWithDelta(383_000_000_000.0 / 0.40, $fundIndustry['marketSize'], 1.0);
+        $this->assertNotNull($fundIndustry['marketGdpShare']);
+
+        $this->assertTrue($holdingIndustry['sharedMarket']);
+        $this->assertNull($holdingIndustry['marketSize']);
+        $this->assertNull($holdingIndustry['marketGdpShare']);
     }
 }

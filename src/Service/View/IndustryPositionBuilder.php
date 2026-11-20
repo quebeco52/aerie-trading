@@ -4,34 +4,34 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\IndustryMoats;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
+use App\Repository\StockRepository;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\FinancialConstants;
-use App\Service\Model\BusinessModelInterface;
+use App\Service\Math\MacroConstants;
 
 /**
- * Where a company sits in its market, on two denominators that answer different questions.
+ * Where a company sits in its total addressable market: listed sellers and the unlisted competitive fringe
+ * together, on one consistent denominator.
  *
- * The ADDRESSABLE share is the firm's reach into the whole serviceable market it sells into, modelled
- * rivals or not (CorporateMetrics::calculateScaleRatio). It is the headline, because most industries here
- * have a single modelled firm and that firm is not a monopolist: the rest of its market is simply not
- * simulated. It is also the number the saturation physics is struck on, so the penalty it carries —
- * Penrose margin friction and the Cobb-Douglas decay of marginal return past half the market — is shown
- * beside it rather than left to be inferred.
+ * Whole-market shares come from the industry ledger once filings have anchored the market (the same shares
+ * MergerReview and M&A deal sizing read), and fall back before first filings to IndustryMarkets and current
+ * addressable shares. When an industry does not sell into one shared market (Conglomerates with zero
+ * substitutability across multiple firms), no shared market share or concentration index is struck.
  *
- * The ROSTER share is the firm's share of what the MODELLED industry sells, from the industry ledger. It
- * only means something when there are modelled rivals, and is shown only then. The ledger also supplies
- * the roster's installed plant against its trend plant and the industry balance those imply (the rest of
- * the industry is a fringe supplying at trend); the last quarterly report supplies what that did to the price.
- * The page never strikes the balance itself: the ledger is written by the ticker and only read here. The industry's
- * outlook is the public's reading of where its long-run demand is heading, never the truth behind it.
+ * The ledger also supplies the roster's installed plant against its trend plant and the industry balance
+ * those imply (the rest of the industry is a fringe supplying at trend); the last quarterly report supplies
+ * what that did to the price. The page never strikes the balance itself: the ledger is written by the ticker
+ * and only read here. The industry's outlook is the public's reading of where its long-run demand is
+ * heading, never the truth behind it.
  */
 class IndustryPositionBuilder
 {
@@ -57,6 +57,7 @@ class IndustryPositionBuilder
         private readonly CorporateReportRepository $reports,
         private readonly \Redis $redis,
         private readonly int $ticksPerYear,
+        private readonly ?StockRepository $stocks = null,
     ) {}
 
     /**
@@ -65,11 +66,19 @@ class IndustryPositionBuilder
      *     industry: array{
      *         tracked: bool,
      *         pricesCapacity: bool,
+     *         isFinancial: bool,
+     *         sharedMarket: bool,
      *         addressableShare: float,
      *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, trailingReturn: ?float, marginalReturn: float, moat: array{label: string, spread: float}},
-     *         rosterShare: float|null,
-     *         peerShares: array<string, float>,
-     *         rosterSize: int,
+     *         marketSize: float|null,
+     *         marketGdpShare: float|null,
+     *         marketShares: array<string, float>,
+     *         listedShare: float|null,
+     *         fringeShare: float|null,
+     *         herfindahl: float|null,
+     *         highlyConcentrated: bool,
+     *         concentrationLine: float,
+     *         listedCount: int,
      *         capacityRatio: float|null,
      *         installedCapacity: float|null,
      *         trendCapacity: float|null,
@@ -86,7 +95,8 @@ class IndustryPositionBuilder
      */
     public function build(Stock $stock, MacroStateDTO $macroState): array
     {
-        $strategy = Sectors::strategyFor($stock->getIndustry());
+        $industry = (string) $stock->getIndustry();
+        $strategy = Sectors::strategyFor($industry);
         $substitutability = $strategy->getIndustrySubstitutability();
         // A lender sells a yield, not a unit: the capacity balance is not struck for it (see EarningsEngine).
         $pricesCapacity = !$strategy->isFinancial() && $substitutability > 0.0;
@@ -103,18 +113,36 @@ class IndustryPositionBuilder
             $this->ticksPerYear,
         );
 
+        $rawMergerMarket = $stock->isBankrupt() ? null : $this->ledger->describeMergerMarket(
+            $stock,
+            $macroState,
+            IndustryShareLedger::secularExcessGrowth($strategy, $stock),
+            $tick,
+            $this->ticksPerYear,
+        );
+
+        $liveStocks = [];
+        if (!$stock->isBankrupt()) {
+            if ($this->stocks !== null && $industry !== '') {
+                $seen = [];
+                foreach ($this->stocks->findBy(['industry' => $industry]) as $candidate) {
+                    if (!$candidate->isBankrupt()) {
+                        $liveStocks[] = $candidate;
+                        $seen[(string) $candidate->getTicker()] = true;
+                    }
+                }
+                if (!isset($seen[(string) $stock->getTicker()])) {
+                    $liveStocks[] = $stock;
+                }
+            } else {
+                $liveStocks = [$stock];
+            }
+        }
+
+        $structure = $this->resolveMarketStructure($industry, $liveStocks, $macroState, $rawMergerMarket);
+
         $kpis = $this->reports->findLatestFor($stock)?->getReportedKpis() ?? [];
         $capacityRatio = $description['capacity_ratio'] ?? null;
-
-        // Largest seller first, as the share list is read. A segment of a company in several markets sells here under
-        // its company's name.
-        $peerShares = [];
-        foreach ($description['peers'] ?? [] as $recordKey => $peer) {
-            $ticker = SegmentBooks::ownerOf((string) $recordKey);
-            $peerShares[$ticker] = ($peerShares[$ticker] ?? 0.0) + $peer['revenue_share'];
-        }
-        arsort($peerShares);
-        $rosterSize = count($peerShares);
 
         // A lender's capital employed is funded by deposits and wholesale borrowing, so equity is the
         // base its reach is measured against; an industrial's is the capital it has put to work.
@@ -149,6 +177,8 @@ class IndustryPositionBuilder
             'industry' => [
                 'tracked' => $description !== null,
                 'pricesCapacity' => $pricesCapacity,
+                'isFinancial' => $strategy->isFinancial(),
+                'sharedMarket' => $structure['sharedMarket'],
                 'addressableShare' => $addressableShare,
                 'saturation' => [
                     'threshold' => FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD,
@@ -159,11 +189,15 @@ class IndustryPositionBuilder
                     'marginalReturn' => $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $evaluationCapital, $macroState),
                     'moat' => ['label' => IndustryMoats::forStock($stock)->label(), 'spread' => IndustryMoats::forStock($stock)->spread()],
                 ],
-                // Only a share of something when there is someone else in the roster to share it with, selling
-                // the same thing: a listing label (conglomerates) groups firms that sell nothing the others buy.
-                'rosterShare' => $description !== null && $rosterSize > 1 && $substitutability > 0.0 ? $description['revenue_share'] : null,
-                'peerShares' => $peerShares,
-                'rosterSize' => $rosterSize,
+                'marketSize' => $structure['marketSize'],
+                'marketGdpShare' => $structure['marketGdpShare'],
+                'marketShares' => $structure['shares'],
+                'listedShare' => $structure['listedShare'],
+                'fringeShare' => $structure['fringeShare'],
+                'herfindahl' => $structure['herfindahl'],
+                'highlyConcentrated' => $structure['highlyConcentrated'],
+                'concentrationLine' => $structure['concentrationLine'],
+                'listedCount' => $structure['listedCount'],
                 'capacityRatio' => $capacityRatio,
                 'installedCapacity' => $description['installed_capacity'] ?? null,
                 'trendCapacity' => $description['trend_capacity'] ?? null,
@@ -176,9 +210,153 @@ class IndustryPositionBuilder
                 // The share of the company's plant a glut past the deepest price cut left standing, last report.
                 'idlePlant' => isset($kpis['idle_plant_share']) ? (float) $kpis['idle_plant_share'] : null,
                 // What the public expects of the industry's long-run demand; shared by every company in it.
-                'outlook' => $this->ledger->describeOutlook((string) $stock->getIndustry()),
-                'mergerReview' => $stock->isBankrupt() ? null : $this->mergerReview($stock, $macroState, $strategy, $tick),
+                'outlook' => $this->ledger->describeOutlook($industry),
+                'mergerReview' => $stock->isBankrupt() ? null : $this->mergerReview($macroState, $rawMergerMarket),
             ],
+        ];
+    }
+
+    /**
+     * Whole-market structure of one industry: total market size (listed sellers plus the unlisted competitive fringe),
+     * each listed seller's share of that whole market, listed vs fringe split, and Herfindahl index across listed
+     * sellers. Reads the industry ledger when priced, or falls back to IndustryMarkets and current addressable
+     * shares before the first filings arrive.
+     *
+     * @param list<Stock> $liveStocks
+     * @return array{
+     *     sharedMarket: bool,
+     *     marketSize: float|null,
+     *     marketGdpShare: float|null,
+     *     shares: array<string, float>,
+     *     listedShare: float|null,
+     *     fringeShare: float|null,
+     *     herfindahl: float|null,
+     *     highlyConcentrated: bool,
+     *     concentrationLine: float,
+     *     listedCount: int
+     * }
+     */
+    public function industryMarketStructure(string $industry, array $liveStocks, MacroStateDTO $macroState): array
+    {
+        $liveStocks = array_values(array_filter($liveStocks, static fn(Stock $s): bool => !$s->isBankrupt()));
+        $strategy = Sectors::strategyFor($industry);
+        $sharedMarket = $industry !== '' && $liveStocks !== [] && ($strategy->getIndustrySubstitutability() > 0.0 || count($liveStocks) <= 1);
+        $mergerMarket = null;
+        if ($sharedMarket) {
+            $tick = (int) ($this->redis->get('simulation_tick_count') ?: 0);
+            foreach ($liveStocks as $candidate) {
+                $candidateMarket = $this->ledger->describeMergerMarket(
+                    $candidate,
+                    $macroState,
+                    IndustryShareLedger::secularExcessGrowth($strategy, $candidate),
+                    $tick,
+                    $this->ticksPerYear,
+                );
+                if ($candidateMarket !== null) {
+                    $mergerMarket = $candidateMarket;
+                    break;
+                }
+            }
+        }
+
+        return $this->resolveMarketStructure($industry, $liveStocks, $macroState, $mergerMarket);
+    }
+
+    /**
+     * @param list<Stock> $liveStocks
+     * @param array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float, shares: array<string, float>}|null $mergerMarket
+     * @return array{
+     *     sharedMarket: bool,
+     *     marketSize: float|null,
+     *     marketGdpShare: float|null,
+     *     shares: array<string, float>,
+     *     listedShare: float|null,
+     *     fringeShare: float|null,
+     *     herfindahl: float|null,
+     *     highlyConcentrated: bool,
+     *     concentrationLine: float,
+     *     listedCount: int
+     * }
+     */
+    private function resolveMarketStructure(string $industry, array $liveStocks, MacroStateDTO $macroState, ?array $mergerMarket): array
+    {
+        $strategy = Sectors::strategyFor($industry);
+        $concentrationLine = MergerReview::reviewScreens($macroState->mergerReviewLeniency)['concentrated'];
+        $liveStocks = array_values(array_filter($liveStocks, static fn(Stock $s): bool => !$s->isBankrupt()));
+        $sharedMarket = $industry !== '' && $liveStocks !== [] && ($strategy->getIndustrySubstitutability() > 0.0 || count($liveStocks) <= 1);
+
+        if (!$sharedMarket) {
+            return [
+                'sharedMarket' => false,
+                'marketSize' => null,
+                'marketGdpShare' => null,
+                'shares' => [],
+                'listedShare' => null,
+                'fringeShare' => null,
+                'herfindahl' => null,
+                'highlyConcentrated' => false,
+                'concentrationLine' => $concentrationLine,
+                'listedCount' => count($liveStocks),
+            ];
+        }
+
+        if ($mergerMarket !== null) {
+            $shares = [];
+            foreach ($mergerMarket['shares'] as $recordKey => $share) {
+                $ticker = SegmentBooks::ownerOf((string) $recordKey);
+                $shares[$ticker] = ($shares[$ticker] ?? 0.0) + $share;
+            }
+            arsort($shares);
+            $marketSize = $mergerMarket['market_revenue'] > 0.0 ? $mergerMarket['market_revenue'] : null;
+            $listedShare = min(1.0, max(0.0, array_sum($shares)));
+            $fringeShare = $mergerMarket['fringe_share'];
+            $herfindahl = $mergerMarket['herfindahl'];
+            $listedCount = count($shares);
+        } else {
+            $shares = [];
+            foreach ($liveStocks as $member) {
+                $evalCap = $strategy->getEvaluationCapital((float) $member->getTotalEquity(), $member->getInvestedCapital());
+                $share = min(
+                    FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
+                    $this->corporateMetrics->calculateAddressableShare($member, $evalCap, $macroState),
+                );
+                if ($share > 0.0) {
+                    $shares[(string) $member->getTicker()] = $share;
+                }
+            }
+            arsort($shares);
+            $totalListed = array_sum($shares);
+            $listedShare = min(1.0, $totalListed);
+            $fringeShare = max(0.0, 1.0 - $totalListed);
+            $herfindahl = min(1.0, array_sum(array_map(static fn(float $s): float => $s * $s, $shares)));
+            if (IndustryMarkets::hasIndustry($industry)) {
+                $marketSize = IndustryMarkets::openingMarket($industry)
+                    * $macroState->nominalGdpIndex
+                    * CorporateMetrics::secularMarketGrowth($liveStocks[0], $macroState->totalTime);
+            } else {
+                $lead = $liveStocks[0];
+                $leadRev = (float) $lead->getTotalRevenue();
+                $leadShare = $shares[(string) $lead->getTicker()] ?? 0.0;
+                $marketSize = $leadRev > 0.0 && $leadShare > 0.0 ? $leadRev / $leadShare : null;
+            }
+            $listedCount = count($liveStocks);
+        }
+
+        $nominalGdp = MacroConstants::DISTRICT_GDP_USD * $macroState->nominalGdpIndex;
+        $marketGdpShare = $marketSize !== null && $nominalGdp > 0.0 ? $marketSize / $nominalGdp : null;
+        $highlyConcentrated = $herfindahl > $concentrationLine;
+
+        return [
+            'sharedMarket' => true,
+            'marketSize' => $marketSize,
+            'marketGdpShare' => $marketGdpShare,
+            'shares' => $shares,
+            'listedShare' => $listedShare,
+            'fringeShare' => $fringeShare,
+            'herfindahl' => $herfindahl,
+            'highlyConcentrated' => $highlyConcentrated,
+            'concentrationLine' => $concentrationLine,
+            'listedCount' => $listedCount,
         ];
     }
 
@@ -189,17 +367,11 @@ class IndustryPositionBuilder
      * that fringe and what clears the Fair Trading Board's screens in force, which it returns too. Null
      * before the ledger has priced the firm's market, which is also when the engine applies no review.
      *
+     * @param array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float, shares: array<string, float>}|null $market
      * @return array{herfindahl: float, highlyConcentrated: bool, acquirerShare: float, fringeShare: float, clearedShare: float, reviewBinds: bool, screens: array{delta: float, concentrated: float, shareCeiling: float}}|null
      */
-    private function mergerReview(Stock $stock, MacroStateDTO $macroState, BusinessModelInterface $strategy, int $tick): ?array
+    private function mergerReview(MacroStateDTO $macroState, ?array $market): ?array
     {
-        $market = $this->ledger->describeMergerMarket(
-            $stock,
-            $macroState,
-            IndustryShareLedger::secularExcessGrowth($strategy, $stock),
-            $tick,
-            $this->ticksPerYear,
-        );
         if ($market === null) {
             return null;
         }

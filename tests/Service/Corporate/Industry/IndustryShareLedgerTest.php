@@ -379,6 +379,7 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta(0.30, $market['acquirer_share'], 1e-12);
         $this->assertEqualsWithDelta(0.10, $market['herfindahl'], 1e-12);
         $this->assertEqualsWithDelta(0.60, $market['fringe_share'], 1e-12);
+        $this->assertEqualsWithDelta(['LDR' => 0.30, 'PER' => 0.10], $market['shares'], 1e-12);
 
         // The market rides trend nominal GDP and the industry's secular excess, as the anchor's trend demand does.
         $later = $ledger->describeMergerMarket($leader, new MacroStateDTO(potentialGdpIndex: 1.2, gdpDeflator: 1.1, totalTime: 5.0), 0.02, 40, 252);
@@ -413,6 +414,7 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta(0.35, $market['acquirer_share'], 1e-12);
         $this->assertEqualsWithDelta((0.35 ** 2) + (0.10 ** 2), $market['herfindahl'], 1e-12);
         $this->assertEqualsWithDelta(0.55, $market['fringe_share'], 1e-12);
+        $this->assertEqualsWithDelta(['LDR' => 0.35, 'PER' => 0.10], $market['shares'], 1e-12);
     }
 
     public function testTheCapacityRatioIsFlooredInAShortageButCarriesAGlutInFull(): void
@@ -554,6 +556,7 @@ class IndustryShareLedgerTest extends TestCase
         $this->assertEqualsWithDelta(0.10, $market['acquirer_share'], 1e-12);
         $this->assertEqualsWithDelta(0.10, $market['herfindahl'], 1e-12, '0.1^2 + 0.3^2; the stale rival is out');
         $this->assertEqualsWithDelta(0.60, $market['fringe_share'], 1e-12);
+        $this->assertEqualsWithDelta(['BNK' => 0.10, 'BNQ' => 0.30], $market['shares'], 1e-12);
     }
 
     /**

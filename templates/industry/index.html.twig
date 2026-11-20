@@ -23,12 +23,15 @@
 		   data-value, a missing figure last. #}
 		<div class="bg-surface-container-low border border-outline-variant/20 rounded-lg overflow-hidden" data-controller="screener">
 			<div class="overflow-x-auto">
-				<table class="w-full text-sm min-w-180">
+				<table class="w-full text-sm min-w-225">
 					<thead>
 						<tr class="table-head">
 							{{ _self.sortable('Industry', null, 'text-left') }}
 							{{ _self.sortable('Sector', null, 'text-left') }}
 							{{ _self.sortable('Companies', null, 'text-right') }}
+							{{ _self.sortable('Market size', 'Estimated total annual revenue of the industry, listed and unlisted sellers together.', 'text-right') }}
+							{{ _self.sortable('Listed share', 'Share of the industry\'s total market held by listed companies; the rest is unlisted competitors.', 'text-right') }}
+							{{ _self.sortable('HHI', 'Herfindahl index of concentration across listed sellers, on the 0–10,000 scale.', 'text-right') }}
 							{{ _self.sortable('Price against balance', 'What the industry\'s output sold for against what it would fetch with just enough plant for demand. Above means too little plant; below, too much.', 'text-right') }}
 							{{ _self.sortable('Idle plant', 'Plant switched off because its output would not cover its running cost.', 'text-right') }}
 							{{ _self.sortable('Demand outlook', 'Expected long-run demand for the whole industry, 1.00 when trading opened.', 'text-right') }}
@@ -41,6 +44,9 @@
 								<th scope="row" class="px-4 py-2 text-left font-normal" data-value="{{ row.name }}"><a href="{{ path('app_industry', {slug: row.slug}) }}" class="text-primary hover:underline">{{ row.name }}</a></th>
 								<td class="px-4 py-2 text-on-surface-variant" data-value="{{ row.sector }}">{{ row.sector }}</td>
 								<td class="px-4 py-2 text-right font-mono tabular-nums text-on-surface" data-value="{{ row.companies }}">{{ row.companies }}</td>
+								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.marketSize is null ? 'text-on-surface-faint' : 'text-on-surface' }}" data-value="{{ row.marketSize ?? '' }}">{{ row.marketSize|format_large('$') }}</td>
+								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.listedShare is null ? 'text-on-surface-faint' : 'text-on-surface' }}" data-value="{{ row.listedShare ?? '' }}">{{ row.listedShare|pct(0) }}</td>
+								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.herfindahl is null ? 'text-on-surface-faint' : (row.highlyConcentrated ? 'text-warning' : 'text-on-surface') }}" data-value="{{ row.herfindahl ?? '' }}">{{ row.herfindahl|hhi }}</td>
 								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.priceGap is null ? 'text-on-surface-faint' : (row.priceGap|abs >= constant('App\\Service\\View\\IndustryPageBuilder::PRICE_GAP_NOTED') ? 'text-warning' : 'text-on-surface') }}" data-value="{{ row.priceGap }}">{{ row.priceGap|pct(1, true) }}</td>
 								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.idle is null ? 'text-on-surface-faint' : 'text-on-surface' }}" data-value="{{ row.idle }}">{{ row.idle|pct(1) }}</td>
 								<td class="px-4 py-2 text-right font-mono tabular-nums {{ row.outlook is null ? 'text-on-surface-faint' : (row.outlook.level - 1)|round(2)|signed_class }}" data-value="{{ row.outlook.level ?? '' }}">{{ row.outlook is null ? '—' : row.outlook.level|figure('index', 2) }}</td>

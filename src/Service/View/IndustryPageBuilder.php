@@ -10,6 +10,7 @@ use App\Entity\StockEvent;
 use App\Repository\CorporateReportRepository;
 use App\Repository\StockEventRepository;
 use App\Repository\StockRepository;
+use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\News\EventPresenter;
@@ -62,10 +63,10 @@ final class IndustryPageBuilder
     ) {}
 
     /**
-     * Every industry with a listed company still trading, by name: its sector, companies, the price and idle plant of
-     * its last full quarter, and its demand outlook.
+     * Every industry with a listed company still trading, by name: its sector, companies, market size and
+     * concentration, the price and idle plant of its last full quarter, and its demand outlook.
      *
-     * @return list<array{name: string, slug: string, sector: string, companies: int, priceGap: ?float, idle: ?float, outlook: array{level: float, doubt: float, revision: float|null}|null}>
+     * @return list<array{name: string, slug: string, sector: string, companies: int, marketSize: ?float, listedShare: ?float, herfindahl: ?float, highlyConcentrated: bool, priceGap: ?float, idle: ?float, outlook: array{level: float, doubt: float, revision: float|null}|null}>
      */
     public function index(): array
     {
@@ -76,15 +77,21 @@ final class IndustryPageBuilder
             }
         }
 
+        $macroState = $this->macroStateProvider->liveState();
         $rows = [];
         foreach ($byIndustry as $industry => $stocks) {
             $quarters = IndustryHistory::quarters($this->reports->findForStocksNewestFirst($stocks, 2));
             $latest = $quarters === [] ? null : $quarters[array_key_last($quarters)];
+            $structure = $this->position->industryMarketStructure($industry, $stocks, $macroState);
             $rows[] = [
                 'name' => $industry,
                 'slug' => Sectors::industrySlug($industry),
                 'sector' => $stocks[0]->getSector(),
                 'companies' => count($stocks),
+                'marketSize' => $structure['marketSize'],
+                'listedShare' => $structure['listedShare'],
+                'herfindahl' => $structure['herfindahl'],
+                'highlyConcentrated' => $structure['highlyConcentrated'],
                 'priceGap' => $latest['priceGap'] ?? null,
                 'idle' => $latest['idle'] ?? null,
                 'outlook' => $this->ledger->describeOutlook($industry),
@@ -111,9 +118,15 @@ final class IndustryPageBuilder
         $back = static fn(int $n): ?array => count($quarters) > $n ? $quarters[count($quarters) - 1 - $n] : null;
 
         // The ledger's reading of the market now, through the largest company still in it: its balance, outlook and
-        // every seller, the businesses other companies have entered it with among them.
+        // whole-market shares across listed sellers, entrants and the unlisted fringe.
         usort($live, static fn(Stock $a, Stock $b): int => self::marketValue($b) <=> self::marketValue($a));
-        $position = $live === [] ? null : $this->position->build($live[0], $this->macroStateProvider->liveState())['industry'];
+        $macroState = $this->macroStateProvider->liveState();
+        $strategy = Sectors::strategyFor($industry);
+        $position = $live === [] ? null : $this->position->build($live[0], $macroState)['industry'];
+        $structure = $live === [] ? null : $this->position->industryMarketStructure($industry, $live, $macroState);
+        $sharedMarket = $structure['sharedMarket'] ?? false;
+        $marketShares = $structure['shares'] ?? [];
+        $multiListed = count($live) > 1 && $sharedMarket;
 
         $companies = [];
         foreach ($live as $stock) {
@@ -122,24 +135,28 @@ final class IndustryPageBuilder
                 'ticker' => $ticker,
                 'name' => $stock->getName(),
                 'marketValue' => self::marketValue($stock),
-                'share' => $position['peerShares'][$ticker] ?? $latest['shares'][$ticker] ?? null,
-                'shareChange' => isset($latest['shares'][$ticker]) && ($old = $back(self::SHARE_CHANGE_QUARTERS)) !== null
+                'share' => $sharedMarket ? ($marketShares[$ticker] ?? null) : null,
+                'shareChange' => $multiListed && isset($latest['shares'][$ticker]) && ($old = $back(self::SHARE_CHANGE_QUARTERS)) !== null
                     ? $latest['shares'][$ticker] - ($old['shares'][$ticker] ?? 0.0) : null,
             ];
         }
         $listed = array_column($companies, 'ticker');
         $entrants = [];
-        foreach ($position['peerShares'] ?? [] as $ticker => $share) {
-            if (!in_array($ticker, $listed, true) && ($stock = $this->stocks->findOneByTicker((string) $ticker)) !== null) {
-                $entrants[] = ['ticker' => (string) $ticker, 'name' => $stock->getName(), 'home' => (string) $stock->getIndustry(), 'homeSlug' => Sectors::industrySlug((string) $stock->getIndustry()), 'share' => $share];
+        if ($sharedMarket) {
+            foreach ($marketShares as $ticker => $share) {
+                if (!in_array($ticker, $listed, true) && ($stock = $this->stocks->findOneByTicker((string) $ticker)) !== null) {
+                    $entrants[] = ['ticker' => (string) $ticker, 'name' => $stock->getName(), 'home' => (string) $stock->getIndustry(), 'homeSlug' => Sectors::industrySlug((string) $stock->getIndustry()), 'share' => $share];
+                }
             }
         }
 
         $yearAgo = $back(self::BUILDING_CHANGE_QUARTERS);
         $mover = null;
-        foreach ($companies as $company) {
-            if ($company['shareChange'] !== null && ($mover === null || abs($company['shareChange']) > abs($mover['shareChange']))) {
-                $mover = $company;
+        if ($multiListed) {
+            foreach ($companies as $company) {
+                if ($company['shareChange'] !== null && ($mover === null || abs($company['shareChange']) > abs($mover['shareChange']))) {
+                    $mover = $company;
+                }
             }
         }
 
@@ -147,6 +164,15 @@ final class IndustryPageBuilder
             'name' => $industry,
             'sector' => ($all[0])->getSector(),
             'pricesCapacity' => $position['pricesCapacity'] ?? false,
+            'isFinancial' => $strategy->isFinancial(),
+            'sharedMarket' => $sharedMarket,
+            'marketSize' => $structure['marketSize'] ?? null,
+            'marketGdpShare' => $structure['marketGdpShare'] ?? null,
+            'listedShare' => $structure['listedShare'] ?? null,
+            'fringeShare' => $structure['fringeShare'] ?? null,
+            'herfindahl' => $structure['herfindahl'] ?? null,
+            'highlyConcentrated' => $structure['highlyConcentrated'] ?? false,
+            'concentrationLine' => $structure['concentrationLine'] ?? MergerReview::reviewScreens($macroState->mergerReviewLeniency)['concentrated'],
             'latest' => $latest,
             'buildingYearAgo' => $yearAgo['building'] ?? null,
             'mover' => $mover,
@@ -157,7 +183,7 @@ final class IndustryPageBuilder
             'companies' => $companies,
             'entrants' => $entrants,
             'failed' => count($all) - count($live),
-            'charts' => self::charts($quarters),
+            'charts' => self::charts($quarters, $sharedMarket),
             'stories' => $this->stories($all),
         ];
     }
@@ -175,7 +201,7 @@ final class IndustryPageBuilder
      * @param  list<array{t: float, label: string, revenue: float, shares: array<string, float>, priceGap: ?float, idle: ?float, building: ?float, margin: ?float}> $quarters
      * @return array<string, mixed>
      */
-    public static function charts(array $quarters): array
+    public static function charts(array $quarters, bool $sharedMarket = true): array
     {
         /**
          * @param \Closure(array{t: float, label: string, revenue: float, shares: array<string, float>, priceGap: ?float, idle: ?float, building: ?float, margin: ?float}): ?float $value
@@ -209,7 +235,7 @@ final class IndustryPageBuilder
             'price' => IndustryCharts::lines([$series('Price against balance', static fn(array $q): ?float => $q['priceGap'])], true, true),
             'plant' => IndustryCharts::lines([$series('Idle plant', static fn(array $q): ?float => $q['idle']), $series('Under construction', static fn(array $q): ?float => $q['building'])], true),
             'margin' => IndustryCharts::lines([$series('Operating margin', static fn(array $q): ?float => $q['margin'])], true),
-            'shares' => count($shareSeries) > 1 ? IndustryCharts::lines($shareSeries, true) : null,
+            'shares' => $sharedMarket && count($shareSeries) > 1 ? IndustryCharts::lines($shareSeries, true) : null,
         ];
     }
 
