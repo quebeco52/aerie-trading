@@ -15,6 +15,9 @@ US, Singapore, Switzerland and Sweden share the principles and differ in everyth
   no justification; a violated principle always does.
 - "Realistic" means a real economy with Aerie's institutions could behave this way. It does not mean "matches the US".
 
+Past decisions, rejected approaches, intended oddities and measurement traps are in `.agents/NOTES.md`. Read the
+section for your area before proposing a change there.
+
 ## Names
 Firm and fund names come from birds (Corvid, Egret), bird words (Talon, Aerie, Skein), water bodies (Lake, Benthos,
 Brine Pool) or water words (Harbor, Breakwater, Riverstone). The name fits the business: Kingfisher dives for its catch
