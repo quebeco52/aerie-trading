@@ -34,12 +34,16 @@ final class SeedRows
      */
     public const DERIVED_KEYS = ['credit_spread'];
 
+    /** Share of a listing that trades when no founder, mutual or state block holds the rest (85%, insiders aside). */
+    public const DEFAULT_PUBLIC_FLOAT = 0.85;
+
     /** @var list<array<string, mixed>>|null The rows at the opening macro, in the seed's order. */
     private static ?array $opening = null;
 
     /**
      * One row with the books its model builds at the macro state. A row states only what sets the firm apart: the
-     * share count and the industry's depreciation rate are filled in where it is silent. capex_ratio is a lender's
+     * sector its industry files under, a widely held float, the share count and the industry's depreciation rate are
+     * filled in where it is silent. capex_ratio is a lender's
      * reinvestment rate and stays absent on an operating firm, whose plant the capital budget plans.
      *
      * @param array<string, mixed> $row A row of InitialMarket::STOCKS.
@@ -64,6 +68,8 @@ final class SeedRows
         IndustryTurnovers::assertCapitalIntensity($row);
 
         $row += [
+            'sector' => Sectors::sectorFor($row['industry'] ?? null),
+            'public_float' => self::DEFAULT_PUBLIC_FLOAT,
             'shares_outstanding' => self::SHARES_OUTSTANDING,
             'depreciation_rate' => Sectors::metricsFor($row['industry'] ?? null)['depreciation'],
         ];

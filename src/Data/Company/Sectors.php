@@ -23,6 +23,95 @@ class Sectors
         'Communication Services' => 17.0, // Telecom, Media, Entertainment
     ];
 
+    /**
+     * The sector each board industry files under, so a seed row names its industry and not both. A row states a sector
+     * only where it files elsewhere (OWLS, a conglomerate run as a financial house).
+     *
+     * @var array<string, string>
+     */
+    public const INDUSTRY_SECTORS = [
+        'Advertising Agencies' => 'Consumer Discretionary',
+        'Aerospace & Defense' => 'Industrials',
+        'Airlines' => 'Industrials',
+        'Apparel Manufacturing' => 'Consumer Discretionary',
+        'Asset Management' => 'Financials',
+        'Auto Manufacturers' => 'Consumer Discretionary',
+        'Banks - Diversified' => 'Financials',
+        'Banks - Regional' => 'Financials',
+        'Beverages - Wineries & Distilleries' => 'Consumer Staples',
+        'Broadcasting' => 'Communication Services',
+        'Brokerages' => 'Financials',
+        'Building Products & Equipment' => 'Industrials',
+        'Chemicals' => 'Materials',
+        'Communication Equipment' => 'Information Technology',
+        'Computer Hardware' => 'Information Technology',
+        'Conglomerates' => 'Industrials',
+        'Consulting Services' => 'Industrials',
+        'Copper' => 'Materials',
+        'Correctional Services' => 'Industrials',
+        'Credit Services' => 'Financials',
+        'Custody Banks' => 'Financials',
+        'Distressed Debt' => 'Financials',
+        'Drug Manufacturers - General' => 'Health Care',
+        'Education & Training Services' => 'Consumer Discretionary',
+        'Electrical Equipment & Parts' => 'Industrials',
+        'Engineering & Construction' => 'Industrials',
+        'Farm & Heavy Construction Machinery' => 'Industrials',
+        'Farm Products' => 'Consumer Staples',
+        'Financial Clearinghouses' => 'Financials',
+        'Financial Data & Ratings' => 'Financials',
+        'Gold' => 'Materials',
+        'Grocery Stores' => 'Consumer Staples',
+        'Healthcare Plans' => 'Health Care',
+        'Hedge Fund' => 'Financials',
+        'Household & Personal Products' => 'Consumer Staples',
+        'Industrial Distribution' => 'Industrials',
+        'Insurance - Diversified' => 'Financials',
+        'Insurance - Life' => 'Financials',
+        'Insurance - Reinsurance' => 'Financials',
+        'Insurance Brokers' => 'Financials',
+        'Integrated Freight & Logistics' => 'Industrials',
+        'Internet Content & Information' => 'Information Technology',
+        'Internet Retail' => 'Consumer Discretionary',
+        'Investment Banking' => 'Financials',
+        'Investment Companies' => 'Financials',
+        'Legal Services' => 'Industrials',
+        'Luxury Goods' => 'Consumer Discretionary',
+        'Marine Ports & Services' => 'Industrials',
+        'Marine Shipping' => 'Industrials',
+        'Medical Care Facilities' => 'Health Care',
+        'Merchant Houses' => 'Industrials',
+        'Mortgage Finance' => 'Financials',
+        'Nuclear Power Equipment' => 'Industrials',
+        'Oil & Gas E&P' => 'Energy',
+        'Oil & Gas Refining & Marketing' => 'Energy',
+        'Online Marketplaces' => 'Consumer Discretionary',
+        'Packaged Foods' => 'Consumer Staples',
+        'Private Banks' => 'Financials',
+        'Private Equity' => 'Financials',
+        'REIT - Healthcare Facilities' => 'Real Estate',
+        'REIT - Industrial' => 'Real Estate',
+        'REIT - Office' => 'Real Estate',
+        'REIT - Residential' => 'Real Estate',
+        'Railroads' => 'Industrials',
+        'Residential Construction' => 'Consumer Discretionary',
+        'Resorts & Casinos' => 'Consumer Discretionary',
+        'Restaurants' => 'Consumer Discretionary',
+        'Securities & Commodity Exchanges' => 'Financials',
+        'Security & Protection Services' => 'Industrials',
+        'Semiconductors' => 'Information Technology',
+        'Space Systems' => 'Industrials',
+        'Specialty Industrial Machinery' => 'Industrials',
+        'Steel' => 'Materials',
+        'Telecom Services' => 'Communication Services',
+        'Tobacco' => 'Consumer Staples',
+        'Tools & Accessories' => 'Industrials',
+        'Utilities - Independent Power Producers' => 'Utilities',
+        'Utilities - Regulated Electric' => 'Utilities',
+        'Utilities - Regulated Water' => 'Utilities',
+        'Waste Management' => 'Industrials',
+    ];
+
     public const BUSINESS_MODEL_DESCRIPTIONS = [
         'commercial_bank' => 'Banks use fractional reserve lending. They take cheap customer deposits (managed via dynamic APY) and lend them out at higher interest rates. Evaluated on Return on Equity (ROE). Highly profitable during steep yield curves but squeezed by inversions. Suffers massive loan loss provisions during economic downturns.',
         'insurance'       => 'Collects highly sticky premiums upfront to form a massive cash "Float". Invests this float heavily into long-duration bonds for yield. Evaluated on ROE. Highly stable top-line revenue, but vulnerable to asymmetric catastrophic claim shocks.',
@@ -468,6 +557,12 @@ class Sectors
     public static function ebitdaCovenant(?string $industry): ?float
     {
         return self::metricsFor($industry)['ebitda_limit'];
+    }
+
+    /** The sector a board industry files under. */
+    public static function sectorFor(?string $industry): string
+    {
+        return self::INDUSTRY_SECTORS[$industry ?? ''] ?? throw new \DomainException(sprintf('Industry %s has no sector in Sectors::INDUSTRY_SECTORS.', $industry ?? 'null'));
     }
 
     /** The business model identifier the industry runs on. */

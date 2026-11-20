@@ -20,10 +20,8 @@ class InitialMarket
             // Systemic balance-sheet supremacy is maintained by hoarding capital, not distributing it
             'management_style' => 'fortress',
             'name' => 'Lakebird Bank',
-            'sector' => 'Financials',
             'industry' => 'Banks - Diversified',
             'systemic_importance' => 'titan',
-            'beta_tilt' => 0.00,
             'moat' => 'wide', // ROE 18% at the opening, two steps past a money-centre bank's
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.40,
@@ -39,7 +37,6 @@ class InitialMarket
         [
             'ticker' => 'SWAN',
             'name' => 'Black Swan Capital',
-            'sector' => 'Financials',
             'industry' => 'Hedge Fund',
             'systemic_importance' => 'titan',
             'beta_tilt' => 0.25, // leveraged long/short books
@@ -59,7 +56,6 @@ class InitialMarket
             // Ruthless expansion from search into every adjacent digital utility
             'management_style' => 'empire_builder',
             'name' => 'Hummingbird Interactive',
-            'sector' => 'Information Technology',
             'industry' => 'Internet Content & Information',
             'systemic_importance' => 'titan',
             'beta_tilt' => -0.25, // steadier cloud contracts, less volatile than smaller software names
@@ -75,7 +71,7 @@ class InitialMarket
             'ticker' => 'OWLS',
             'management_style' => 'fortress',
             'name' => 'Owl Capital Partners',
-            'sector' => 'Financials',
+            'sector' => 'Financials', // a conglomerate run as an investment house, filed with them
             'industry' => 'Conglomerates',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // a contrarian holder that buys when prices fall
@@ -91,7 +87,6 @@ class InitialMarket
         [
             'ticker' => 'KING',
             'name' => 'Kingfisher Capital',
-            'sector' => 'Financials',
             'industry' => 'Investment Banking',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.25, // among the most cyclical deal franchises
@@ -112,7 +107,6 @@ class InitialMarket
         [
             'ticker' => 'PERE',
             'name' => 'Peregrine Prime Securities',
-            'sector' => 'Financials',
             'industry' => 'Investment Banking',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // a delta-neutral market maker that earns on volatility
@@ -132,7 +126,6 @@ class InitialMarket
         [
             'ticker' => 'CORV',
             'name' => 'Corvid Capital',
-            'sector' => 'Financials',
             'industry' => 'Investment Banking',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // restructuring fees run against the cycle
@@ -141,7 +134,6 @@ class InitialMarket
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.45,
-            'public_float' => 0.85,
             'addressable_share' => 0.28,
             'floating_debt_ratio' => 0.85,
             'historical_fixed_rate' => 0.045,
@@ -152,7 +144,6 @@ class InitialMarket
         [
             'ticker' => 'RIVR',
             'name' => 'Riverstone Financial',
-            'sector' => 'Financials',
             'industry' => 'Banks - Regional',
             'systemic_importance' => 'none',
             'beta_tilt' => 0.25, // one region, smaller borrowers, commercial property
@@ -176,7 +167,6 @@ class InitialMarket
             // A savings bank's owners are its depositors' neighbours: steady dividends, no empire
             'management_style' => 'steward',
             'name' => 'Plover Savings Bank',
-            'sector' => 'Financials',
             'industry' => 'Banks - Regional',
             // The District's second home lender: a domestic systemically important bank
             'systemic_importance' => 'systemic',
@@ -197,7 +187,6 @@ class InitialMarket
             'ticker' => 'SAFE',
             'management_style' => 'fortress',
             'name' => 'Safe Harbor Reinsurance',
-            'sector' => 'Financials',
             'industry' => 'Insurance - Reinsurance',
             'systemic_importance' => 'titan',
             'beta_tilt' => -0.25, // losses follow catastrophes, not the business cycle
@@ -220,10 +209,8 @@ class InitialMarket
             'ticker' => 'DOVE',
             'management_style' => 'fortress', // Strict underwriting and conservative float investment ahead of growth
             'name' => 'White Dove Insurance',
-            'sector' => 'Financials',
             'industry' => 'Insurance - Diversified',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.35,
             // 95.5% combined ratio; European composites' P&C books run about 93-95%.
@@ -243,10 +230,8 @@ class InitialMarket
             // A statutory monopoly running near-zero capex has no use for retained capital
             'management_style' => 'steward',
             'name' => 'Shrike Standard Ratings',
-            'sector' => 'Financials',
             'industry' => 'Financial Data & Ratings',
             'systemic_importance' => 'systemic',
-            'beta_tilt' => 0.00,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.55,
             'revenue' => 8_670_000_000.00,
@@ -258,11 +243,9 @@ class InitialMarket
         [
             'ticker' => 'BIRD',
             'name' => 'Bird Power Inc',
-            'sector' => 'Utilities',
             'industry' => 'Utilities - Regulated Electric',
             'systemic_importance' => 'base',
             // a regulated electric utility: 15.0% (Damodaran, Utility (General), US, January 2026)
-            'beta_tilt' => 0.00,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.80,
             'revenue' => 63_600_000_000.00,
@@ -274,7 +257,6 @@ class InitialMarket
         [
             'ticker' => 'WATCH',
             'name' => 'Bird Watch Security',
-            'sector' => 'Industrials',
             'industry' => 'Security & Protection Services',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // multi-year retainers held through recessions
@@ -282,17 +264,14 @@ class InitialMarket
             'fixed_cost_ratio' => 0.45,
             'revenue' => 27_100_000_000.00,
             'addressable_share' => 0.288,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.045,
         ],
         [
             'ticker' => 'WING',
             'name' => 'Steel Wings Smelting & Corp',
-            'sector' => 'Materials',
             'industry' => 'Steel',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.45,
             'revenue' => 48_800_000_000.00,
@@ -305,10 +284,8 @@ class InitialMarket
         [
             'ticker' => 'PENG',
             'name' => 'Penguin Computing',
-            'sector' => 'Information Technology',
             'industry' => 'Computer Hardware',
             'systemic_importance' => 'none',
-            'beta_tilt' => 0.00,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.55,
             'revenue' => 33_800_000_000.00,
@@ -320,27 +297,22 @@ class InitialMarket
         [
             'ticker' => 'SHOR',
             'name' => 'Lakeshore Living',
-            'sector' => 'Real Estate',
             'industry' => 'REIT - Residential',
             'systemic_importance' => 'none',
-            'beta_tilt' => 0.00,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.25,
             'operating_margin' => 0.55,
             'revenue' => 15_300_000_000.00,
             'addressable_share' => 0.280,
             'retained_share' => 0.62,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.050,
         ],
         [
             'ticker' => 'RIVE',
             'name' => 'River Stream Industries',
-            'sector' => 'Industrials',
             'industry' => 'Specialty Industrial Machinery',
             'systemic_importance' => 'none',
-            'beta_tilt' => 0.00,
             'moat' => 'very_wide',
             'payout' => 'low',
             'fixed_cost_ratio' => 0.60,
@@ -357,7 +329,6 @@ class InitialMarket
             // Cost-plus programmes fund themselves, so the cash returns to shareholders
             'management_style' => 'steward',
             'name' => 'Gryphon Defense Systems',
-            'sector' => 'Industrials',
             'industry' => 'Aerospace & Defense',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.25, // orders follow mainland and allied budgets, not the District cycle
@@ -375,7 +346,6 @@ class InitialMarket
             // Every dollar goes into rockets and satellites while the market grows; a dividend waits for it to mature
             'management_style' => 'operator',
             'name' => 'Skylark Orbital',
-            'sector' => 'Industrials',
             'industry' => 'Space Systems',
             'systemic_importance' => 'none',
             'beta_tilt' => 0.25, // a growth stock: its value is mostly years away, so it moves with risk appetite
@@ -391,10 +361,8 @@ class InitialMarket
         [
             'ticker' => 'LOON',
             'name' => 'Loon Call Telecom',
-            'sector' => 'Communication Services',
             'industry' => 'Telecom Services',
             'systemic_importance' => 'systemic',
-            'beta_tilt' => 0.00,
             'fixed_cost_ratio' => 0.75, // Verizon 2024: device cost is 25% of operating costs
             'revenue' => 68_200_000_000.00,
             'addressable_share' => 0.352,
@@ -407,10 +375,8 @@ class InitialMarket
             'ticker' => 'PHIL',
             'management_style' => 'steward', // Declining legacy volumes run for cash and returned as massive dividends
             'name' => 'Pheasant & Morris International',
-            'sector' => 'Consumer Staples',
             'industry' => 'Tobacco',
             'systemic_importance' => 'none',
-            'beta_tilt' => 0.00,
             'fixed_cost_ratio' => 0.25,
             'revenue' => 23_400_000_000.00,
             'addressable_share' => 0.284,
@@ -423,7 +389,6 @@ class InitialMarket
             // Hundreds of disconnected divisions bolted together is empire building as a strategy
             'management_style' => 'empire_builder',
             'name' => 'Three Rivers Manufacturing',
-            'sector' => 'Industrials',
             'industry' => 'Conglomerates',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.24, // no division large enough to move the group
@@ -442,7 +407,6 @@ class InitialMarket
         [
             'ticker' => 'IBHI',
             'name' => 'Iron Beak Heavy Ind',
-            'sector' => 'Industrials',
             'industry' => 'Engineering & Construction',
             'systemic_importance' => 'titan',
             'beta_tilt' => 0.25, // heavy fixed costs on a thin margin
@@ -465,7 +429,6 @@ class InitialMarket
             // on, and its revenue moves with that market, not with the technology cycle. The sector
             // is not cosmetic: it picks which demand factor the stream draws on and which cohort
             // the P/E anchor shrinks toward.
-            'sector' => 'Financials',
             'industry' => 'Financial Data & Ratings',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.25, // priced with technology stocks though subscriptions hold
@@ -474,14 +437,12 @@ class InitialMarket
             'fixed_cost_ratio' => 0.85,
             'revenue' => 8_870_000_000.00,
             'addressable_share' => 0.108,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.035,
         ],
         [
             'ticker' => 'SINK',
             'name' => 'Sinking Shore Extraction',
-            'sector' => 'Energy',
             'industry' => 'Oil & Gas E&P',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.10, // deepwater cost base, partly hedged
@@ -496,7 +457,6 @@ class InitialMarket
         [
             'ticker' => 'CASC',
             'name' => 'Cascade Refining',
-            'sector' => 'Energy',
             'industry' => 'Oil & Gas Refining & Marketing',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.25, // crack-spread earnings swing from losses to records
@@ -518,7 +478,6 @@ class InitialMarket
             // Leveraged the balance sheet to buy the entire shoreline, not for return on capital
             'management_style' => 'empire_builder',
             'name' => 'Silver Gull Resorts',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Resorts & Casinos',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.15, // fixed lease income steadies the casino book
@@ -526,7 +485,6 @@ class InitialMarket
             'fixed_cost_ratio' => 0.70,
             'revenue' => 47_000_000_000.00,
             'addressable_share' => 0.305,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.055,
         ],
@@ -535,10 +493,8 @@ class InitialMarket
             // Regulated returns are distributed, not reinvested past the approved rate base
             'management_style' => 'steward',
             'name' => 'Heron Regional Water',
-            'sector' => 'Utilities',
             'industry' => 'Utilities - Regulated Water',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.80,
             'revenue' => 24_700_000_000.00,
@@ -551,7 +507,6 @@ class InitialMarket
             'ticker' => 'CORM',
             'management_style' => 'steward', // Unbreakable municipal contracts require no growth capital to renew
             'name' => 'Cormorant Environmental',
-            'sector' => 'Industrials',
             'industry' => 'Waste Management',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.25, // waste volumes barely move in a recession
@@ -565,7 +520,6 @@ class InitialMarket
         [
             'ticker' => 'CRAN',
             'name' => 'Crane Medical Network',
-            'sector' => 'Health Care',
             'industry' => 'Medical Care Facilities',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.10, // volumes follow health programmes, not the cycle
@@ -580,7 +534,6 @@ class InitialMarket
         [
             'ticker' => 'TALN',
             'name' => 'Talon Credit',
-            'sector' => 'Financials',
             'industry' => 'Credit Services',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.25, // unsecured consumer credit, strongly cyclical
@@ -588,7 +541,6 @@ class InitialMarket
             'capex_ratio' => 0.15,
             'payout' => 'low',
             'fixed_cost_ratio' => 0.60,
-            'public_float' => 0.85,
             'addressable_share' => 0.30,
             'floating_debt_ratio' => 0.60,
             'historical_fixed_rate' => 0.050,
@@ -600,7 +552,6 @@ class InitialMarket
         [
             'ticker' => 'CANV',
             'name' => 'Canvasback Logistics',
-            'sector' => 'Industrials',
             'industry' => 'Integrated Freight & Logistics',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.15, // surge-priced volumes on a fixed network
@@ -615,7 +566,6 @@ class InitialMarket
         [
             'ticker' => 'TERN',
             'name' => 'Tern Airways',
-            'sector' => 'Industrials',
             'industry' => 'Airlines',
             'systemic_importance' => 'none',
             'beta_tilt' => 0.15, // business travel and full planes turn with the cycle
@@ -634,10 +584,8 @@ class InitialMarket
             // Asset-light packaging lines convert operating profit straight into distributable cash
             'management_style' => 'steward',
             'name' => 'Sugarbird Confectionery',
-            'sector' => 'Consumer Staples',
             'industry' => 'Packaged Foods',
             'systemic_importance' => 'none',
-            'beta_tilt' => 0.00,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.25,
             'revenue' => 45_200_000_000.00,
@@ -649,7 +597,6 @@ class InitialMarket
         [
             'ticker' => 'STRK',
             'name' => 'Stork Consumer Credit',
-            'sector' => 'Financials',
             'industry' => 'Credit Services',
             'systemic_importance' => 'none',
             'beta_tilt' => 0.25, // unsecured lending, sharp on labour data
@@ -669,7 +616,6 @@ class InitialMarket
         [
             'ticker' => 'BREW',
             'name' => 'Copperhead Coffee Roasters',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Restaurants',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.15, // steadier than most restaurants
@@ -688,7 +634,6 @@ class InitialMarket
             'ticker' => 'CLAW',
             'management_style' => 'steward', // Partnership economics: settlement windfalls are drawn down, not banked
             'name' => 'Clear Rivers Law',
-            'sector' => 'Industrials',
             'industry' => 'Legal Services',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.15, // retainer income holds through the cycle
@@ -705,7 +650,6 @@ class InitialMarket
         [
             'ticker' => 'FINC',
             'name' => 'Finch Securities',
-            'sector' => 'Financials',
             'industry' => 'Brokerages',
             'systemic_importance' => 'none',
             'beta_tilt' => 0.20, // retail trading and margin balances rise and fall with the market
@@ -726,7 +670,6 @@ class InitialMarket
             // Century-long municipal leases leave nothing to reinvest in; the rent goes out as yield
             'management_style' => 'steward',
             'name' => 'Plaza Civic River Trust',
-            'sector' => 'Real Estate',
             'industry' => 'REIT - Office',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // rent paid from public budgets
@@ -743,7 +686,6 @@ class InitialMarket
         [
             'ticker' => 'LYRE',
             'name' => 'Lyrebird Media',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Advertising Agencies',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.25, // retainers and crisis work steady a recession
@@ -751,14 +693,12 @@ class InitialMarket
             'fixed_cost_ratio' => 0.25,
             'revenue' => 18_800_000_000.00,
             'addressable_share' => 0.25,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
         ],
         [
             'ticker' => 'BELL',
             'name' => 'Bellbird Media',
-            'sector' => 'Communication Services',
             'industry' => 'Broadcasting',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.10, // the airtime half sells at the going ad rate
@@ -776,10 +716,8 @@ class InitialMarket
         [
             'ticker' => 'STAR',
             'name' => 'Starling Academic Systems',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Education & Training Services',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.65,
             'revenue' => 16_300_000_000.00,
@@ -793,7 +731,6 @@ class InitialMarket
             // Buys out its own successful vendors to absorb their volume into the platform
             'management_style' => 'empire_builder',
             'name' => 'Weaver Marketplace',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Internet Retail',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.25, // thin margin on fixed fulfilment costs
@@ -809,7 +746,6 @@ class InitialMarket
             'ticker' => 'JDAW',
             'management_style' => 'steward', // Reinvests in the platform; no warehouses to build
             'name' => 'Jackdaw Bazaar',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Online Marketplaces',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.10, // pure commission on discretionary sales, no fixed fulfilment base
@@ -824,7 +760,6 @@ class InitialMarket
         [
             'ticker' => 'CROP',
             'name' => 'Poultry Crop Operations',
-            'sector' => 'Consumer Staples',
             'industry' => 'Farm Products',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.15, // volumes hold in a downturn
@@ -855,7 +790,6 @@ class InitialMarket
             // financial demand factor at the 0.25 sector loading its model declares, and its P/E shrinks
             // toward the Financials anchor of 14 rather than the Industrials 20, which pulls with the
             // holding-company discount this trust's lore claims rather than against it.
-            'sector' => 'Financials',
             'industry' => 'Investment Companies',
             'systemic_importance' => 'titan',
             'beta_tilt' => 0.06, // follows the District economy through its holdings
@@ -888,7 +822,6 @@ class InitialMarket
             'ticker' => 'ELDE',
             'management_style' => 'steward', // Securitised pension streams are passed through to holders by design
             'name' => 'Elderbird Retirement Services',
-            'sector' => 'Real Estate',
             'industry' => 'REIT - Healthcare Facilities',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.10, // ageing-population rents trade like a long bond
@@ -897,7 +830,6 @@ class InitialMarket
             'revenue' => 8_490_000_000.00,
             'addressable_share' => 0.275,
             'retained_share' => 0.01,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.030,
         ],
@@ -913,7 +845,6 @@ class InitialMarket
             // 95% of revenue in royalties and leases. If its EARNINGS should also ride the cycle
             // more gently than a company-operated chain's, that is ModelParam::OperatingCyclicality
             // (the restaurant default is a full 1.00), not the sector.
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Restaurants',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.25, // diners trade down to it in a recession
@@ -932,7 +863,6 @@ class InitialMarket
             'ticker' => 'VULT',
             'management_style' => 'fortress', // Stockpiles dry powder through expansions to deploy it into the bust
             'name' => 'Vulture Capital Recovery',
-            'sector' => 'Financials',
             'industry' => 'Distressed Debt',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // deploys into distress, but is still long credit
@@ -952,7 +882,6 @@ class InitialMarket
             // Sells the mass-market fleet at a loss to take the market; returns come later
             'management_style' => 'empire_builder',
             'name' => 'Falconet Motor Group',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Auto Manufacturers',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.15, // luxury buyers ride out an ordinary slowdown
@@ -969,7 +898,6 @@ class InitialMarket
         [
             'ticker' => 'OSPR',
             'name' => 'Osprey Global Vanguard',
-            'sector' => 'Industrials',
             'industry' => 'Security & Protection Services',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // deployments rise with tension abroad
@@ -988,7 +916,6 @@ class InitialMarket
         [
             'ticker' => 'NCKR',
             'name' => 'Nutcracker Cash & Vault',
-            'sector' => 'Industrials',
             'industry' => 'Security & Protection Services',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.10, // notes are drawn in a bank scare as well as spent in a boom
@@ -1006,7 +933,6 @@ class InitialMarket
         [
             'ticker' => 'WALL',
             'name' => 'Wallcreeper Custodial',
-            'sector' => 'Industrials',
             'industry' => 'Correctional Services',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.25, // the District pays for every place whatever the economy does
@@ -1023,7 +949,6 @@ class InitialMarket
         [
             'ticker' => 'NJAR',
             'name' => 'Nightjar Risk Partners',
-            'sector' => 'Industrials',
             'industry' => 'Security & Protection Services',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.15, // fraud and crisis work arrives when markets break
@@ -1033,14 +958,12 @@ class InitialMarket
             // risk and investigations firms earn 15-20% before interest (Kroll, Control Risks, FTI forensic)
             'revenue' => 20_700_000_000.00,
             'addressable_share' => 0.0517,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.050,
         ],
         [
             'ticker' => 'CROW',
             'name' => 'Crowfall Capital',
-            'sector' => 'Financials',
             'industry' => 'Asset Management',
             'systemic_importance' => 'systemic',
             // Defensive, not inverse. A short book marks up in a selloff, but the fee base underneath it is
@@ -1052,7 +975,6 @@ class InitialMarket
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.48,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.90,
             'historical_fixed_rate' => 0.075,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
@@ -1064,7 +986,6 @@ class InitialMarket
             // Conquers new mineral territory with debt whenever a sovereign borrower defaults
             'management_style' => 'empire_builder',
             'name' => 'Condor Extraction',
-            'sector' => 'Materials',
             'industry' => 'Copper',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.10, // heavy capital spending against a metal price
@@ -1084,10 +1005,8 @@ class InitialMarket
             // Debt-fuelled fab construction priced to deny rivals scale, not to clear a hurdle
             'management_style' => 'empire_builder',
             'name' => 'Silicon Creek Foundries',
-            'sector' => 'Information Technology',
             'industry' => 'Semiconductors',
             'systemic_importance' => 'systemic',
-            'beta_tilt' => 0.00,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.70,
             'revenue' => 58_300_000_000.00,
@@ -1099,7 +1018,6 @@ class InitialMarket
         [
             'ticker' => 'KSTL',
             'name' => 'Kestrel Civic Lines',
-            'sector' => 'Industrials',
             'industry' => 'Railroads',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // half its revenue is commuter subscriptions
@@ -1108,21 +1026,18 @@ class InitialMarket
             'fixed_cost_ratio' => 0.80,
             'revenue' => 18_500_000_000.00,
             'addressable_share' => 0.288,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.045,
         ],
         [
             'ticker' => 'POOL',
             'name' => 'Brine Pool Capital',
-            'sector' => 'Financials',
             'industry' => 'Mortgage Finance',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.25, // wholesale-funded, falls steeply in credit crises
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.50,
-            'public_float' => 0.85,
             'addressable_share' => 0.314,
             'floating_debt_ratio' => 0.70,
             'historical_fixed_rate' => 0.050,
@@ -1136,7 +1051,6 @@ class InitialMarket
             // The default waterfall must stay funded before any capital leaves the clearinghouse
             'management_style' => 'fortress',
             'name' => 'Aerie Central Clearing',
-            'sector' => 'Financials',
             'industry' => 'Financial Clearinghouses',
             'systemic_importance' => 'titan',
             'beta_tilt' => -0.25, // clearing volume rises in sell-offs
@@ -1157,7 +1071,6 @@ class InitialMarket
         [
             'ticker' => 'ROOK',
             'name' => 'Rookery Holdings',
-            'sector' => 'Financials',
             'industry' => 'Securities & Commodity Exchanges',
             'systemic_importance' => 'titan',
             'beta_tilt' => 0.05, // turnover rises in a sell-off as the value it is charged on falls
@@ -1176,7 +1089,6 @@ class InitialMarket
             'ticker' => 'WELL',
             'management_style' => 'steward', // Pays out what the spread earns; growth is the pension schemes it buys
             'name' => 'Wellspring Life',
-            'sector' => 'Financials',
             'industry' => 'Insurance - Life',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.10, // savings fees ride the market and a rally in bonds squeezes the guarantees
@@ -1200,7 +1112,6 @@ class InitialMarket
             'ticker' => 'HONY',
             'management_style' => 'empire_builder', // Grows by buying the small brokers it places business beside
             'name' => 'Honeyguide Partners',
-            'sector' => 'Financials',
             'industry' => 'Insurance Brokers',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.15, // commissions follow the insurance cycle, not the business cycle
@@ -1217,7 +1128,6 @@ class InitialMarket
         [
             'ticker' => 'ALBT',
             'name' => 'Albatross Deepwaters',
-            'sector' => 'Industrials',
             'industry' => 'Marine Shipping',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.25, // spot freight on a fixed fleet
@@ -1233,14 +1143,12 @@ class InitialMarket
         [
             'ticker' => 'IBIS',
             'name' => 'Ibis Pharmaceuticals',
-            'sector' => 'Health Care',
             'industry' => 'Drug Manufacturers - General',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.15, // prescription demand ignores the cycle
             'fixed_cost_ratio' => 0.70,
             'revenue' => 63_300_000_000.00,
             'addressable_share' => 0.307,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.040,
             'depreciation_rate' => 0.10,
@@ -1248,10 +1156,8 @@ class InitialMarket
         [
             'ticker' => 'PEAC',
             'name' => 'Peacock Heritage Group',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Luxury Goods',
             'systemic_importance' => 'systemic',
-            'beta_tilt' => 0.00,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.50,
             'revenue' => 43_100_000_000.00,
@@ -1265,7 +1171,6 @@ class InitialMarket
             // Mature staples brands defend shelf space with marketing spend, not capital
             'management_style' => 'steward',
             'name' => 'Lark & Crest Brands',
-            'sector' => 'Consumer Staples',
             'industry' => 'Household & Personal Products',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // among the least volatile on the exchange
@@ -1273,14 +1178,12 @@ class InitialMarket
             'fixed_cost_ratio' => 0.45,
             'revenue' => 86_700_000_000.00,
             'addressable_share' => 0.314,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.035,
         ],
         [
             'ticker' => 'CBIL',
             'name' => 'Crossbill Precision Tooling',
-            'sector' => 'Industrials',
             'industry' => 'Tools & Accessories',
             'systemic_importance' => 'systemic',
             // A tollbooth that "completely bypasses the traditional boom-and-bust cycles of standard
@@ -1291,7 +1194,6 @@ class InitialMarket
             'fixed_cost_ratio' => 0.60,
             'revenue' => 36_100_000_000.00,
             'addressable_share' => 0.3,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
             'depreciation_rate' => 0.08,
@@ -1299,7 +1201,6 @@ class InitialMarket
         [
             'ticker' => 'PINT',
             'name' => 'Pintail Beverage Group',
-            'sector' => 'Consumer Staples',
             'industry' => 'Beverages - Wineries & Distilleries',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.10, // demand barely moves with the cycle
@@ -1307,14 +1208,12 @@ class InitialMarket
             'fixed_cost_ratio' => 0.45,
             'revenue' => 34_500_000_000.00,
             'addressable_share' => 0.315,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
         ],
         [
             'ticker' => 'SPRW',
             'name' => 'Sparrow Markets',
-            'sector' => 'Consumer Staples',
             'industry' => 'Grocery Stores',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.25, // food is bought whatever the economy does
@@ -1333,10 +1232,8 @@ class InitialMarket
             // Statutory trust distribution on a sub-2% vacancy portfolio leaves little to retain
             'management_style' => 'steward',
             'name' => 'Kite Logistics Trust',
-            'sector' => 'Real Estate',
             'industry' => 'REIT - Industrial',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.52,
@@ -1350,7 +1247,6 @@ class InitialMarket
         [
             'ticker' => 'SHER',
             'name' => 'Shearwater Mills',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Apparel Manufacturing',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.10, // trade-down softens a downturn
@@ -1365,15 +1261,12 @@ class InitialMarket
         [
             'ticker' => 'FULM',
             'name' => 'Fulmar Chemical Group',
-            'sector' => 'Materials',
             'industry' => 'Chemicals',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.60,
             'revenue' => 67_800_000_000.00,
             'addressable_share' => 0.25,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
         ],
@@ -1382,7 +1275,6 @@ class InitialMarket
             // Prioritizes passenger safety engineering, fleet longevity, and steady dividend distributions
             'management_style' => 'steward',
             'name' => 'Eider Motor Group',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Auto Manufacturers',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // fleet replacement, parts and subscriptions
@@ -1400,7 +1292,6 @@ class InitialMarket
             // Generational telecom R&D and steady dividend distributions backed by patent tollbooths
             'management_style' => 'steward',
             'name' => 'Erne Network Systems',
-            'sector' => 'Information Technology',
             'industry' => 'Communication Equipment',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // royalties steady the equipment cycle
@@ -1417,10 +1308,8 @@ class InitialMarket
             // Disciplined metallurgical R&D, conservative leverage, and steady cycle-spanning dividend distributions
             'management_style' => 'steward',
             'name' => 'Sanderling Rock Dynamics',
-            'sector' => 'Industrials',
             'industry' => 'Specialty Industrial Machinery',
             'systemic_importance' => 'systemic',
-            'beta_tilt' => 0.00,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.55,
             // vertically integrated tungsten-carbide sintering plants and heavy tunnel borers
@@ -1437,16 +1326,13 @@ class InitialMarket
             // distributions
             'management_style' => 'steward',
             'name' => 'Nuthatch Climate Systems',
-            'sector' => 'Industrials',
             'industry' => 'Building Products & Equipment',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.50,
             'capital_intensity' => 'light', // OEM heat-pump systems sold through certified independent installers
             'revenue' => 80_500_000_000.00,
             'addressable_share' => 0.22,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
         ],
@@ -1456,7 +1342,6 @@ class InitialMarket
             // dividend payouts
             'management_style' => 'steward',
             'name' => 'Alca Compression Dynamics',
-            'sector' => 'Industrials',
             'industry' => 'Specialty Industrial Machinery',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // service income carries a downturn
@@ -1474,7 +1359,6 @@ class InitialMarket
             // corridors
             'management_style' => 'operator',
             'name' => 'Raven Merchant Group',
-            'sector' => 'Industrials',
             'industry' => 'Merchant Houses',
             'systemic_importance' => 'titan',
             'beta_tilt' => -0.15, // staples volumes hold in recessions
@@ -1492,7 +1376,6 @@ class InitialMarket
             // into programmatic bolt-ons
             'management_style' => 'steward',
             'name' => 'Harrier Industrial Holdings',
-            'sector' => 'Industrials',
             'industry' => 'Conglomerates',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // pricing power, little capital
@@ -1501,7 +1384,6 @@ class InitialMarket
             'fixed_cost_ratio' => 0.30,
             'revenue' => 36_000_000_000.00,
             'addressable_share' => 0.0822,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.035,
             'depreciation_rate' => 0.04,
@@ -1512,7 +1394,6 @@ class InitialMarket
             // extraction
             'management_style' => 'empire_builder',
             'name' => 'Tiercel Capital Partners',
-            'sector' => 'Financials',
             'industry' => 'Private Equity',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.25, // leveraged buyouts whose exits need open credit
@@ -1533,10 +1414,8 @@ class InitialMarket
             // monetization
             'management_style' => 'fortress',
             'name' => 'Bustard Heavy Dynamics',
-            'sector' => 'Industrials',
             'industry' => 'Farm & Heavy Construction Machinery',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'payout' => 'balanced',
             'fixed_cost_ratio' => 0.60,
             // high-fixed-cost welding, heat-treatment and machining plants for surface earthmoving machinery
@@ -1553,7 +1432,6 @@ class InitialMarket
             // execution
             'management_style' => 'operator',
             'name' => 'Boby Electrical Systems',
-            'sector' => 'Industrials',
             'industry' => 'Electrical Equipment & Parts',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // backlog and substation replacement, not the cycle
@@ -1561,7 +1439,6 @@ class InitialMarket
             'fixed_cost_ratio' => 0.50,
             'revenue' => 48_200_000_000.00,
             'addressable_share' => 0.0727,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.036,
         ],
@@ -1570,7 +1447,6 @@ class InitialMarket
             // High-velocity working capital, automated distribution routing, and disciplined shareholder cash returns
             'management_style' => 'steward',
             'name' => 'Magpie Industrial Supply',
-            'sector' => 'Industrials',
             'industry' => 'Industrial Distribution',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.10, // repair parts when capex is deferred
@@ -1578,7 +1454,6 @@ class InitialMarket
             'fixed_cost_ratio' => 0.35,
             'revenue' => 39_600_000_000.00,
             'addressable_share' => 0.0571,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.035,
         ],
@@ -1587,7 +1462,6 @@ class InitialMarket
             // Surge production discipline: an export order book is won on delivery slots, not on programme prestige
             'management_style' => 'operator',
             'name' => 'Ptarmigan Land Systems',
-            'sector' => 'Industrials',
             'industry' => 'Aerospace & Defense',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.25, // orders follow defence budgets, not the District cycle
@@ -1605,7 +1479,6 @@ class InitialMarket
             // Programmatic absorption of regional lock and door makers, funded out of the aftermarket
             'management_style' => 'empire_builder',
             'name' => 'Wren Access Systems',
-            'sector' => 'Industrials',
             'industry' => 'Building Products & Equipment',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.15, // less cyclical than the building trade
@@ -1625,7 +1498,6 @@ class InitialMarket
             // Machine availability is the product; the rig is only how it is delivered
             'management_style' => 'operator',
             'name' => 'Chough Mining Systems',
-            'sector' => 'Industrials',
             'industry' => 'Farm & Heavy Construction Machinery',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.10, // parts demand runs while mines produce
@@ -1644,10 +1516,8 @@ class InitialMarket
             // Tonnage is contracted years ahead, so the fleet is renewed on a schedule rather than on a rate spike
             'management_style' => 'steward',
             'name' => 'Gannet Ro-Ro Lines',
-            'sector' => 'Industrials',
             'industry' => 'Marine Shipping',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'risk' => -1,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.60,
@@ -1663,7 +1533,6 @@ class InitialMarket
             // A single-purpose heavy-haul line cannot be rebuilt, so the balance sheet protects the track
             'management_style' => 'fortress',
             'name' => 'Redwing Ore Line',
-            'sector' => 'Industrials',
             'industry' => 'Railroads',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.10, // steel, timber and container traffic follows the factory cycle
@@ -1681,7 +1550,6 @@ class InitialMarket
             // Buys land at what the homes on it will bear and pays out what it cannot build on
             'management_style' => 'operator',
             'name' => 'Bowerbird Homes',
-            'sector' => 'Consumer Discretionary',
             'industry' => 'Residential Construction',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.10, // a land bank bought on the housing cycle
@@ -1700,15 +1568,12 @@ class InitialMarket
             // Develops a mine when the deck clears its cost of capital and pays out the rest
             'management_style' => 'operator',
             'name' => 'Goldfinch Mining',
-            'sector' => 'Materials',
             'industry' => 'Gold',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.80,
             'revenue' => 13_100_000_000.00,
             'addressable_share' => 0.169,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.055,
         ],
@@ -1717,10 +1582,8 @@ class InitialMarket
             // Prices its book to the loss ratio it can earn and pays out what it cannot grow
             'management_style' => 'operator',
             'name' => 'Pelican Health Plans',
-            'sector' => 'Health Care',
             'industry' => 'Healthcare Plans',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'wide',
             // Claims are 82.5% of premium, UnitedHealth's 2019 medical care ratio: the engine strikes the split on cash
             // costs net of depreciation (1.6% of revenue on its acquired systems), and administration takes 10% and
@@ -1737,7 +1600,6 @@ class InitialMarket
             'ticker' => 'EGRT',
             'management_style' => 'steward', // A custodian's clients want it dull: steady dividends, no acquisitions
             'name' => 'Egret Trust',
-            'sector' => 'Financials',
             'industry' => 'Custody Banks',
             // Custodian of the Sovereign Reserve Fund and of most assets on Glasswater Row
             'systemic_importance' => 'systemic',
@@ -1760,10 +1622,8 @@ class InitialMarket
         [
             'ticker' => 'PTRL',
             'name' => 'Storm Petrel Securities',
-            'sector' => 'Financials',
             'industry' => 'Investment Banking',
             'systemic_importance' => 'systemic', // Lead primary dealer in Exchequer debt and the repo market
-            'beta_tilt' => 0.00,
             'risk' => 1,
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
@@ -1781,7 +1641,6 @@ class InitialMarket
             'ticker' => 'BNTH',
             'management_style' => 'steward', // Discretion first: steady dividends, no acquisitions that draw attention
             'name' => 'Benthos Fiduciary & Trust',
-            'sector' => 'Financials',
             'industry' => 'Private Banks',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.25, // its fees are struck on market values
@@ -1790,7 +1649,6 @@ class InitialMarket
             'moat' => 'wide',
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.65,
-            'public_float' => 0.85,
             'addressable_share' => 0.40,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.030,
@@ -1807,7 +1665,6 @@ class InitialMarket
             // A challenger run for subscribers: payout held down, the network built ahead of them
             'management_style' => 'empire_builder',
             'name' => 'Skua Mobile',
-            'sector' => 'Communication Services',
             'industry' => 'Telecom Services',
             'systemic_importance' => 'base',
             // above Loon Call's 14%: a challenger's sign-ups swing more, and this sets their noise too
@@ -1826,10 +1683,8 @@ class InitialMarket
             'ticker' => 'DIPR',
             'management_style' => 'operator',
             'name' => 'Dipper Generation',
-            'sector' => 'Utilities',
             'industry' => 'Utilities - Independent Power Producers',
             'systemic_importance' => 'base',
-            'beta_tilt' => 0.00,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.35, // fuel and carbon for the gas fleet are most of the cash cost
             'revenue' => 10_200_000_000.00,
@@ -1845,7 +1700,6 @@ class InitialMarket
             // Fuel and service contracts run for decades and need little new capital, so the cash goes to shareholders
             'management_style' => 'steward',
             'name' => 'Firecrest Atomic',
-            'sector' => 'Industrials',
             'industry' => 'Nuclear Power Equipment',
             'systemic_importance' => 'base',
             'beta_tilt' => -0.25, // orders follow world energy prices and long rates, the fleet runs whatever the cycle
@@ -1862,7 +1716,6 @@ class InitialMarket
             // A concession holder: builds quays the trade has asked for, pays out the rest
             'management_style' => 'steward',
             'name' => 'Kittiwake Harbour Terminals',
-            'sector' => 'Industrials',
             'industry' => 'Marine Ports & Services',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.05, // throughput follows trade
@@ -1872,14 +1725,13 @@ class InitialMarket
             // container terminal operators earn 35-45% before interest (ICTSI, Hutchison Port Holdings Trust)
             'revenue' => 11_400_000_000.00,
             'addressable_share' => 0.36,
-            'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
         ],
         [
             'ticker' => 'GDWT',
             'name' => 'Godwit Consulting Group',
-            'sector' => 'Information Technology',
+            'sector' => 'Information Technology', // a technology consultancy, filed with its clients' systems trade
             'industry' => 'Consulting Services',
             'systemic_importance' => 'none',
             'beta_tilt' => 0.10, // strategy bookings are the first budget a client cuts
@@ -1898,7 +1750,6 @@ class InitialMarket
             'ticker' => 'TSTN',
             'management_style' => 'steward', // Partnership economics: crisis-year fees are paid out to the partners
             'name' => 'Turnstone Advisory',
-            'sector' => 'Industrials',
             'industry' => 'Consulting Services',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.25, // busiest when credit cracks
@@ -1917,7 +1768,6 @@ class InitialMarket
             'ticker' => 'AVCT',
             'management_style' => 'fortress', // Keeps a war chest against the lawsuits a failed audit brings
             'name' => 'Avocet & Curlew',
-            'sector' => 'Industrials',
             'industry' => 'Consulting Services',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.05, // the audit book holds through a slump; the advisory book does not

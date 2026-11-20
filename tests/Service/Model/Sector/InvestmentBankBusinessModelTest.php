@@ -43,7 +43,7 @@ class InvestmentBankBusinessModelTest extends TestCase
 
         $this->assertNotNull($corvConfig, 'CORV must be registered in InitialMarket::STOCKS');
         $this->assertSame('Corvid Capital', $corvConfig['name']);
-        $this->assertSame('Financials', $corvConfig['sector']);
+        $this->assertSame('Financials', \App\Service\Market\Pricing\SeedRows::for('CORV')['sector']);
         $this->assertSame('Investment Banking', $corvConfig['industry']);
         $this->assertArrayHasKey('CORV', StockInfo::DESCRIPTIONS);
         $this->assertArrayHasKey('CORV', StockModelTuning::OVERRIDES);

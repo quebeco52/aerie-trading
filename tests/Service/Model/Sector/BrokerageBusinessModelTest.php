@@ -46,7 +46,7 @@ class BrokerageBusinessModelTest extends TestCase
 
         $this->assertNotNull($finchConfig, 'FINC must be registered in InitialMarket::STOCKS');
         $this->assertSame('Finch Securities', $finchConfig['name']);
-        $this->assertSame('Financials', $finchConfig['sector']);
+        $this->assertSame('Financials', \App\Service\Market\Pricing\SeedRows::for('FINC')['sector']);
         $this->assertSame('Brokerages', $finchConfig['industry']);
 
         $industryConfig = Sectors::INDUSTRY_METRICS['Brokerages'] ?? null;

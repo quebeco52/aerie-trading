@@ -37,3 +37,6 @@
   purpose (moat ladder caps opening ROIC near 25%). A firm whose margin will not fit is a different business, not a
   bigger step: JDAW became Online Marketplaces (revenue is commission, not merchandise). Financials and REITs keep a
   stated margin; it means something else there.
+- A row never states a default (11-20): `sector` comes from `Sectors::INDUSTRY_SECTORS` (OWLS and GDWT file elsewhere
+  and say so), `public_float` defaults to 85% (`SeedRows::DEFAULT_PUBLIC_FLOAT`), `beta_tilt` to 0.
+  `InitialMarketTest` refuses a row that restates one.

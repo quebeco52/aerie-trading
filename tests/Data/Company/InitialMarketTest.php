@@ -146,8 +146,7 @@ class InitialMarketTest extends TestCase
         }
 
         $this->assertArrayNotHasKey('beta', $stock, "{$ticker}: lore sets a position in the industry's band, not a beta");
-        $this->assertArrayHasKey('beta_tilt', $stock, "Missing beta_tilt for {$ticker}");
-        $this->assertLessThanOrEqual(IndustryBetas::LORE_BAND, abs($stock['beta_tilt']), "{$ticker}: beta_tilt outside the industry band");
+        $this->assertLessThanOrEqual(IndustryBetas::LORE_BAND, abs((float) ($stock['beta_tilt'] ?? 0.0)), "{$ticker}: beta_tilt outside the industry band");
 
         $this->assertGreaterThanOrEqual(0.0, $stock['capex_ratio'] ?? 0.0, "CapEx ratio negative for {$ticker}");
 
@@ -276,6 +275,26 @@ class InitialMarketTest extends TestCase
                 $this->fail("SeedRows::resolve() should refuse 'credit_spread' on {$ticker}.");
             } catch (\DomainException) {
                 $this->addToAssertionCount(1);
+            }
+        }
+    }
+
+    /**
+     * A row states only what sets the firm apart: never the sector its industry files under, the default float or a
+     * zero tilt.
+     */
+    public function testNoSeedRowStatesWhatItsIndustryOrTheDefaultsAlreadyGive(): void
+    {
+        foreach (InitialMarket::STOCKS as $row) {
+            $ticker = $row['ticker'];
+            if (isset($row['sector'])) {
+                $this->assertNotSame(Sectors::sectorFor($row['industry']), $row['sector'], "{$ticker} states the sector its industry already files under.");
+            }
+            if (isset($row['public_float'])) {
+                $this->assertNotEquals(SeedRows::DEFAULT_PUBLIC_FLOAT, $row['public_float'], "{$ticker} states the default float.");
+            }
+            if (isset($row['beta_tilt'])) {
+                $this->assertNotEquals(0.0, (float) $row['beta_tilt'], "{$ticker} states a zero beta tilt.");
             }
         }
     }

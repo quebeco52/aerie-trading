@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace App\Tests\Render;
 
 use App\Data\Company\DividendTier;
-use App\Data\Company\InitialMarket;
 use App\Data\Company\StockInfo;
 use App\Entity\StockEvent;
 use App\Entity\User;
+use App\Service\Market\Pricing\SeedRows;
 use Symfony\Bundle\FrameworkBundle\Test\KernelTestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
@@ -28,7 +28,7 @@ final class PagesRenderTest extends KernelTestCase
         $stocks = [];
         // One firm in each tier of the dividend roll, so the screener shows every badge.
         $rollStreaks = [5 => 6, 6 => 12, 7 => 31, 8 => 56];
-        foreach (array_slice(InitialMarket::STOCKS, 0, 24) as $i => $s) {
+        foreach (array_slice(SeedRows::all(), 0, 24) as $i => $s) {
             $streak = $rollStreaks[$i] ?? (int) ($s['dividend_streak'] ?? 0);
             $price = mt_rand(800, 42000) / 100;
             $shares = mt_rand(50, 900) * 1_000_000;
@@ -424,7 +424,7 @@ final class PagesRenderTest extends KernelTestCase
      */
     private function reservePage(): array
     {
-        $rows = [...array_slice(InitialMarket::STOCKS, 0, 8), ...array_values(array_filter(InitialMarket::STOCKS, static fn(array $row): bool => $row['ticker'] === 'ACC'))];
+        $rows = [...array_slice(SeedRows::all(), 0, 8), ...array_values(array_filter(SeedRows::all(), static fn(array $row): bool => $row['ticker'] === 'ACC'))];
         $board = [];
         foreach ($rows as $i => $row) {
             $board[] = (new \App\Entity\Stock())->setTicker($row['ticker'])->setName($row['name'])->setSector($row['sector'])
