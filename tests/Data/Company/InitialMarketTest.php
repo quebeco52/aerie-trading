@@ -165,7 +165,7 @@ class InitialMarketTest extends TestCase
         }
 
         foreach (SeedRows::DERIVED_KEYS as $derivedKey) {
-            $this->assertArrayNotHasKey($derivedKey, $stock, "{$ticker}: {$derivedKey} is derived at opening from rating and LGD");
+            $this->assertArrayNotHasKey($derivedKey, $stock, "{$ticker}: {$derivedKey} is derived at opening rather than seeded");
         }
 
         // Balance sheet non-negatives
@@ -330,6 +330,15 @@ class InitialMarketTest extends TestCase
             try {
                 SeedRows::resolve($byTicker[$ticker] + ['systemic_importance' => 'titan']);
                 $this->fail("SeedRows::resolve() should refuse retired 'systemic_importance' on {$ticker}.");
+            } catch (\DomainException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        foreach (['WING', 'LAKE', 'BRKW', 'SAFE', 'SWAN', 'SHOR', 'FINC', 'ACC'] as $ticker) {
+            try {
+                SeedRows::resolve($byTicker[$ticker] + ['addressable_share' => 0.30]);
+                $this->fail("SeedRows::resolve() should refuse 'addressable_share' on {$ticker}.");
             } catch (\DomainException) {
                 $this->addToAssertionCount(1);
             }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryMarkets;
 use App\Data\Macro\InputOutputExposures;
 use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\DebtHealthDTO;
@@ -38,11 +39,11 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
      * A trust still states its operating margin: its return is historic-cost NOI yield before depreciation, not a
      * DuPont moat spread.
      */
-    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin'];
     /** What resolveOpeningBooks() builds for a trust; operating_margin remains a character input. */
     public const OPENING_BOOK_KEYS = [
         'baseline_roic', 'total_equity', 'wholesale_debt', 'customer_deposits', 'corporate_treasury', 'retained_earnings',
-        'sam_ratio',
+        'sam_ratio', 'addressable_share',
     ];
 
     // --- Operating Cyclicality & Demand Structure ---
@@ -318,9 +319,9 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
         SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
             'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
             'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
-            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
             'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
         ]);
+        IndustryMarkets::assertRow($seedRow);
     }
 
     /**

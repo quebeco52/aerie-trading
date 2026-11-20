@@ -57,3 +57,8 @@
 - No `systemic_importance` (11-20). Column and all 103 seed keys retired; Penrose saturation runs un-dampened (`1.0x`),
   analyst coverage scales smoothly with log live real market cap (`COVERAGE_SIZE_*_GDP_SHARE`), and Glasswater Row
   plot widths/beacons follow live share of street market cap (`LANDMARK_CAP_SHARE` / `WIDE_CAP_SHARE`).
+- No seeded `addressable_share` on 98 rows (11-20). `IndustryMarkets::BY_INDUSTRY` gives each board industry's opening
+  total revenue market (listed firms plus unlisted competitive fringe) as a multiple of `DISTRICT_GDP_USD`, and each firm
+  opens at `revenue / market` with `1 - Σ listed shares` left as the private fringe; `BRKW` keeps `sam_ratio` and the
+  4 closed funds keep `CapacityShare` in `StockModelTuning`. `Stock::$samRatio` widened to `DECIMAL(7,4)` so small
+  firms (`SKYL`, `TSTN`, `CLAW`, `ROOK`) keep their opening market shares on persist.

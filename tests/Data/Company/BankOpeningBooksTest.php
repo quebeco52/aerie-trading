@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Data\Company;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\IndustryMoats;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
@@ -160,9 +161,10 @@ class BankOpeningBooksTest extends TestCase
         $opening = new MacroStateDTO();
         $costOfEquity = Valuation::calculateCAPM($opening->equityRiskFreeRate, IndustryBetas::seedBetaFor($row), MacroConstants::BASE_EQUITY_RISK_PREMIUM);
 
+        $expectedShare = (float) $row['revenue'] / (MacroConstants::DISTRICT_GDP_USD * IndustryMarkets::BY_INDUSTRY[$row['industry']]);
         $this->assertEqualsWithDelta($costOfEquity + IndustryMoats::forRow($row)->spread(), (float) $stock->getBaselineRoe(), 1e-4, $row['ticker']);
         $this->assertEqualsWithDelta(
-            $row['addressable_share'],
+            $expectedShare,
             CorporateMetrics::getInstance()->calculateScaleRatio((float) $stock->getTotalEquity(), 1.0, (float) $stock->getSamRatio()),
             1e-6,
             $row['ticker'],
@@ -218,10 +220,12 @@ class BankOpeningBooksTest extends TestCase
 
         return [
             'a book beside the character' => [['total_equity' => 1.0e12] + $lake],
+            'addressable_share stated on a lender' => [['addressable_share' => 0.30] + $lake],
             'an input missing' => [$missing],
             'wholesale funding past all of it' => [['wholesale_funding_share' => 1.0] + $lake],
             'retained earnings past its equity' => [['retained_share' => 1.5] + $lake],
             'no revenue' => [['revenue' => 0.0] + $lake],
+            'revenue past its industry market' => [['revenue' => MacroConstants::DISTRICT_GDP_USD * IndustryMarkets::BY_INDUSTRY[$lake['industry']] * 1.1] + $lake],
             'a moat off the ladder' => [['moat' => 'impregnable'] + $lake],
             'a funding mix beside a shadow bank' => [['wholesale_funding_share' => 0.5] + $pool],
             'a shadow bank margin past its revenue' => [['operating_margin' => 1.2] + $pool],

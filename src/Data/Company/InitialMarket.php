@@ -7,10 +7,10 @@ namespace App\Data\Company;
 /**
  * The listed firms as they open. Every operating firm, lender, insurer and fee financial states its character instead
  * of hand-set books, and its business model's resolveOpeningBooks() builds the balance sheet, return and market share
- * that character implies (only spheres like BRKW still state their books directly). Read the resolved books through
- * App\Service\Market\Pricing\SeedRows. A `moat` names the firm's step on the ladder (App\Data\Company\Moat) where it
- * is not its industry's (IndustryMoats); `risk` and `events` shift the firm's opening business-risk and event-risk
- * steps by ±1 around its industry's (IndustryRisks).
+ * from its industry market (IndustryMarkets) that character implies (only spheres like BRKW still state their books
+ * directly). Read the resolved books through App\Service\Market\Pricing\SeedRows. A `moat` names the firm's step on
+ * the ladder (App\Data\Company\Moat) where it is not its industry's (IndustryMoats); `risk` and `events` shift the
+ * firm's opening business-risk and event-risk steps by ±1 around its industry's (IndustryRisks).
  */
 class InitialMarket
 {
@@ -25,7 +25,6 @@ class InitialMarket
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.40,
             'public_float' => 0.50, // Founders' trusts still hold about half the bank
-            'addressable_share' => 0.43,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.025,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
@@ -56,7 +55,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // steadier cloud contracts, less volatile than smaller software names
             'moat' => 'very_wide',
             'revenue' => 82_800_000_000.00,
-            'addressable_share' => 0.293,
         ],
         [
             'ticker' => 'OWLS',
@@ -67,7 +65,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // a contrarian holder that buys when prices fall
             'moat' => 'wide',
             'revenue' => 61_400_000_000.00,
-            'addressable_share' => 0.204,
             'depreciation_rate' => 0.03,
         ],
         [
@@ -80,7 +77,6 @@ class InitialMarket
             'capex_ratio' => 0.05,
             'payout' => 'low',
             'operating_margin' => 0.40,
-            'addressable_share' => 0.333,
             'floating_debt_ratio' => 0.65,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 42_800_000_000.00,
@@ -95,7 +91,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.15,
             'operating_margin' => 0.35,
-            'addressable_share' => 0.267,
             'floating_debt_ratio' => 0.80,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 30_200_000_000.00,
@@ -110,7 +105,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.10,
             'operating_margin' => 0.45,
-            'addressable_share' => 0.28,
             'public_float' => 0.85, // Partners still hold about 15% of the shares
             'floating_debt_ratio' => 0.85,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
@@ -128,7 +122,6 @@ class InitialMarket
             'payout' => 'balanced',
             'fixed_cost_ratio' => 0.40,
             // It opens at 45% of its market, inside the share past which a lender's returns fall.
-            'addressable_share' => 0.45,
             'floating_debt_ratio' => 0.35,
             'historical_fixed_rate' => 0.035,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
@@ -146,7 +139,6 @@ class InitialMarket
             'moat' => 'narrow', // ROE 10% at the opening: the second home lender's branch network
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.45,
-            'addressable_share' => 0.35, // More headroom than RIVR and LAKE open with
             'floating_debt_ratio' => 0.15, // Covered bonds are fixed-rate
             'historical_fixed_rate' => 0.028,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
@@ -168,7 +160,6 @@ class InitialMarket
             // and earning mainly on the float they invest.
             'operating_margin' => 0.015,
             'public_float' => 0.70, // The founding mutual kept about 30% of the shares at listing
-            'addressable_share' => 0.431,
             // Its books are built on this character by its model (InsuranceBusinessModel::resolveOpeningBooks()).
             'revenue' => 590_000_000_000.00,
             'retained_share' => 0.20,
@@ -182,7 +173,6 @@ class InitialMarket
             'fixed_cost_ratio' => 0.35,
             // 95.5% combined ratio; European composites' P&C books run about 93-95%.
             'operating_margin' => 0.045,
-            'addressable_share' => 0.34,
             // Its liabilities are not marked to the curve, so it elects to keep the bond mark out of its capital ratio.
             'aoci_filtered' => true,
             // Its books are built on this character by its model (InsuranceBusinessModel::resolveOpeningBooks()).
@@ -198,7 +188,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'cost_structure' => 'flexible', // analyst staff scales with new-issue ratings volume
             'revenue' => 8_670_000_000.00,
-            'addressable_share' => 0.132,
         ],
         [
             'ticker' => 'BIRD',
@@ -207,7 +196,6 @@ class InitialMarket
             // a regulated electric utility: 15.0% (Damodaran, Utility (General), US, January 2026)
             'moat' => 'narrow',
             'revenue' => 63_600_000_000.00,
-            'addressable_share' => 0.281,
         ],
         [
             'ticker' => 'WATCH',
@@ -216,7 +204,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // multi-year retainers held through recessions
             'risk' => -1,
             'revenue' => 27_100_000_000.00,
-            'addressable_share' => 0.288,
         ],
         [
             'ticker' => 'WING',
@@ -224,7 +211,6 @@ class InitialMarket
             'industry' => 'Steel',
             'moat' => 'moderate',
             'revenue' => 48_800_000_000.00,
-            'addressable_share' => 0.203,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -233,7 +219,6 @@ class InitialMarket
             'industry' => 'Computer Hardware',
             'moat' => 'wide',
             'revenue' => 33_800_000_000.00,
-            'addressable_share' => 0.232,
         ],
         [
             'ticker' => 'SHOR',
@@ -242,7 +227,6 @@ class InitialMarket
             'moat' => 'narrow',
             'operating_margin' => 0.55,
             'revenue' => 15_300_000_000.00,
-            'addressable_share' => 0.280,
             'retained_share' => 0.62,
         ],
         [
@@ -254,7 +238,6 @@ class InitialMarket
             // sixty percent long-term robotics service contracts over a lighter plant base
             'capital_intensity' => 'light',
             'revenue' => 52_300_000_000.00,
-            'addressable_share' => 0.284,
         ],
         [
             'ticker' => 'GRIP',
@@ -266,7 +249,6 @@ class InitialMarket
             'events' => -1,
             'moat' => 'wide',
             'revenue' => 85_600_000_000.00,
-            'addressable_share' => 0.293,
             'public_float' => 0.95, // Founder sold out after listing; almost all shares trade freely
         ],
         [
@@ -279,14 +261,12 @@ class InitialMarket
             'moat' => 'narrow',
             // engineering, the factory and the launch pads; propellant, recovery and ground crews follow the launches
             'revenue' => 11_300_000_000.00,
-            'addressable_share' => 0.3,
         ],
         [
             'ticker' => 'LOON',
             'name' => 'Loon Call Telecom',
             'industry' => 'Telecom Services',
             'revenue' => 68_200_000_000.00,
-            'addressable_share' => 0.352,
             'depreciation_rate' => 0.068, // Verizon 2024: D&A over net plant plus spectrum licences
         ],
         [
@@ -295,7 +275,6 @@ class InitialMarket
             'name' => 'Pheasant & Morris International',
             'industry' => 'Tobacco',
             'revenue' => 23_400_000_000.00,
-            'addressable_share' => 0.284,
         ],
         [
             'ticker' => 'TRIV',
@@ -310,7 +289,6 @@ class InitialMarket
             // one-third fast-turning household staples and adhesives, lighter than rail and utility holdings
             'capital_intensity' => 'light',
             'revenue' => 59_000_000_000.00,
-            'addressable_share' => 0.28,
         ],
         [
             'ticker' => 'IBHI',
@@ -319,7 +297,6 @@ class InitialMarket
             'beta_tilt' => 0.25, // heavy fixed costs on a thin margin
             'moat' => 'narrow',
             'revenue' => 233_000_000_000.00,
-            'addressable_share' => 0.315,
             'public_float' => 0.45, // Lakebird Bank and Black Swan Capital hold about 55% of the shares
         ],
         [
@@ -339,7 +316,6 @@ class InitialMarket
             'payout' => 'low',
             'cost_structure' => 'rigid', // terminal network and low-latency data feeds are largely fixed
             'revenue' => 8_870_000_000.00,
-            'addressable_share' => 0.108,
         ],
         [
             'ticker' => 'SINK',
@@ -348,7 +324,6 @@ class InitialMarket
             'beta_tilt' => 0.10, // deepwater cost base, partly hedged
             'moat' => 'wide',
             'revenue' => 62_300_000_000.00,
-            'addressable_share' => 0.276,
         ],
         [
             'ticker' => 'CASC',
@@ -358,7 +333,6 @@ class InitialMarket
             // A merchant refiner at a $22 crack: Valero's margin (-$0.41 + 0.598 x crack) less its ~$6.5/bbl of costs,
             // over the refiner's own barrel revenue. Break-even near an $11.6 crack, as Valero ran in 2020.
             'revenue' => 569_000_000_000.00,
-            'addressable_share' => 0.246,
             // The District's only refiner, its market the District's fuel and the mainland coast it ships to: opens at
             // about a quarter of it.
             // An export refinery, sized like Singapore's or Korea's: product sales open near 10% of GDP, against 2-3%
@@ -373,7 +347,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // fixed lease income steadies the casino book
             'moat' => 'wide',
             'revenue' => 47_000_000_000.00,
-            'addressable_share' => 0.305,
         ],
         [
             'ticker' => 'WADE',
@@ -383,7 +356,6 @@ class InitialMarket
             'industry' => 'Utilities - Regulated Water',
             'moat' => 'narrow',
             'revenue' => 24_700_000_000.00,
-            'addressable_share' => 0.303,
         ],
         [
             'ticker' => 'CORM',
@@ -392,7 +364,6 @@ class InitialMarket
             'industry' => 'Waste Management',
             'beta_tilt' => -0.25, // waste volumes barely move in a recession
             'revenue' => 24_800_000_000.00,
-            'addressable_share' => 0.296,
         ],
         [
             'ticker' => 'CRAN',
@@ -401,7 +372,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // volumes follow health programmes, not the cycle
             'moat' => 'wide',
             'revenue' => 102_000_000_000.00,
-            'addressable_share' => 0.283,
         ],
         [
             'ticker' => 'TALN',
@@ -412,7 +382,6 @@ class InitialMarket
             'capex_ratio' => 0.15,
             'payout' => 'low',
             'fixed_cost_ratio' => 0.60,
-            'addressable_share' => 0.30,
             'floating_debt_ratio' => 0.60,
             'historical_fixed_rate' => 0.050,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
@@ -427,7 +396,6 @@ class InitialMarket
             'beta_tilt' => 0.15, // surge-priced volumes on a fixed network
             'moat' => 'narrow',
             'revenue' => 88_700_000_000.00,
-            'addressable_share' => 0.27,
         ],
         [
             'ticker' => 'TERN',
@@ -436,7 +404,6 @@ class InitialMarket
             'beta_tilt' => 0.15, // business travel and full planes turn with the cycle
             // network carriers earn 8-10% before interest in a good year
             'revenue' => 80_200_000_000.00,
-            'addressable_share' => 0.37,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -447,7 +414,6 @@ class InitialMarket
             'industry' => 'Packaged Foods',
             'moat' => 'very_wide',
             'revenue' => 45_200_000_000.00,
-            'addressable_share' => 0.3,
         ],
         [
             'ticker' => 'STRK',
@@ -458,7 +424,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.45,
-            'addressable_share' => 0.28,
             'floating_debt_ratio' => 0.65,
             'historical_fixed_rate' => 0.050,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
@@ -476,7 +441,6 @@ class InitialMarket
             // franchisor
             'capital_intensity' => 'light',
             'revenue' => 38_100_000_000.00,
-            'addressable_share' => 0.33,
         ],
         [
             'ticker' => 'CLAW',
@@ -487,7 +451,6 @@ class InitialMarket
             'events' => 1,
             'moat' => 'very_wide',
             'revenue' => 2_260_000_000.00,
-            'addressable_share' => 0.045,
             'public_float' => 0.60, // Senior litigation partners hold about 40% of the firm
             'depreciation_rate' => 0.04,
         ],
@@ -499,7 +462,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.08,
             'operating_margin' => 0.45,
-            'addressable_share' => 0.10,
             'floating_debt_ratio' => 0.80,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 2_160_000_000.00,
@@ -515,7 +477,6 @@ class InitialMarket
             'moat' => 'moderate',
             'operating_margin' => 0.55,
             'revenue' => 21_300_000_000.00,
-            'addressable_share' => 0.295,
             'retained_share' => 0.64,
             'public_float' => 0.15, // Lakebird Bank sponsored the trust and holds most of the units
         ],
@@ -526,7 +487,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // retainers and crisis work steady a recession
             'moat' => 'very_wide',
             'revenue' => 18_800_000_000.00,
-            'addressable_share' => 0.25,
         ],
         [
             'ticker' => 'BELL',
@@ -537,7 +497,6 @@ class InitialMarket
             // sports rights, newsrooms and the stations are paid for whatever the airtime sells for
             // news-led networks earn about 20% before interest (Fox, fiscal 2024-25)
             'revenue' => 59_300_000_000.00,
-            'addressable_share' => 0.352,
             // the founding family's trust holds the voting shares
             'public_float' => 0.60,
         ],
@@ -547,7 +506,6 @@ class InitialMarket
             'industry' => 'Education & Training Services',
             'moat' => 'moderate',
             'revenue' => 16_300_000_000.00,
-            'addressable_share' => 0.13,
             'public_float' => 0.75, // University endowment and corporate sponsors hold about a quarter
         ],
         [
@@ -559,7 +517,6 @@ class InitialMarket
             'beta_tilt' => 0.25, // thin margin on fixed fulfilment costs
             'moat' => 'very_wide',
             'revenue' => 111_000_000_000.00,
-            'addressable_share' => 0.347,
         ],
         [
             'ticker' => 'JDAW',
@@ -569,7 +526,6 @@ class InitialMarket
             'beta_tilt' => 0.10, // pure commission on discretionary sales, no fixed fulfilment base
             'moat' => 'very_wide',
             'revenue' => 51_700_000_000.00,
-            'addressable_share' => 0.327,
         ],
         [
             'ticker' => 'CROP',
@@ -578,7 +534,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // volumes hold in a downturn
             'moat' => 'narrow',
             'revenue' => 105_000_000_000.00,
-            'addressable_share' => 0.3,
         ],
         [
             'ticker' => 'BRKW',
@@ -631,7 +586,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // ageing-population rents trade like a long bond
             'operating_margin' => 0.55,
             'revenue' => 8_490_000_000.00,
-            'addressable_share' => 0.275,
             'retained_share' => 0.01,
         ],
         [
@@ -653,7 +607,6 @@ class InitialMarket
             // owns the high-traffic franchise sites and finances automated equipment, booking rent and royalties
             'capital_intensity' => 'heavy',
             'revenue' => 31_100_000_000.00,
-            'addressable_share' => 0.264,
         ],
         [
             'ticker' => 'VULT',
@@ -680,7 +633,6 @@ class InitialMarket
             // An OEM's plant, tooling and contracted line labour are roughly two fifths of its cost base; at
             // 0.58 the fleet broke even on a 15% volume drop and any ordinary slowdown put it in the red.
             'revenue' => 280_000_000_000.00,
-            'addressable_share' => 0.304,
             'public_float' => 0.75, // Founder retains about a quarter of the shares
         ],
         [
@@ -694,7 +646,6 @@ class InitialMarket
             // mechanised offshore field force with its own vehicles, aircraft, escort ships and supply lines
             'capital_intensity' => 'very_heavy',
             'revenue' => 40_300_000_000.00,
-            'addressable_share' => 0.28,
         ],
         [
             'ticker' => 'NCKR',
@@ -705,7 +656,6 @@ class InitialMarket
             // depots, vaults and the armoured fleet; crews follow the rounds
             // cash carriers earn 9-14% before interest (Brink's, Loomis, Prosegur Cash)
             'revenue' => 34_900_000_000.00,
-            'addressable_share' => 0.0725,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -717,7 +667,6 @@ class InitialMarket
             // owned prisons and the minimum staffing each must keep, full or not
             // prison operators earn 15-20% before interest on owned estates (GEO, CoreCivic, Serco custodial)
             'revenue' => 16_900_000_000.00,
-            'addressable_share' => 0.0525,
         ],
         [
             'ticker' => 'NJAR',
@@ -728,7 +677,6 @@ class InitialMarket
             // investigators and analysts are kept on whether the cases come or not
             // risk and investigations firms earn 15-20% before interest (Kroll, Control Risks, FTI forensic)
             'revenue' => 20_700_000_000.00,
-            'addressable_share' => 0.0517,
         ],
         [
             'ticker' => 'CROW',
@@ -757,7 +705,6 @@ class InitialMarket
             // A low-cost major: copper majors earn 25-35% at mid-cycle on ~0.5x asset turnover, which is what
             // carries them through a metals slump that sinks the high-cost producers.
             'revenue' => 29_200_000_000.00,
-            'addressable_share' => 0.208,
             // Majority owned by LAKE and SWAN, per its own description. A thin float is what makes a
             // high-volatility miner genuinely hard to trade in size and hard to borrow.
             'public_float' => 0.45,
@@ -770,7 +717,6 @@ class InitialMarket
             'industry' => 'Semiconductors',
             'moat' => 'wide',
             'revenue' => 58_300_000_000.00,
-            'addressable_share' => 0.293,
         ],
         [
             'ticker' => 'KSTL',
@@ -780,7 +726,6 @@ class InitialMarket
             'risk' => -1,
             'moat' => 'moderate',
             'revenue' => 18_500_000_000.00,
-            'addressable_share' => 0.288,
         ],
         [
             'ticker' => 'POOL',
@@ -789,7 +734,6 @@ class InitialMarket
             'beta_tilt' => 0.25, // wholesale-funded, falls steeply in credit crises
             'capex_ratio' => 0.05,
             'operating_margin' => 0.50,
-            'addressable_share' => 0.314,
             'floating_debt_ratio' => 0.70,
             'historical_fixed_rate' => 0.050,
             'depreciation_rate' => 0.01,
@@ -810,7 +754,6 @@ class InitialMarket
             'operating_margin' => 0.55,
             // The closely held block is the District's (StrategicHoldings), taken off in AnchorHoldings::tradableFloat
             'public_float' => 1.00,
-            'addressable_share' => 0.50,
             // Its books are built on this character by its model (ClearingHouseBusinessModel::resolveOpeningBooks()).
             'revenue' => 12_500_000_000.00,
             'retained_share' => 0.40,
@@ -822,7 +765,6 @@ class InitialMarket
             'beta_tilt' => 0.05, // turnover rises in a sell-off as the value it is charged on falls
             'moat' => 'very_wide',
             'revenue' => 7_630_000_000.00,
-            'addressable_share' => 0.317, // the only licensed venue: the District's own turnover is the room it has
             // Control sits in unlisted Class B voting shares (the District, LAKE, SWAN, SAFE), which carry little of
             // the capital; the District's 20% of the capital is StrategicHoldings', taken off in
             // AnchorHoldings::tradableFloat.
@@ -841,7 +783,6 @@ class InitialMarket
             // the investment spread.
             'operating_margin' => 0.04,
             'public_float' => 1.00, // Fully public after demutualisation; no anchor holder
-            'addressable_share' => 0.24,
             // Reserves are paid out over decades, so the bonds behind them run longer than a composite's.
             'securities_duration' => 10.0,
             'aoci_filtered' => true,
@@ -856,7 +797,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // commissions follow the insurance cycle, not the business cycle
             'moat' => 'wide',
             'revenue' => 11_600_000_000.00,
-            'addressable_share' => 0.15,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -867,7 +807,6 @@ class InitialMarket
             'moat' => 'moderate',
             'payout' => 'low',
             'revenue' => 53_000_000_000.00,
-            'addressable_share' => 0.258,
         ],
         [
             'ticker' => 'IBIS',
@@ -875,7 +814,6 @@ class InitialMarket
             'industry' => 'Drug Manufacturers - General',
             'beta_tilt' => -0.15, // prescription demand ignores the cycle
             'revenue' => 63_300_000_000.00,
-            'addressable_share' => 0.307,
             'depreciation_rate' => 0.10,
         ],
         [
@@ -884,7 +822,6 @@ class InitialMarket
             'industry' => 'Luxury Goods',
             'moat' => 'wide',
             'revenue' => 43_100_000_000.00,
-            'addressable_share' => 0.32,
             'public_float' => 0.55, // Controlling luxury-house family holds about 45% of the group
         ],
         [
@@ -896,7 +833,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // among the least volatile on the exchange
             'moat' => 'very_wide',
             'revenue' => 86_700_000_000.00,
-            'addressable_share' => 0.314,
         ],
         [
             'ticker' => 'CBIL',
@@ -908,7 +844,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // falls by less than most equipment makers
             'moat' => 'very_wide',
             'revenue' => 36_100_000_000.00,
-            'addressable_share' => 0.3,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -918,7 +853,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // demand barely moves with the cycle
             'moat' => 'very_wide',
             'revenue' => 34_500_000_000.00,
-            'addressable_share' => 0.315,
         ],
         [
             'ticker' => 'SPRW',
@@ -929,7 +863,6 @@ class InitialMarket
             // store rents, depots and head office; suppliers, fuel and store payroll follow the baskets sold
             // supermarket chains earn 3-4% before interest (Kroger, Tesco, Ahold Delhaize)
             'revenue' => 175_000_000_000.00,
-            'addressable_share' => 0.353,
         ],
         [
             'ticker' => 'KITE',
@@ -940,7 +873,6 @@ class InitialMarket
             'moat' => 'moderate',
             'operating_margin' => 0.52,
             'revenue' => 20_500_000_000.00,
-            'addressable_share' => 0.358,
             'retained_share' => 0.44,
         ],
         [
@@ -950,7 +882,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // trade-down softens a downturn
             'moat' => 'very_wide',
             'revenue' => 59_000_000_000.00,
-            'addressable_share' => 0.178,
         ],
         [
             'ticker' => 'FULM',
@@ -958,7 +889,6 @@ class InitialMarket
             'industry' => 'Chemicals',
             'moat' => 'moderate',
             'revenue' => 67_800_000_000.00,
-            'addressable_share' => 0.25,
         ],
         [
             'ticker' => 'EIDR',
@@ -970,7 +900,6 @@ class InitialMarket
             'risk' => -1,
             'moat' => 'moderate',
             'revenue' => 124_000_000_000.00,
-            'addressable_share' => 0.253,
         ],
         [
             'ticker' => 'ERNE',
@@ -981,7 +910,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // royalties steady the equipment cycle
             'moat' => 'moderate',
             'revenue' => 62_800_000_000.00,
-            'addressable_share' => 0.119,
         ],
         [
             'ticker' => 'SNDR',
@@ -993,7 +921,6 @@ class InitialMarket
             // vertically integrated tungsten-carbide sintering plants and heavy tunnel borers
             'capital_intensity' => 'heavy',
             'revenue' => 89_200_000_000.00,
-            'addressable_share' => 0.247,
         ],
         [
             'ticker' => 'NUTH',
@@ -1005,7 +932,6 @@ class InitialMarket
             'moat' => 'wide',
             'capital_intensity' => 'light', // OEM heat-pump systems sold through certified independent installers
             'revenue' => 80_500_000_000.00,
-            'addressable_share' => 0.22,
         ],
         [
             'ticker' => 'ALCA',
@@ -1017,7 +943,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // service income carries a downturn
             'moat' => 'very_wide',
             'revenue' => 86_100_000_000.00,
-            'addressable_share' => 0.242,
         ],
         [
             'ticker' => 'RAVN',
@@ -1029,7 +954,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // staples volumes hold in recessions
             'moat' => 'moderate',
             'revenue' => 160_000_000_000.00,
-            'addressable_share' => 0.148,
             'public_float' => 0.65, // Founding Iron Quay merchant families hold about 35%
         ],
         [
@@ -1043,7 +967,6 @@ class InitialMarket
             'moat' => 'wide',
             'payout' => 'low',
             'revenue' => 36_000_000_000.00,
-            'addressable_share' => 0.0822,
             'depreciation_rate' => 0.04,
         ],
         [
@@ -1074,7 +997,6 @@ class InitialMarket
             // high-fixed-cost welding, heat-treatment and machining plants for surface earthmoving machinery
             'capital_intensity' => 'heavy',
             'revenue' => 42_500_000_000.00,
-            'addressable_share' => 0.0965,
         ],
         [
             'ticker' => 'BOBY',
@@ -1086,7 +1008,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // backlog and substation replacement, not the cycle
             'moat' => 'wide',
             'revenue' => 48_200_000_000.00,
-            'addressable_share' => 0.0727,
         ],
         [
             'ticker' => 'MAGP',
@@ -1097,7 +1018,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // repair parts when capex is deferred
             'moat' => 'moderate',
             'revenue' => 39_600_000_000.00,
-            'addressable_share' => 0.0571,
         ],
         [
             'ticker' => 'PTAR',
@@ -1109,7 +1029,6 @@ class InitialMarket
             'moat' => 'wide',
             'payout' => 'balanced',
             'revenue' => 69_100_000_000.00,
-            'addressable_share' => 0.268,
         ],
         [
             'ticker' => 'WREN',
@@ -1123,7 +1042,6 @@ class InitialMarket
             // decades of lockmaker roll-up acquisitions consolidated into Wren factories
             'capital_intensity' => 'heavy',
             'revenue' => 22_900_000_000.00,
-            'addressable_share' => 0.27,
         ],
         [
             'ticker' => 'CHUF',
@@ -1135,7 +1053,6 @@ class InitialMarket
             'risk' => -1,
             'moat' => 'very_wide',
             'revenue' => 62_500_000_000.00,
-            'addressable_share' => 0.261,
             'depreciation_rate' => 0.07,
         ],
         [
@@ -1147,7 +1064,6 @@ class InitialMarket
             'risk' => -1,
             'moat' => 'moderate',
             'revenue' => 59_700_000_000.00,
-            'addressable_share' => 0.261,
             'depreciation_rate' => 0.07,
         ],
         [
@@ -1159,7 +1075,6 @@ class InitialMarket
             'beta_tilt' => 0.10, // steel, timber and container traffic follows the factory cycle
             'payout' => 'income',
             'revenue' => 23_500_000_000.00,
-            'addressable_share' => 0.267,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -1171,7 +1086,6 @@ class InitialMarket
             'beta_tilt' => 0.10, // a land bank bought on the housing cycle
             'moat' => 'narrow',
             'revenue' => 30_100_000_000.00,
-            'addressable_share' => 0.167,
         ],
         [
             'ticker' => 'FNCH',
@@ -1181,7 +1095,6 @@ class InitialMarket
             'industry' => 'Gold',
             'moat' => 'narrow',
             'revenue' => 13_100_000_000.00,
-            'addressable_share' => 0.169,
         ],
         [
             'ticker' => 'PELI',
@@ -1195,7 +1108,6 @@ class InitialMarket
             // leaves a 5.5% operating margin, about its insurance segment's.
             'fixed_cost_ratio' => 0.112,
             'revenue' => 80_600_000_000.00,
-            'addressable_share' => 0.153,
             // Operating cash plus the claims float: about seven weeks of claims owed, invested until paid.
         ],
         [
@@ -1210,7 +1122,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.60,
-            'addressable_share' => 0.34,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.030,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
@@ -1227,7 +1138,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
             'operating_margin' => 0.35,
-            'addressable_share' => 0.267,
             'floating_debt_ratio' => 0.80, // Inventory funded overnight in repo
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 26_100_000_000.00,
@@ -1244,7 +1154,6 @@ class InitialMarket
             'moat' => 'wide',
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.65,
-            'addressable_share' => 0.40,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.030,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
@@ -1266,7 +1175,6 @@ class InitialMarket
             'moat' => 'none',
             'payout' => 'low',
             'revenue' => 23_000_000_000.00,
-            'addressable_share' => 0.284,
             'public_float' => 0.45, // its mainland parent holds the rest
             'depreciation_rate' => 0.08,
         ],
@@ -1277,7 +1185,6 @@ class InitialMarket
             'industry' => 'Utilities - Independent Power Producers',
             'moat' => 'narrow',
             'revenue' => 10_200_000_000.00,
-            'addressable_share' => 0.295,
             'depreciation_rate' => 0.045,
             // about 1.8 times EBITDA: a one-sigma gas slump halves it and must leave it under the 4.0 covenant
         ],
@@ -1290,7 +1197,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // orders follow world energy prices and long rates, the fleet runs whatever the cycle
             // engineering staff, licensing and the fuel plants; crews and materials follow the plants being built
             'revenue' => 38_400_000_000.00,
-            'addressable_share' => 0.267,
         ],
         [
             'ticker' => 'KTWK',
@@ -1303,7 +1209,6 @@ class InitialMarket
             // dock crews on shift, crane upkeep and the concession's fixed rent; the royalty and power scale with boxes
             // container terminal operators earn 35-45% before interest (ICTSI, Hutchison Port Holdings Trust)
             'revenue' => 11_400_000_000.00,
-            'addressable_share' => 0.36,
         ],
         [
             'ticker' => 'GDWT',
@@ -1315,7 +1220,6 @@ class InitialMarket
             // salaried consultants and delivery centres; subcontractors, travel and bonuses scale with the work
             // strategy and technology consultancies earn 13-16% before interest (Accenture, Capgemini, CGI)
             'revenue' => 57_800_000_000.00,
-            'addressable_share' => 0.12,
             'depreciation_rate' => 0.12,
         ],
         [
@@ -1328,7 +1232,6 @@ class InitialMarket
             'moat' => 'very_wide',
             // restructuring, forensic and economic advisers earn 10-15% before interest (FTI Consulting, Huron)
             'revenue' => 5_340_000_000.00,
-            'addressable_share' => 0.103,
             'public_float' => 0.70, // Advisory partners retain about 30% of the equity
             'depreciation_rate' => 0.08,
         ],
@@ -1342,7 +1245,6 @@ class InitialMarket
             // salaried audit and tax staff carried through the year; contractors and travel follow the work
             // a listed multidisciplinary firm paying its partners market salaries earns 12-15% before interest
             'revenue' => 45_400_000_000.00,
-            'addressable_share' => 0.12,
             'public_float' => 0.75, // Audit and consulting partners retain about a quarter of the firm
             'depreciation_rate' => 0.10,
         ],

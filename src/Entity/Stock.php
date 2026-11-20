@@ -711,8 +711,8 @@ class Stock
     /**
      * @var string|null The Serviceable Addressable Market (SAM) multiplier.
      */
-    #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 2, nullable: true, options: ['default' => '1.00'])]
-    private ?string $samRatio = '1.00';
+    #[ORM\Column(type: Types::DECIMAL, precision: 7, scale: 4, nullable: true, options: ['default' => '1.0000'])]
+    private ?string $samRatio = '1.0000';
 
     #[ORM\Column(length: 255, nullable: true)]
     private ?string $industry = null;
@@ -2007,7 +2007,7 @@ class Stock
 
     public function setSamRatio(?string $samRatio): static
     {
-        $this->samRatio = $samRatio !== null ? self::cleanBcStr($samRatio, 2) : null;
+        $this->samRatio = $samRatio !== null ? self::cleanBcStr($samRatio, 4) : null;
         return $this;
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\IndustryMarkets;
 use App\DTO\DebtExpansionAppetiteDTO;
 use App\DTO\InterestExpenseDTO;
 use App\DTO\MacroStateDTO;
@@ -390,20 +391,20 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
 
     // --- Opening Books ---
     /** What an insurer's seed row states when its books are built from its character (resolveOpeningBooks()). */
-    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin'];
     /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
     public const OPENING_BOOK_KEYS = [
         'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
-        'sam_ratio',
+        'sam_ratio', 'addressable_share',
     ];
 
     /**
      * An insurer's opening books from its character: the annual premium it writes, its structural underwriting margin,
-     * its moat over its cost of equity and the share of its serviceable market its surplus fills. Policyholder float is
-     * the steady reserve stock that premium carries (resolveReserveToPremiumRatio()), corporate debt sits at its
-     * manager's target share of the wholesale limit, cash backs the float in full plus its manager's operating buffer,
-     * and surplus is scaled until the model's capacity-constrained book writes the stated premium. A row that states
-     * its books (no revenue key) is handed back as it is.
+     * its moat over its cost of equity and the share of its industry's market (IndustryMarkets) its surplus fills.
+     * Policyholder float is the steady reserve stock that premium carries (resolveReserveToPremiumRatio()), corporate
+     * debt sits at its manager's target share of the wholesale limit, cash backs the float in full plus its manager's
+     * operating buffer, and surplus is scaled until the model's capacity-constrained book writes the stated premium.
+     * A row that states its books (no revenue key) is handed back as it is.
      */
     public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
     {
@@ -414,14 +415,14 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
         SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
             'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
             'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
-            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
             'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
         ]);
+        IndustryMarkets::assertRow($seedRow);
 
         $ticker = (string) $seedRow['ticker'];
         $revenue = (float) $seedRow['revenue'];
         $margin = (float) $seedRow['operating_margin'];
-        $addressableShare = (float) $seedRow['addressable_share'];
+        $addressableShare = IndustryMarkets::forRow($seedRow);
         $baselineRoe = $this->openingBaselineRoe($seedRow, $openingMacro);
 
         $stock = $this->buildOpeningStock($seedRow, $baselineRoe);

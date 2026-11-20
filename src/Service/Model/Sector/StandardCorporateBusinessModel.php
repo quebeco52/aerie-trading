@@ -6,6 +6,7 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\IndustryFixedCosts;
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\IndustryMoats;
 use App\Data\Company\IndustryTurnovers;
 use App\Data\Company\ManagementStyle;
@@ -50,11 +51,11 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     /** Decimal places the derived opening margin is rounded to, matching Stock::$operatingMargin (NUMERIC(6,4)). */
     public const OPENING_MARGIN_SCALE = 4;
     /** What an operating firm's seed row states when its books are built from its character (resolveOpeningBooks()). */
-    public const OPENING_CHARACTER_KEYS = ['revenue', 'addressable_share'];
+    public const OPENING_CHARACTER_KEYS = ['revenue'];
     /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
     public const OPENING_BOOK_KEYS = [
         'baseline_roic', 'operating_margin', 'total_equity', 'wholesale_debt', 'customer_deposits', 'corporate_treasury',
-        'retained_earnings', 'sam_ratio',
+        'retained_earnings', 'sam_ratio', 'addressable_share',
     ];
 
     // --- Pricing Power & Macro Physics ---
@@ -91,11 +92,11 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     /**
      * An operating firm's opening books from its character: the revenue it earns at its industry's capital intensity
      * (IndustryTurnovers), its moat (IndustryMoats) over what its business must earn (CAPM on its asset beta at the
-     * base premium), the operating margin implied by both, and the share of its addressable market its capital spans.
-     * Its invested capital is what earns that revenue at that return; its manager's leverage target, capped where its
-     * net debt reaches its manager's share of the covenant, splits it into debt and equity; it holds the cash its
-     * treasury targets, and half its equity, or the share its row states, is retained earnings. A row that states its
-     * books (no revenue key) is handed back as it is.
+     * base premium), the operating margin implied by both, and the share of its industry's market (IndustryMarkets) its
+     * capital spans. Its invested capital is what earns that revenue at that return; its manager's leverage target,
+     * capped where its net debt reaches its manager's share of the covenant, splits it into debt and equity; it holds
+     * the cash its treasury targets, and half its equity, or the share its row states, is retained earnings. A row
+     * that states its books (no revenue key) is handed back as it is.
      */
     public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
     {
@@ -108,7 +109,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         $ticker = (string) $seedRow['ticker'];
         $industry = $seedRow['industry'] ?? null;
         $revenue = (float) $seedRow['revenue'];
-        $addressableShare = (float) $seedRow['addressable_share'];
+        $addressableShare = IndustryMarkets::forRow($seedRow);
         $taxRate = $this->getEffectiveTaxRate($openingMacro->corporateTaxRate);
         $baselineRoic = $this->openingReturn($seedRow, $openingMacro);
         $margin = $this->openingMargin($seedRow, $baselineRoic, $taxRate);
@@ -213,10 +214,10 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     {
         SeedRows::assertCharacter($seedRow, static::OPENING_CHARACTER_KEYS, static::OPENING_BOOK_KEYS, [
             'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
-            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
             'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
         ]);
         IndustryTurnovers::assertRow($seedRow);
+        IndustryMarkets::assertRow($seedRow);
     }
 
     /**

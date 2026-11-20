@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\DTO\SectorPhysicsResult;
@@ -109,11 +110,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
     /**
      * What a broker or dealer's seed row states when its books are built from its character (resolveOpeningBooks()).
      */
-    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin'];
     /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
     public const OPENING_BOOK_KEYS = [
         'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
-        'sam_ratio',
+        'sam_ratio', 'addressable_share',
     ];
 
     // --- Clearinghouse Liquidity Rules ---
@@ -130,11 +131,11 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
 
     /**
      * A broker or investment bank's opening books from its character: the fee and trading revenue it earns at its
-     * margin, its moat over its cost of equity and the share of its addressable market its equity fills. Equity is set
-     * by its TargetCapitalRatio (or, with none, its manager's leverage target), the rest of the balance sheet is funded
-     * wholesale with no deposits, cash holds the clearing backing its treasury targets, and the whole is scaled until
-     * its struck operating yield earns the stated revenue. A row that states its books (no revenue key) is handed back
-     * as it is.
+     * margin, its moat over its cost of equity and the share of its industry's market (IndustryMarkets) its equity
+     * fills. Equity is set by its TargetCapitalRatio (or, with none, its manager's leverage target), the rest of the
+     * balance sheet is funded wholesale with no deposits, cash holds the clearing backing its treasury targets, and the
+     * whole is scaled until its struck operating yield earns the stated revenue. A row that states its books (no
+     * revenue key) is handed back as it is.
      */
     public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
     {
@@ -145,14 +146,14 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
             'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
             'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
-            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
             'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
         ]);
+        IndustryMarkets::assertRow($seedRow);
 
         $ticker = (string) $seedRow['ticker'];
         $revenue = (float) $seedRow['revenue'];
         $margin = (float) $seedRow['operating_margin'];
-        $addressableShare = (float) $seedRow['addressable_share'];
+        $addressableShare = IndustryMarkets::forRow($seedRow);
         $baselineRoe = $this->openingBaselineRoe($seedRow, $openingMacro);
 
         $stock = $this->buildOpeningStock($seedRow, $baselineRoe)

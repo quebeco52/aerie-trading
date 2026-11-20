@@ -29,11 +29,11 @@ final class SeedRows
     /** Shares every firm lists with (1bn): price levels differ by size, the share count does not. */
     public const SHARES_OUTSTANDING = 1_000_000_000;
     /**
-     * Derived opening fields a seed row must never state; computed at opening from rating and LGD.
+     * Derived opening fields a seed row must never state; computed at opening rather than seeded.
      *
      * @var list<string>
      */
-    public const DERIVED_KEYS = ['credit_spread'];
+    public const DERIVED_KEYS = ['credit_spread', 'addressable_share'];
 
     /**
      * Retired seed keys a row must never state; standing and visibility are read from live size instead.

@@ -6,6 +6,7 @@ namespace App\Tests\Data\Company;
 
 use App\Data\Company\CapitalIntensity;
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\IndustryMoats;
 use App\Data\Company\IndustryTurnovers;
 use App\Data\Company\InitialMarket;
@@ -147,9 +148,10 @@ class OperatingOpeningBooksTest extends TestCase
             : Valuation::calculateCAPM($opening->equityRiskFreeRate, IndustryBetas::seedBetaFor($row), MacroConstants::BASE_EQUITY_RISK_PREMIUM)
                 + IndustryMoats::forRow($row)->spread();
 
+        $expectedShare = (float) $row['revenue'] / (MacroConstants::DISTRICT_GDP_USD * IndustryMarkets::BY_INDUSTRY[$row['industry']]);
         $this->assertEqualsWithDelta($expectedReturn, (float) $stock->getBaselineRoic(), 1e-4, $row['ticker']);
         $this->assertEqualsWithDelta(
-            $row['addressable_share'],
+            $expectedShare,
             CorporateMetrics::getInstance()->calculateScaleRatio($stock->getInvestedCapital(), 1.0, (float) $stock->getSamRatio()),
             1e-6,
             $row['ticker'],
@@ -220,18 +222,20 @@ class OperatingOpeningBooksTest extends TestCase
         }
         self::assertNotNull($grip);
         self::assertNotNull($shor);
-        $missing = $grip;
-        unset($missing['addressable_share']);
+        $missingReitMargin = $shor;
+        unset($missingReitMargin['operating_margin']);
 
         return [
             'a book beside the character' => [['total_equity' => 3.5e10] + $grip],
             'operating margin stated on an in-scope row' => [['operating_margin' => 0.14] + $grip],
+            'addressable_share stated on an operating row' => [['addressable_share' => 0.30] + $grip],
             'capital intensity off the ladder' => [['capital_intensity' => 'ultralight'] + $grip],
             'industry without a turnover entry' => [['industry' => 'General'] + $grip],
-            'an input missing' => [$missing],
+            'REIT missing operating_margin' => [$missingReitMargin],
             'no margin to earn on a REIT' => [['operating_margin' => 0.0] + $shor],
             'retained earnings past its equity' => [['retained_share' => 1.5] + $grip],
             'no revenue' => [['revenue' => 0.0] + $grip],
+            'revenue past its industry market' => [['revenue' => MacroConstants::DISTRICT_GDP_USD * IndustryMarkets::BY_INDUSTRY[$grip['industry']] * 1.1] + $grip],
             'a moat off the ladder' => [['moat' => 'impregnable'] + $grip],
         ];
     }

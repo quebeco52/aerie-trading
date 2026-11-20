@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Model\Sector;
 
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\IndustryMoats;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
@@ -452,22 +453,22 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     /** Most passes of the opening solve; the books are near scale-free, so two or three suffice. */
     public const MAX_OPENING_BOOK_PASSES = 8;
     /** What a lender's seed row states when its books are built from its character (resolveOpeningBooks()). */
-    public const OPENING_CHARACTER_KEYS = ['revenue', 'wholesale_funding_share', 'addressable_share', 'retained_share'];
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'wholesale_funding_share', 'retained_share'];
     /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
     public const OPENING_BOOK_KEYS = [
         'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
-        'sam_ratio', 'operating_margin',
+        'sam_ratio', 'operating_margin', 'addressable_share',
     ];
 
     /**
      * A lender's opening books from its character: the revenue it earns, the share of its funding that is wholesale,
-     * its moat (IndustryMoats) over the cost of equity, the share of its addressable market its equity fills and the
-     * share of it that is retained earnings. Its equity is the capital ratio it steers to (its TargetCapitalRatio), or,
-     * with none, the leverage its manager recapitalises toward (openingEquity()). The balance sheet is built on those
-     * ratios, holding the cash its treasury targets; its pricing is struck on it as the model strikes it, and the whole
-     * is scaled until it earns the stated revenue. Its operating margin is the one its cost base and through-the-cycle
-     * losses leave on that revenue (openingOperatingMargin()). A row that states its books (no revenue key) is handed
-     * back as it is.
+     * its moat (IndustryMoats) over the cost of equity, the share of its industry's market (IndustryMarkets) its equity
+     * fills and the share of it that is retained earnings. Its equity is the capital ratio it steers to (its
+     * TargetCapitalRatio), or, with none, the leverage its manager recapitalises toward (openingEquity()). The balance
+     * sheet is built on those ratios, holding the cash its treasury targets; its pricing is struck on it as the model
+     * strikes it, and the whole is scaled until it earns the stated revenue. Its operating margin is the one its cost
+     * base and through-the-cycle losses leave on that revenue (openingOperatingMargin()). A row that states its books
+     * (no revenue key) is handed back as it is.
      */
     public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
     {
@@ -480,7 +481,7 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
 
         $revenue = (float) $seedRow['revenue'];
         $wholesaleShare = $this->openingWholesaleShare($seedRow);
-        $addressableShare = (float) $seedRow['addressable_share'];
+        $addressableShare = IndustryMarkets::forRow($seedRow);
         $books = [
             'baseline_roe' => $this->openingCostOfEquity($seedRow, $openingMacro) + IndustryMoats::forRow($seedRow)->spread(),
         ];
@@ -589,12 +590,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         $inRange = array_intersect_key([
             'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
             'wholesale_funding_share' => (float) ($seedRow['wholesale_funding_share'] ?? -1.0) >= 0.0 && (float) ($seedRow['wholesale_funding_share'] ?? 1.0) < 1.0,
-            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
             'retained_share' => (float) ($seedRow['retained_share'] ?? -1.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 2.0) <= 1.0,
             'operating_margin' => $margin > 0.0 && $margin < 1.0,
         ], array_flip(static::OPENING_CHARACTER_KEYS));
 
         SeedRows::assertCharacter($seedRow, static::OPENING_CHARACTER_KEYS, static::OPENING_BOOK_KEYS, $inRange);
+        IndustryMarkets::assertRow($seedRow);
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Data\Company;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\IndustryMoats;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
@@ -129,7 +130,7 @@ class InsurerAndFeeOpeningBooksTest extends TestCase
             $this->assertEqualsWithDelta($expectedFloat, $deposits, $expectedFloat * 1e-6, $row['ticker']);
             $this->assertEqualsWithDelta($expectedDebt, $wholesale, max(1.0, $expectedDebt * 1e-6), $row['ticker']);
             $this->assertEqualsWithDelta($expectedCash, (float) $stock->getCorporateTreasury(), $expectedCash * 1e-6, $row['ticker']);
-            $expectedShare = (float) $row['addressable_share'];
+            $expectedShare = (float) $row['revenue'] / (MacroConstants::DISTRICT_GDP_USD * IndustryMarkets::BY_INDUSTRY[$row['industry']]);
         } elseif ($strategy instanceof ClearingHouseBusinessModel) {
             $capitalRatio = $strategy->getTargetCapitalRatio($stock);
             $this->assertNotNull($capitalRatio);
@@ -137,7 +138,7 @@ class InsurerAndFeeOpeningBooksTest extends TestCase
             $this->assertEqualsWithDelta($capitalRatio, $equity / ($equity + $deposits), 1e-9, $row['ticker']);
             $expectedCash = $manager->managedTargetCash($strategy, $operatingBase, $deposits, 0.0);
             $this->assertEqualsWithDelta($expectedCash, (float) $stock->getCorporateTreasury(), $expectedCash * 1e-6, $row['ticker']);
-            $expectedShare = (float) $row['addressable_share'];
+            $expectedShare = (float) $row['revenue'] / (MacroConstants::DISTRICT_GDP_USD * IndustryMarkets::BY_INDUSTRY[$row['industry']]);
         } elseif ($strategy instanceof BrokerageBusinessModel) {
             $capitalRatio = $strategy->getTargetCapitalRatio($stock);
             $this->assertNotNull($capitalRatio);
@@ -145,7 +146,7 @@ class InsurerAndFeeOpeningBooksTest extends TestCase
             $this->assertEqualsWithDelta($capitalRatio, $equity / ($equity + $wholesale), 1e-9, $row['ticker']);
             $expectedCash = $strategy->calculateTargetOperatingCash($operatingBase, 0.0, $wholesale);
             $this->assertEqualsWithDelta($expectedCash, (float) $stock->getCorporateTreasury(), $expectedCash * 1e-6, $row['ticker']);
-            $expectedShare = (float) $row['addressable_share'];
+            $expectedShare = (float) $row['revenue'] / (MacroConstants::DISTRICT_GDP_USD * IndustryMarkets::BY_INDUSTRY[$row['industry']]);
         } else {
             self::assertInstanceOf(AssetManagementBusinessModel::class, $strategy);
             $this->assertSame(0.0, $deposits, $row['ticker']);
@@ -200,19 +201,22 @@ class InsurerAndFeeOpeningBooksTest extends TestCase
         $crow = $byTicker['CROW'];
 
         $missingSafe = $safe;
-        unset($missingSafe['addressable_share']);
+        unset($missingSafe['operating_margin']);
         $missingKing = $king;
         unset($missingKing['operating_margin']);
 
         return [
             'insurer with hand-set equity' => [['total_equity' => 1.0e11] + $safe],
-            'insurer missing addressable_share' => [$missingSafe],
+            'insurer missing operating_margin' => [$missingSafe],
+            'insurer stating addressable_share' => [['addressable_share' => 0.30] + $safe],
             'insurer retained share above 1' => [['retained_share' => 1.2] + $safe],
             'broker with hand-set debt' => [['wholesale_debt' => 1.0e11] + $king],
             'broker missing operating_margin' => [$missingKing],
+            'broker stating addressable_share' => [['addressable_share' => 0.30] + $king],
             'broker zero revenue' => [['revenue' => 0.0] + $king],
             'clearinghouse with hand-set deposits' => [['customer_deposits' => 1.0e11] + $acc],
             'clearinghouse margin above 1' => [['operating_margin' => 1.0] + $acc],
+            'clearinghouse stating addressable_share' => [['addressable_share' => 0.30] + $acc],
             'asset manager with hand-set roe' => [['baseline_roe' => 0.20] + $crow],
             'asset manager stating addressable_share' => [['addressable_share' => 0.30] + $crow],
             'asset manager moat off the ladder' => [['moat' => 'unassailable'] + $crow],
