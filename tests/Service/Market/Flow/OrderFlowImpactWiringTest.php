@@ -155,6 +155,8 @@ class OrderFlowImpactWiringTest extends TestCase
             ->setJumpIntensity('2.0')
             ->setJumpVol('0.10');
 
+        $stock->setBusinessVolatility(sqrt(VarianceBudget::longTermIdiosyncraticVariance(0.28, 1.0)));
+        $stock->setBusinessVolatility(sqrt(VarianceBudget::longTermIdiosyncraticVariance(0.28, 1.0)));
         $stock->setTurnoverRatio(LiquidityEngine::structuralTurnoverRatio(0.28));
         $stock->setImpactVarianceEma(0.0);
 
@@ -533,6 +535,8 @@ class OrderFlowImpactWiringTest extends TestCase
     {
         $stock = $this->stock()->setTicker('BETA');
         $stock->setPrice('50.00')->setSharesOutstanding('200000000')->setPublicFloatPercentage('0.50');
+        $stock->setBusinessVolatility(sqrt(VarianceBudget::longTermIdiosyncraticVariance(0.28, 1.0)));
+        $stock->setBusinessVolatility(sqrt(VarianceBudget::longTermIdiosyncraticVariance(0.28, 1.0)));
         $stock->setTurnoverRatio(LiquidityEngine::structuralTurnoverRatio(0.28));
 
         return $stock;

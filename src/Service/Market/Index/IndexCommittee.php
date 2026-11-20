@@ -109,7 +109,9 @@ final class IndexCommittee
     public static function trailingVolatility(Stock $stock): float
     {
         $vol = $stock->getRealizedVolatility()
-            ?? (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
+            ?? ($stock->getCurrentVolatility() !== null
+                ? (float) $stock->getCurrentVolatility()
+                : ($stock->getLeveredVolatility() ?? (float) $stock->getVolatility()));
 
         return max(self::INDEX_MINIMUM_WEIGHT_VOLATILITY, $vol);
     }

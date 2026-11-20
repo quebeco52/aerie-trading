@@ -247,7 +247,7 @@ final class LiquidityEngine implements ResetInterface
      */
     public function activityMultiplier(Stock $stock): float
     {
-        $baseline = (float) $stock->getVolatility();
+        $baseline = $stock->getLeveredVolatility() ?? (float) $stock->getVolatility();
         $current = (float) ($stock->getCurrentVolatility() ?? $baseline);
 
         if ($baseline <= 0.0 || $current <= 0.0) {
@@ -267,7 +267,9 @@ final class LiquidityEngine implements ResetInterface
      */
     public function dailyVolatility(Stock $stock): float
     {
-        $annual = (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility());
+        $annual = $stock->getCurrentVolatility() !== null
+            ? (float) $stock->getCurrentVolatility()
+            : ($stock->getLeveredVolatility() ?? (float) $stock->getVolatility());
 
         return max(0.0, $annual) / sqrt(FinancialConstants::TRADING_DAYS_PER_YEAR);
     }

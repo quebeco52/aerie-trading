@@ -98,6 +98,9 @@ wins; tell the user so the line can be fixed. Status and open work do not belong
   0.08-0.31; equity for a financial) and `EventRisk` (own-jump arrivals 0.3-1.25/yr, jumps always carry 25% of own
   variance); a lore override moves one step. Opening equity vol and jump size are derived in the opening price loop,
   levered by the beta's Hamada multiplier. Damodaran's industry std devs are small-cap and were rejected as a source.
+  After the open the long-run vol is re-levered every tick (`leveredVolatility`); credit compares spot vol with it, so
+  leverage reaches credit once, through Merton's V/D. Revenue, margin and fundamental-jump noise stay on the opening
+  `volatility` on purpose: a firm's sales do not get noisier because it borrowed.
 - `credit_spread` is read (TreasuryEngine's junk baseline); the seed field is not dead.
 
 ## Macro and policy

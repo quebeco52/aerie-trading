@@ -403,7 +403,7 @@ class DebtEngine
         $spread = CreditRisk::calculateRecoveryAdjustedSpread($classSpread, $lossGivenDefault, self::CLASS_CURVE_LOSS_GIVEN_DEFAULT) * $issuerMultiple;
 
         if (!$throughTheCycle) {
-            $structuralVolatility = (float) $stock->getVolatility();
+            $structuralVolatility = $stock->getLeveredVolatility() ?? (float) $stock->getVolatility();
             $volatility = (float) $stock->getCurrentVolatility() ?: $structuralVolatility;
             $spread += max(0.0, ($volatility - max(self::VOLATILITY_PREMIUM_THRESHOLD, $structuralVolatility)) * self::VOLATILITY_PREMIUM_SENSITIVITY);
         }
@@ -509,12 +509,10 @@ class DebtEngine
      * Volatility of the firm's assets for the Merton model (sigma_V).
      *
      * An operating firm's asset volatility is the risk of its business, and borrowing does not change it:
-     * leverage raises the EQUITY's volatility instead, sigma_E = N(d1) sigma_V V / E. This simulation holds
-     * each name's equity volatility at its configured figure whatever the firm borrows, so de-levering that
-     * figure at the CURRENT capital structure, sigma_E E / V, made the assets look safer with every dollar of
-     * debt and the distance to default climbed again past D/V of about 0.7. sigma_V is therefore solved once,
-     * at the capital structure the equity volatility was configured at, and afterwards moves only with the
-     * equity volatility's own departure from that figure (an earnings shock, a volatile market).
+     * leverage raises the EQUITY's volatility instead, sigma_E = N(d1) sigma_V V / E. sigma_V is solved once,
+     * at the capital structure the opening equity volatility was struck on, and afterwards moves only with spot
+     * equity volatility's departure from the firm's current levered long-run volatility (an earnings shock, a
+     * volatile market) so leverage is counted once through V/D rather than a second time through sigma_V.
      *
      * A financial keeps the de-levered identity: the wholesale book it grows is matched against low-risk
      * assets, so its asset volatility does fall as that book grows.
@@ -531,8 +529,9 @@ class DebtEngine
 
         // Average mean-reverting equity volatility over the Merton horizon, reverting at the speed the price
         // process itself reverts the name's variance at, as the option desk's term structure does.
-        $spotVolatility = max(0.05, (float) ($stock->getCurrentVolatility() ?? $stock->getVolatility()));
-        $structuralVolatility = max(0.05, (float) ($stock->getVolatility() ?: $spotVolatility));
+        $structuralBase = $stock->getLeveredVolatility() ?? (float) $stock->getVolatility();
+        $spotVolatility = max(0.05, $stock->getCurrentVolatility() !== null ? (float) $stock->getCurrentVolatility() : $structuralBase);
+        $structuralVolatility = max(0.05, $structuralBase ?: $spotVolatility);
         $equityVolatility = max(0.05, StochasticProcesses::averageMeanRevertingVolatility(
             $spotVolatility,
             $structuralVolatility,

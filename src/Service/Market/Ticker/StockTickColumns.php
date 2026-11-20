@@ -10,15 +10,15 @@ use Doctrine\DBAL\Connection;
 /**
  * The columns of `stocks` that move on every tick, written as data rather than through the unit of work.
  *
- * Ten fields change on every name on every tick: the price, the instantaneous volatility, the impact variance, the
+ * Eleven fields change on every name on every tick: the price, the instantaneous volatility, the impact variance, the
  * realized variance, the momentum trend, the credit spread, the corporate flow backlog, the equity the fundamentals
- * support, the levered beta struck on it, and the incumbent CEO's tenure — that last because the succession hazard ages
- * every board on every tick. Because they always change, every stock would be a dirty entity at every flush and
- * Doctrine would send one UPDATE per stock inside the tick transaction.
+ * support, the levered beta and levered long-run volatility struck on it, and the incumbent CEO's tenure — that last
+ * because the succession hazard ages every board on every tick. Because they always change, every stock would be a
+ * dirty entity at every flush and Doctrine would send one UPDATE per stock inside the tick transaction.
  *
  * So these columns are mapped `updatable: false` on the entity (see Stock): the unit of work still tracks
  * them, the setters still keep the in-process entity current, but an UPDATE never carries them, and a stock
- * whose only changes are these ten is not written at all. Whatever flushes the working set must write them
+ * whose only changes are these eleven is not written at all. Whatever flushes the working set must write them
  * here first, in a few bulk statements, or the database keeps yesterday's price. The ticker does so on
  * every history tick, before its flush, and on every other tick a frame goes out, so a fill is never struck
  * at a price the screens have moved past; anything else that flushes stocks after ticking them must do the
@@ -38,6 +38,7 @@ final class StockTickColumns
         'corporate_flow_backlog',
         'fair_equity_value',
         'levered_beta',
+        'levered_volatility',
         'ceo_tenure_years',
     ];
 
@@ -85,6 +86,7 @@ final class StockTickColumns
                 $stock->getCorporateFlowBacklog(),
                 $stock->getFairEquityValue(),
                 $stock->getLeveredBeta(),
+                $stock->getLeveredVolatility(),
                 $stock->getCeoTenureYears(),
             ];
         }

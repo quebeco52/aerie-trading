@@ -160,16 +160,26 @@ final class OptionPricingEngine
      */
     public function surfaceFor(Stock $stock, float $timeToExpiry): array
     {
+        $leveredVolatility = $stock->getLeveredVolatility();
+        $longRunVolatility = $leveredVolatility ?? (float) $stock->getVolatility();
         $spotVolatility = $stock->getCurrentVolatility() !== null
             ? (float) $stock->getCurrentVolatility()
-            : (float) $stock->getVolatility();
+            : $longRunVolatility;
+        $beta = $stock->getLeveredBeta() ?? (float) $stock->getBeta();
+        $lambda = (float) $stock->getJumpIntensity();
+        $jumpVol = $leveredVolatility !== null
+            ? VarianceBudget::jumpScaleForVarianceShare(
+                sqrt(VarianceBudget::longTermIdiosyncraticVariance($longRunVolatility, $beta)),
+                $lambda,
+            )
+            : (float) $stock->getJumpVol();
 
         return $this->surface(
             $spotVolatility,
-            (float) $stock->getVolatility(),
-            $stock->getLeveredBeta() ?? (float) $stock->getBeta(),
-            (float) $stock->getJumpIntensity(),
-            (float) $stock->getJumpVol(),
+            $longRunVolatility,
+            $beta,
+            $lambda,
+            $jumpVol,
             $timeToExpiry,
         );
     }

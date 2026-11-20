@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Market\Pricing;
 
+use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryRisks;
+use App\Data\Company\InitialMarket;
+use App\Data\Company\Sectors;
 use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\Valuation;
@@ -81,5 +85,57 @@ final class VarianceBudgetTest extends TestCase
             $assetBeta * $cashBlended,
             1e-12,
         );
+    }
+
+    /**
+     * Across the full D/E range [0, MAX_BETA_DEBT_TO_EQUITY], levering both beta and business risk by L keeps
+     * longTermIdiosyncraticVariance strictly above the 20% floor for every firm with BusinessRisk >= Low (and every
+     * board firm), and calibratedJumpParameters() never rescales the jump scale returned by leveredRiskProfile().
+     */
+    public function testLeveredRiskProfileNeverHitsTheIdiosyncraticFloorOrRescalesJumpsAcrossLeverageRange(): void
+    {
+        $taxRate = 0.25;
+
+        foreach (InitialMarket::STOCKS as $row) {
+            $industry = (string) ($row['industry'] ?? 'General');
+            $risk = IndustryRisks::forRow($row);
+            $businessVol = $risk['business']->vol();
+            $lambda = $risk['events']->intensity();
+            $assetBeta = IndustryBetas::seedBetaFor($row);
+            $isFinancial = Sectors::strategyFor($industry)->isFinancial();
+
+            foreach ([0.0, 0.25, 0.50, 1.0, 1.5, 2.0, 2.5] as $debtToEquity) {
+                $leverage = $isFinancial ? 1.0 : Valuation::hamadaMultiplier($taxRate, $debtToEquity);
+                $leveredBeta = $assetBeta * $leverage;
+
+                $profile = VarianceBudget::leveredRiskProfile($leveredBeta, $leverage, $businessVol, $lambda);
+                $sigmaLR = $profile['volatility'];
+                $jumpScale = $profile['jump_scale'];
+
+                $sysVar = (($leveredBeta * MacroConstants::MACRO_VOL_BASE_ANCHOR) ** 2)
+                    + VarianceBudget::systemicJumpMoments($leveredBeta)['variance'];
+                $rawIdioVar = ($sigmaLR * $sigmaLR) - $sysVar;
+                $floorVar = 0.20 * ($sigmaLR * $sigmaLR);
+
+                $this->assertGreaterThan(
+                    $floorVar,
+                    $rawIdioVar,
+                    sprintf('%s hit 20%% floor at D/E=%.2f', $row['ticker'], $debtToEquity),
+                );
+                $this->assertEqualsWithDelta(
+                    $rawIdioVar,
+                    VarianceBudget::longTermIdiosyncraticVariance($sigmaLR, $leveredBeta),
+                    1e-12,
+                );
+
+                $calibrated = VarianceBudget::calibratedJumpParameters($sigmaLR, $leveredBeta, $lambda, $jumpScale);
+                $this->assertEqualsWithDelta(
+                    $jumpScale,
+                    $calibrated['scale'],
+                    1e-12,
+                    sprintf('%s jump scale rescaled at D/E=%.2f', $row['ticker'], $debtToEquity),
+                );
+            }
+        }
     }
 }

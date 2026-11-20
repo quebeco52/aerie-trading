@@ -300,6 +300,7 @@ class OpeningBoardBuilder
         $previousPrice = (float) $stock->getPrice();
         $previousVol = (float) $stock->getVolatility();
         $lambda = $eventRisk->intensity();
+        $stock->setBusinessVolatility($businessRisk->vol());
         $stock->setJumpIntensity(Decimal::format($lambda, 2));
 
         for ($pass = 0; $pass < self::MAX_OPENING_PRICE_PASSES; $pass++) {
@@ -313,6 +314,7 @@ class OpeningBoardBuilder
             $storedVol = Decimal::format($equityVol, 4);
             $stock->setVolatility($storedVol);
             $stock->setCurrentVolatility($storedVol);
+            $stock->setLeveredVolatility((float) $storedVol);
 
             // Derive the jump scale on the stored volatility's idiosyncratic variance and floor to the 4-decimal
             // column scale so calibratedJumpParameters() never rescales an opening row on rounding noise.

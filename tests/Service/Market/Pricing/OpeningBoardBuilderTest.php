@@ -312,4 +312,94 @@ class OpeningBoardBuilderTest extends TestCase
             $this->assertEqualsWithDelta($vol ** 2, (float) $stock->getRealizedVarianceEma(), 1e-12, "{$ticker} realizedVarianceEma stale.");
         }
     }
+
+    /**
+     * Continuity at the open: every firm's dynamic long-run volatility and jump scale computed by
+     * MarketPricingContext::forStock() match its stored opening volatility and jump_vol within 1e-4, calibrated
+     * jump parameters never rescale, and clearing businessVolatility heals from IndustryRisks.
+     */
+    public function testDynamicLongRunRiskMatchesOpeningVolatilityAndJumpScaleForEveryFirm(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $board = $this->openBoard($openingMacro);
+        $rowsByTicker = [];
+        foreach (SeedRows::all() as $row) {
+            $rowsByTicker[$row['ticker']] = $row;
+        }
+
+        foreach ($board as $ticker => $stock) {
+            $expectedBizVol = IndustryRisks::businessForRow($rowsByTicker[$ticker])->vol();
+            $this->assertSame($expectedBizVol, $stock->getBusinessVolatility(), "{$ticker} missing opening businessVolatility.");
+
+            $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
+            $ctx = MarketPricingContext::forStock($stock, $openingMacro, $health, $this->ledger);
+
+            $this->assertEqualsWithDelta((float) $stock->getVolatility(), $ctx->longTermVolatility, 1e-4, "{$ticker} sigma_LR diverges from opening volatility.");
+            $this->assertSame((float) $stock->getVolatility(), $stock->getLeveredVolatility(), "{$ticker} opening leveredVolatility disagrees with opening volatility.");
+            // Stored jump_vol is floored to 4 dp on the 4-dp stored volatility, so unrounded sigma_LR's jump scale can
+            // sit up to ~1.5e-4 above it (max ~1.24e-4 on PLZA); the stored-volatility jump scale itself is within
+            // 1e-4.
+            $this->assertEqualsWithDelta((float) $stock->getJumpVol(), $ctx->jumpVol, 1.5e-4, "{$ticker} derived jump scale diverges from opening jump_vol.");
+            $storedVolJumpScale = VarianceBudget::jumpScaleForVarianceShare(
+                sqrt(VarianceBudget::longTermIdiosyncraticVariance((float) $stock->getVolatility(), $health->leveredBeta)),
+                $ctx->lambda,
+            );
+            $this->assertEqualsWithDelta((float) $stock->getJumpVol(), $storedVolJumpScale, 1e-4, "{$ticker} stored jump_vol diverges from 4-dp floor of stored-vol jump scale.");
+
+            $calibrated = VarianceBudget::calibratedJumpParameters($ctx->longTermVolatility, $ctx->beta, $ctx->lambda, $ctx->jumpVol);
+            $this->assertEqualsWithDelta($ctx->jumpVol, $calibrated['scale'], 1e-12, "{$ticker} derived jump scale was rescaled.");
+
+            $stock->setBusinessVolatility(null);
+            $this->assertSame($expectedBizVol, IndustryRisks::resolveBusinessVolatility($stock), "{$ticker} failed to heal null businessVolatility.");
+        }
+    }
+
+    /**
+     * Direction: raising an operating firm's D/E raises sigma_LR without shrinking its idiosyncratic variance share;
+     * zeroing net debt drops sigma_LR to the unlevered value. A financial's sigma_LR does not move with D/E.
+     */
+    public function testReleveringRaisesLongRunVolatilityAndPreservesIdiosyncraticShare(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $board = $this->openBoard($openingMacro);
+
+        $firm = $board['FALC'];
+        $openHealth = $this->debtEngine->analyzeDebtHealth($firm, $openingMacro);
+        $openCtx = MarketPricingContext::forStock($firm, $openingMacro, $openHealth, $this->ledger);
+        $openIdioShare = VarianceBudget::longTermIdiosyncraticVariance($openCtx->longTermVolatility, $openCtx->beta)
+            / ($openCtx->longTermVolatility ** 2);
+
+        // Double net debt (raising D/E well above opening): sigma_LR rises and idiosyncratic share does not fall.
+        $openDebt = (float) $firm->getWholesaleDebt();
+        $firm->setWholesaleDebt((string) ($openDebt * 2.0));
+        $highHealth = $this->debtEngine->analyzeDebtHealth($firm, $openingMacro);
+        $highCtx = MarketPricingContext::forStock($firm, $openingMacro, $highHealth, $this->ledger);
+        $highIdioShare = VarianceBudget::longTermIdiosyncraticVariance($highCtx->longTermVolatility, $highCtx->beta)
+            / ($highCtx->longTermVolatility ** 2);
+
+        $this->assertGreaterThan($openHealth->equityLeverageMultiplier, $highHealth->equityLeverageMultiplier);
+        $this->assertGreaterThan($openCtx->longTermVolatility, $highCtx->longTermVolatility);
+        $this->assertGreaterThanOrEqual($openIdioShare - 1e-9, $highIdioShare);
+
+        // Zero net debt (D/E = 0, no excess net cash): sigma_LR falls to the unlevered value (L = 1).
+        $firm->setWholesaleDebt((string) $firm->getCorporateTreasury());
+        $unleveredHealth = $this->debtEngine->analyzeDebtHealth($firm, $openingMacro);
+        $unleveredCtx = MarketPricingContext::forStock($firm, $openingMacro, $unleveredHealth, $this->ledger);
+        $expectedUnlevered = VarianceBudget::equityVolatilityFromBusinessRisk(
+            (float) $firm->getBeta(),
+            1.0,
+            IndustryRisks::resolveBusinessVolatility($firm),
+        );
+
+        $this->assertLessThan($openCtx->longTermVolatility, $unleveredCtx->longTermVolatility);
+        $this->assertEqualsWithDelta($expectedUnlevered, $unleveredCtx->longTermVolatility, 1e-6);
+
+        // Financial firm: doubling wholesale debt leaves L = 1 and sigma_LR unchanged.
+        $bank = $board['LAKE'];
+        $bankOpenCtx = MarketPricingContext::forStock($bank, $openingMacro, $this->debtEngine->analyzeDebtHealth($bank, $openingMacro), $this->ledger);
+        $bank->setWholesaleDebt((string) ((float) $bank->getWholesaleDebt() * 2.0));
+        $bankHighCtx = MarketPricingContext::forStock($bank, $openingMacro, $this->debtEngine->analyzeDebtHealth($bank, $openingMacro), $this->ledger);
+
+        $this->assertEqualsWithDelta($bankOpenCtx->longTermVolatility, $bankHighCtx->longTermVolatility, 1e-12);
+    }
 }

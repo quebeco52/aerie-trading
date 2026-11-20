@@ -103,7 +103,7 @@ class NewsFeedBuilder
         $card = $this->presenter->present($row);
 
         [$scope, $ticker, $name, $volatility] = match (true) {
-            $row instanceof StockEvent => [NewsDesk::SCOPE_COMPANY, $row->getStock()->getTicker(), $row->getStock()->getName(), (float) $row->getStock()->getVolatility()],
+            $row instanceof StockEvent => [NewsDesk::SCOPE_COMPANY, $row->getStock()->getTicker(), $row->getStock()->getName(), $row->getStock()->getLeveredVolatility() ?? (float) $row->getStock()->getVolatility()],
             $row instanceof EtfEvent => [NewsDesk::SCOPE_FUND, $row->getEtf()->getTicker(), $row->getEtf()->getName(), null],
             default => [NewsDesk::SCOPE_DISTRICT, null, null, null],
         };

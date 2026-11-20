@@ -601,6 +601,21 @@ class Stock
     private ?float $leveredBeta = null;
 
     /**
+     * @var float|null Annual idiosyncratic volatility of the operating business (equity for a financial), from the
+     *                 firm's BusinessRisk step at the open. Null heals from IndustryRisks::resolveBusinessVolatility().
+     */
+    #[ORM\Column(type: 'float', nullable: true)]
+    private ?float $businessVolatility = null;
+
+    /**
+     * @var float|null Long-run equity volatility the price process settles toward at the last tick: business risk and
+     *                 systematic loading levered by this tick's capital structure. Null until the first tick (falls
+     *                 back to the opening volatility). A per-tick column.
+     */
+    #[ORM\Column(type: 'float', nullable: true, updatable: false)]
+    private ?float $leveredVolatility = null;
+
+    /**
      * @var float|null Annual share turnover as a fraction of the public float: a structural property of the
      *                 name, not a draw. Sets how much volume the market carries and therefore how much size
      *                 costs. Null falls back to the baseline.
@@ -1810,6 +1825,28 @@ class Stock
     public function getLeveredBeta(): ?float
     {
         return $this->leveredBeta;
+    }
+
+    public function setBusinessVolatility(?float $businessVolatility): static
+    {
+        $this->businessVolatility = $businessVolatility;
+        return $this;
+    }
+
+    public function getBusinessVolatility(): ?float
+    {
+        return $this->businessVolatility;
+    }
+
+    public function setLeveredVolatility(?float $leveredVolatility): static
+    {
+        $this->leveredVolatility = $leveredVolatility;
+        return $this;
+    }
+
+    public function getLeveredVolatility(): ?float
+    {
+        return $this->leveredVolatility;
     }
 
     public function setTurnoverRatio(?float $turnoverRatio): static

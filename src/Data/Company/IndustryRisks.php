@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Data\Company;
 
+use App\Entity\Stock;
+
 /**
  * Industry business-risk and event-risk steps, the anchors every listed firm's opening volatility and jump process are
  * built on. Each board industry sits at the step nearest (in log) the median of its firms' implied business
@@ -177,6 +179,11 @@ final class IndustryRisks
     }
 
     /**
+     * @var array<string, array<string, mixed>>|null Seed rows indexed by ticker for healing null businessVolatility.
+     */
+    private static ?array $seedRowsByTicker = null;
+
+    /**
      * Both risk steps for a seed row.
      *
      * @param array<string, mixed> $row A row of InitialMarket::STOCKS.
@@ -188,6 +195,30 @@ final class IndustryRisks
             'business' => self::businessForRow($row),
             'events' => self::eventsForRow($row),
         ];
+    }
+
+    /**
+     * The operating business-risk step volatility a stock carries: its stored column when set, else healed from its
+     * seed row in InitialMarket::STOCKS, else its industry default, so a live database works before a reseed.
+     */
+    public static function resolveBusinessVolatility(Stock $stock): float
+    {
+        $stored = $stock->getBusinessVolatility();
+        if ($stored !== null) {
+            return $stored;
+        }
+
+        if (self::$seedRowsByTicker === null) {
+            $byTicker = [];
+            foreach (InitialMarket::STOCKS as $row) {
+                $byTicker[(string) $row['ticker']] = $row;
+            }
+            self::$seedRowsByTicker = $byTicker;
+        }
+
+        $row = self::$seedRowsByTicker[$stock->getTicker()] ?? null;
+
+        return ($row !== null ? self::businessForRow($row) : self::forIndustry($stock->getIndustry())['business'])->vol();
     }
 
     /**

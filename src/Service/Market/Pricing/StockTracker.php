@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Pricing;
 
+use App\Data\Company\IndustryRisks;
 use App\Data\Company\StrategicHoldings;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
@@ -309,8 +310,14 @@ class StockTracker
     {
         $stock = $tick->stock;
         $tick->health = $this->debtEngine->analyzeDebtHealth($stock, $board->macro);
-        // The beta this tick trades the name on, kept for the option desk to quote the same exposure.
+        // The beta and long-run volatility this tick trades the name on, kept for the option, liquidity, credit and
+        // news desks to quote the same exposure and normal risk.
         $stock->setLeveredBeta($tick->health->leveredBeta);
+        $stock->setLeveredVolatility(VarianceBudget::equityVolatilityFromBusinessRisk(
+            $tick->health->leveredBeta,
+            $tick->health->equityLeverageMultiplier,
+            IndustryRisks::resolveBusinessVolatility($stock),
+        ));
 
         // What this firm's credit costs, published for the bond desk to discount its listed issues at.
         // Computed here rather than there so there is one authority on it: the same figure the firm

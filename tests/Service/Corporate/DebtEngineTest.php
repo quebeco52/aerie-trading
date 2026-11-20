@@ -1551,6 +1551,51 @@ class DebtEngineTest extends TestCase
     }
 
     /**
+     * Credit counts leverage once: when spot volatility equals the firm's current levered long-run volatility at any
+     * leverage level, resolveAssetVolatility() returns the calibrated opening asset volatility unchanged and the
+     * issuer spread carries zero volatility premium. Only spot shocks above leveredVolatility widen credit.
+     */
+    public function testCreditCountsLeverageOnceWhenSpotMatchesLeveredVolatility(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = $this->neutralMacro();
+        $stock = $this->leveredFirm('ONCE', '1.00', '0.01');
+        $stock->setVolatility('0.20');
+        $stock->setCurrentVolatility('0.20');
+        $stock->setLeveredVolatility(0.20);
+
+        $calibrated = $engine->calibrateAssetVolatility($stock, $macro->policyRateEma);
+        $this->assertNotNull($calibrated);
+
+        $baselineSpread = $engine->resolveCreditSpread($stock, $macro);
+
+        foreach ([0.35, 0.50, 0.65] as $leveredVol) {
+            $debt = 500_000_000.0 * ($leveredVol / 0.20);
+            $stock->setLeveredVolatility($leveredVol);
+            $stock->setCurrentVolatility(sprintf('%.4f', $leveredVol));
+
+            $this->assertEqualsWithDelta(
+                $calibrated,
+                $engine->resolveAssetVolatility($stock, 1_000_000_000.0, $debt, $macro->policyRateEma),
+                1e-9,
+                "Asset vol must stay calibrated when spot == leveredVolatility ({$leveredVol}).",
+            );
+            $this->assertEqualsWithDelta(
+                $baselineSpread,
+                $engine->resolveCreditSpread($stock, $macro),
+                1e-12,
+                "Spread vol premium must be zero when spot == leveredVolatility ({$leveredVol}).",
+            );
+        }
+
+        // A genuine spot shock above leveredVolatility raises both asset vol and spread.
+        $stock->setLeveredVolatility(0.40);
+        $stock->setCurrentVolatility('0.60');
+        $this->assertGreaterThan($calibrated, $engine->resolveAssetVolatility($stock, 1_000_000_000.0, 1_000_000_000.0, $macro->policyRateEma));
+        $this->assertGreaterThan($baselineSpread, $engine->resolveCreditSpread($stock, $macro));
+    }
+
+    /**
      * A weighted average cannot exceed the dearer of its legs. A flat distress add-on of up to 15 points
      * made it do exactly that (a 22% WACC on a firm whose equity and debt both cost less); distress now
      * reaches the hurdle only through the yield the firm would pay to borrow and its levered beta.

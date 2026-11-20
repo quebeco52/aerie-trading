@@ -60,6 +60,24 @@ class MarketEventPublisherTest extends TestCase
         $this->assertSame('$1.42', $result['presented']['eps'], 'The live card is built from the same facts the row keeps.');
     }
 
+    public function testHeadlineMaterialityReadsLeveredVolatilityOverOpeningVolatility(): void
+    {
+        $stock = new Stock();
+        $stock->setTicker('LEVR');
+        $stock->setVolatility('0.15');
+
+        $this->emMock->expects($this->exactly(2))->method('persist');
+
+        // A 3.5% earnings move is > 3 daily sigmas at 15% annual vol, so it makes a headline.
+        $atOpeningVol = $this->publisher->publish($stock, 'EARNINGS', 'Quarterly earnings.', 3.5);
+        $this->assertTrue($atOpeningVol['headline']);
+
+        // At 45% levered vol the same 3.5% move is ~1.2 daily sigmas, no longer unusual for the firm.
+        $stock->setLeveredVolatility(0.45);
+        $atLeveredVol = $this->publisher->publish($stock, 'EARNINGS', 'Quarterly earnings.', 3.5);
+        $this->assertFalse($atLeveredVol['headline']);
+    }
+
     public function testPublishEtfEventPersists(): void
     {
         $etf = new Etf();

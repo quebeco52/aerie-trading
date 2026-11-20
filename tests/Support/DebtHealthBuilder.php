@@ -34,6 +34,7 @@ final class DebtHealthBuilder
     private float $debtToEquity = 0.0;
     private float $leverageTarget = 0.0;
     private bool $hasMarketAccess = true;
+    private float $equityLeverageMultiplier = 1.0;
 
     public static function healthy(): self
     {
@@ -65,6 +66,7 @@ final class DebtHealthBuilder
         $builder->debtToEquity = $health->debtToEquity;
         $builder->leverageTarget = $health->leverageTarget;
         $builder->hasMarketAccess = $health->hasMarketAccess;
+        $builder->equityLeverageMultiplier = $health->equityLeverageMultiplier;
 
         return $builder;
     }
@@ -147,6 +149,13 @@ final class DebtHealthBuilder
         return $this;
     }
 
+    public function withEquityLeverageMultiplier(float $equityLeverageMultiplier): self
+    {
+        $this->equityLeverageMultiplier = $equityLeverageMultiplier;
+
+        return $this;
+    }
+
     public function withMetrics(DebtMetricsDTO $rawMetrics): self
     {
         $this->rawMetrics = $rawMetrics;
@@ -220,6 +229,7 @@ final class DebtHealthBuilder
             debtToEquity: $this->debtToEquity,
             leverageTarget: $this->leverageTarget,
             hasMarketAccess: $this->hasMarketAccess,
+            equityLeverageMultiplier: $this->equityLeverageMultiplier,
         );
     }
 }

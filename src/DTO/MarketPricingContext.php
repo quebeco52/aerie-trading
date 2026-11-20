@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 namespace App\DTO;
 
+use App\Data\Company\IndustryRisks;
 use App\Data\Company\Sectors;
 use App\Entity\Stock;
 use App\Service\Corporate\Earnings\CapitalBudgetEngine;
 use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\EarningsEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Model\BusinessModelInterface;
 
 /**
@@ -30,7 +32,7 @@ class MarketPricingContext
         public float $marketJumpMultiplier = 1.0,
         public float $marketVol = 0.15,
         public float $reversionSpeed = \App\Service\Market\Pricing\MarketEngine::FAIR_VALUE_PULL_SPEED,
-        public float $kappa = \App\Service\Market\Pricing\VarianceBudget::BASE_VARIANCE_REVERSION_SPEED,
+        public float $kappa = VarianceBudget::BASE_VARIANCE_REVERSION_SPEED,
         public float $volOfVol = 0.3,
         public ?MacroStateDTO $macroState = null,
         public float $bookValuePerShare = 0.0,
@@ -150,7 +152,14 @@ class MarketPricingContext
     ): self {
         $strategy = Sectors::strategyFor($stock->getIndustry());
         $shares = max(1.0, (float) $stock->getSharesOutstanding());
-        $baselineVolatility = (float) $stock->getVolatility();
+        $lambda = (float) $stock->getJumpIntensity();
+        $risk = VarianceBudget::leveredRiskProfile(
+            $health->leveredBeta,
+            $health->equityLeverageMultiplier,
+            IndustryRisks::resolveBusinessVolatility($stock),
+            $lambda,
+        );
+        $longTermVolatility = $risk['volatility'];
         $treasury = (float) $stock->getCorporateTreasury();
         $excessCash = \App\Service\Corporate\CorporateMetrics::excessOperatingCash($stock);
         // A sphere's filed book moves once a quarter; the listed portfolio inside it moves every tick, and fair value
@@ -163,11 +172,11 @@ class MarketPricingContext
 
         return new self(
             currentPrice: (float) $stock->getPrice(),
-            currentVolatility: (float) ($stock->getCurrentVolatility() ?? $baselineVolatility),
-            longTermVolatility: $baselineVolatility,
+            currentVolatility: (float) ($stock->getCurrentVolatility() ?? $longTermVolatility),
+            longTermVolatility: $longTermVolatility,
             dt: $dt,
-            lambda: (float) $stock->getJumpIntensity(),
-            jumpVol: (float) $stock->getJumpVol(),
+            lambda: $lambda,
+            jumpVol: $risk['jump_scale'],
             // DebtEngine levers the firm's own signed beta through Hamada, so an inverse hedge stays inverse.
             beta: $health->leveredBeta,
             marketZ: $macroState->marketZ,

@@ -32,9 +32,12 @@ final class StockTrackerFactorWiringTest extends TestCase
 {
     use StockTrackerFactory;
 
-    private function debtHealth(float $leveredBeta): DebtHealthDTO
+    private function debtHealth(float $leveredBeta, float $equityLeverageMultiplier = 1.0): DebtHealthDTO
     {
-        return DebtHealthBuilder::healthy()->withLeveredBeta($leveredBeta)->build();
+        return DebtHealthBuilder::healthy()
+            ->withLeveredBeta($leveredBeta)
+            ->withEquityLeverageMultiplier($equityLeverageMultiplier)
+            ->build();
     }
 
     /**
@@ -49,6 +52,7 @@ final class StockTrackerFactorWiringTest extends TestCase
         ?\App\Service\Market\Agent\AgentStrategyInterface $agentStrategy = null,
         ?\Closure $earningsReport = null,
         ?AcquisitionEngine $acquisitionEngine = null,
+        float $equityLeverageMultiplier = 1.0,
     ): StockTracker {
         $marketEngine = $this->createStub(MarketEngine::class);
         $marketEngine->method('calculateNextPrice')->willReturnCallback(
@@ -77,7 +81,7 @@ final class StockTrackerFactorWiringTest extends TestCase
         );
 
         $debtEngine = $this->createStub(DebtEngine::class);
-        $debtEngine->method('analyzeDebtHealth')->willReturn($this->debtHealth($leveredBeta));
+        $debtEngine->method('analyzeDebtHealth')->willReturn($this->debtHealth($leveredBeta, $equityLeverageMultiplier));
 
         $earnings = $this->createStub(EarningsEngine::class);
         if ($earningsReport === null) {
@@ -351,5 +355,78 @@ final class StockTrackerFactorWiringTest extends TestCase
         $this->assertNotNull($seen, 'the agents were shown the tick');
         $this->assertEqualsWithDelta($liquidity->structuralDailyVolume($stock), $seen->averageDailyVolume, 1e-6);
         $this->assertLessThan($stressedDepth, $seen->averageDailyVolume);
+    }
+
+    /**
+     * Persistence round-trip: assessCredit() writes leveredVolatility onto the stock, StockTickColumns exports it in
+     * the bulk update row, and OptionPricingEngine::surfaceFor() reads that levered long-run volatility and matching
+     * jump scale back from a reloaded entity.
+     */
+    public function testAssessCreditPersistsLeveredVolatilityThroughTickColumnsToOptionSurface(): void
+    {
+        $captured = null;
+        $leveredBeta = 1.80;
+        $leverageMultiplier = 1.80;
+        $businessVol = 0.22;
+        $lambda = 0.80;
+        $tracker = $this->buildTracker($leveredBeta, [100.0], $captured, equityLeverageMultiplier: $leverageMultiplier);
+
+        $stock = $this->stock();
+        (new \ReflectionProperty(Stock::class, 'id'))->setValue($stock, 42);
+        $stock->setBeta('1.00');
+        $stock->setVolatility('0.28');
+        $stock->setCurrentVolatility('0.28');
+        $stock->setJumpIntensity((string) $lambda);
+        $stock->setJumpVol('0.06');
+        $stock->setBusinessVolatility($businessVol);
+
+        $tracker->updateStocks([$stock], 1.0 / 252.0, false, new MacroStateDTO());
+
+        $expectedProfile = \App\Service\Market\Pricing\VarianceBudget::leveredRiskProfile(
+            $leveredBeta,
+            $leverageMultiplier,
+            $businessVol,
+            $lambda,
+        );
+        $this->assertNotNull($captured);
+        $this->assertEqualsWithDelta($expectedProfile['volatility'], $captured->longTermVolatility, 1e-12);
+        $this->assertEqualsWithDelta($expectedProfile['jump_scale'], $captured->jumpVol, 1e-12);
+        $this->assertEqualsWithDelta($expectedProfile['volatility'], (float) $stock->getLeveredVolatility(), 1e-12);
+
+        // Verify the StockTickColumns bulk-update row carries the exact leveredVolatility written by assessCredit().
+        $rows = \App\Service\Market\Ticker\StockTickColumns::rows([$stock]);
+        $colIndex = array_search('levered_volatility', \App\Service\Market\Ticker\StockTickColumns::COLUMNS, true);
+        $betaIndex = array_search('levered_beta', \App\Service\Market\Ticker\StockTickColumns::COLUMNS, true);
+        $this->assertIsInt($colIndex);
+        $this->assertIsInt($betaIndex);
+        $persistedVol = $rows[42][$colIndex];
+        $persistedBeta = $rows[42][$betaIndex];
+        $this->assertEqualsWithDelta($expectedProfile['volatility'], (float) $persistedVol, 1e-12);
+
+        // Reconstruct a stock as a fresh request would read it back from the database and quote its option surface.
+        $reloaded = $this->stock();
+        $reloaded->setBeta('1.00');
+        $reloaded->setVolatility('0.28');
+        $reloaded->setCurrentVolatility('0.28');
+        $reloaded->setJumpIntensity((string) $lambda);
+        $reloaded->setJumpVol('0.06');
+        $reloaded->setLeveredBeta((float) $persistedBeta);
+        $reloaded->setLeveredVolatility((float) $persistedVol);
+
+        $optionEngine = new \App\Service\Market\Option\OptionPricingEngine(new \App\Service\Market\Bond\BondPricingEngine());
+        $fromStock = $optionEngine->surfaceFor($reloaded, 1.0);
+        $expectedSurface = $optionEngine->surface(
+            0.28,
+            $expectedProfile['volatility'],
+            $leveredBeta,
+            $lambda,
+            $expectedProfile['jump_scale'],
+            1.0,
+        );
+        $staleSurface = $optionEngine->surface(0.28, 0.28, $leveredBeta, $lambda, 0.06, 1.0);
+
+        $this->assertEqualsWithDelta($expectedSurface['atm_volatility'], $fromStock['atm_volatility'], 1e-12);
+        $this->assertEqualsWithDelta($expectedSurface['skewness'], $fromStock['skewness'], 1e-12);
+        $this->assertGreaterThan($staleSurface['atm_volatility'] + 0.05, $fromStock['atm_volatility']);
     }
 }

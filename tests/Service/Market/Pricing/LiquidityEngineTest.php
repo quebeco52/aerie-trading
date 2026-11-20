@@ -117,6 +117,15 @@ class LiquidityEngineTest extends TestCase
         $this->assertSame(LiquidityEngine::MAX_ADV_ACTIVITY_MULTIPLIER, $exploded);
     }
 
+    public function testActivityMultiplierComparesSpotAgainstLeveredVolatility(): void
+    {
+        // A newly levered firm trading at its new normal volatility is not experiencing an activity burst.
+        $stock = $this->stock(volatility: 0.25, currentVolatility: 0.45);
+        $stock->setLeveredVolatility(0.45);
+
+        $this->assertEqualsWithDelta(1.0, $this->engine->activityMultiplier($stock), 1e-12);
+    }
+
     // --- Spread ---
 
     public function testSpreadWidensWithVolatilityAndNarrowsWithVolume(): void

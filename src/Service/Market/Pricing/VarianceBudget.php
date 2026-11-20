@@ -427,6 +427,35 @@ final readonly class VarianceBudget
     }
 
     /**
+     * Long-run equity volatility and matching Kou jump scale implied by a firm's systematic loading, leverage
+     * multiplier, business idiosyncratic risk and jump arrival rate.
+     *
+     * The jump scale puts MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE of the levered idiosyncratic variance into own jumps,
+     * so calibratedJumpParameters() does not rescale it at any leverage.
+     *
+     * @param float $leveredBeta              The equity's levered market beta (DebtHealthDTO::$leveredBeta).
+     * @param float $leverageMultiplier       The Hamada + cash-blend multiplier L (1.0 for a financial).
+     * @param float $businessIdiosyncraticVol Annual idiosyncratic volatility of the operating assets (equity for a
+     *                                        financial).
+     * @param float $lambda                   Own-jump arrival rate, per year.
+     * @return array{volatility: float, jump_scale: float}
+     */
+    public static function leveredRiskProfile(
+        float $leveredBeta,
+        float $leverageMultiplier,
+        float $businessIdiosyncraticVol,
+        float $lambda,
+    ): array {
+        $idiosyncraticEquityVol = max(0.0, $leverageMultiplier) * max(0.0, $businessIdiosyncraticVol);
+        $volatility = self::equityVolatilityFromBusinessRisk($leveredBeta, $leverageMultiplier, $businessIdiosyncraticVol);
+
+        return [
+            'volatility' => $volatility,
+            'jump_scale' => self::jumpScaleForVarianceShare($idiosyncraticEquityVol, $lambda),
+        ];
+    }
+
+    /**
      * Kou jump scale that puts the requested share of equity idiosyncratic variance into own jumps at arrival rate
      * lambda: scale = sqrt(share x sigma_idio,E^2 / (lambda x m2)), where m2 is the unit-scale Kou raw second moment.
      *

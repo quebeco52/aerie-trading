@@ -82,7 +82,7 @@ class MarketEventPublisher
             $description,
             $changePercent,
             $asset instanceof Stock ? NewsDesk::SCOPE_COMPANY : NewsDesk::SCOPE_FUND,
-            $asset instanceof Stock ? (float) $asset->getVolatility() : null,
+            $asset instanceof Stock ? ($asset->getLeveredVolatility() ?? (float) $asset->getVolatility()) : null,
             $facts,
             $dealShareOfValue,
         );
