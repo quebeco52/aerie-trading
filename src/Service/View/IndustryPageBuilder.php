@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\Entity\Stock;
@@ -152,7 +153,18 @@ final class IndustryPageBuilder
         if ($sharedMarket) {
             foreach ($marketShares as $ticker => $share) {
                 if (!in_array($ticker, $listed, true) && ($stock = $this->stocks->findOneByTicker((string) $ticker)) !== null) {
-                    $entrants[] = ['ticker' => (string) $ticker, 'name' => $stock->getName(), 'home' => (string) $stock->getIndustry(), 'homeSlug' => Sectors::industrySlug((string) $stock->getIndustry()), 'share' => $share];
+                    $entrant = [
+                        'ticker' => (string) $ticker,
+                        'name' => $stock->getName(),
+                        'home' => (string) $stock->getIndustry(),
+                        'homeSlug' => Sectors::industrySlug((string) $stock->getIndustry()),
+                        'share' => $share,
+                    ];
+                    $segmentLabel = self::segmentLabelFor($stock, $industry);
+                    if ($segmentLabel !== null) {
+                        $entrant['segmentLabel'] = $segmentLabel;
+                    }
+                    $entrants[] = $entrant;
                 }
             }
         }
@@ -208,6 +220,15 @@ final class IndustryPageBuilder
             if ($stock->isBankrupt()) {
                 continue;
             }
+            if (FinancialBooks::hasBooks($stock)) {
+                foreach (FinancialBooks::industries($stock) as $book => $bookIndustry) {
+                    if ($book !== FinancialBooks::MAIN && $bookIndustry === $industry) {
+                        $sellers[] = ['stock' => $stock, 'segment' => $book];
+                    }
+                }
+
+                continue;
+            }
             $momentum = $stock->getEarningsMomentumZ() ?? [];
             $hasPlant = SegmentBooks::plant($momentum) !== null;
             $pending = SegmentBooks::pending($momentum);
@@ -250,7 +271,9 @@ final class IndustryPageBuilder
                 'name' => $stock->getName(),
                 'home' => (string) $stock->getIndustry(),
                 'homeSlug' => Sectors::industrySlug((string) $stock->getIndustry()),
-                'segmentLabel' => SegmentBooks::label($stock, $segment),
+                'segmentLabel' => FinancialBooks::hasBooks($stock)
+                    ? FinancialBooks::label($stock, $segment)
+                    : SegmentBooks::label($stock, $segment),
                 'share' => $shares[$ticker] ?? null,
                 'marketValue' => self::marketValue($stock),
             ];
@@ -289,6 +312,23 @@ final class IndustryPageBuilder
             'charts' => ['price' => null, 'plant' => null, 'margin' => null, 'shares' => null],
             'stories' => [],
         ];
+    }
+
+    /** Label of the company's secondary segment or financial book selling into the given industry, if any. */
+    private static function segmentLabelFor(Stock $stock, string $industry): ?string
+    {
+        foreach (FinancialBooks::industries($stock) as $book => $bookIndustry) {
+            if ($book !== FinancialBooks::MAIN && $bookIndustry === $industry) {
+                return FinancialBooks::label($stock, $book);
+            }
+        }
+        foreach (SegmentBooks::industries($stock) as $segment => $segIndustry) {
+            if ($segment !== Segments::MAIN && $segIndustry === $industry) {
+                return SegmentBooks::label($stock, $segment);
+            }
+        }
+
+        return null;
     }
 
     /** @param Stock $stock */

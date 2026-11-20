@@ -44,6 +44,9 @@ final class Segments
             'consumer_devices' => ['label' => 'Consumer devices', 'industry' => 'Computer Hardware', 'streams' => ['consumer_terminals'], 'margin' => 0.4, 'turnover' => 1.5],
         ]],
         'WEAV' => ['main' => 'Online retail', 'segments' => [
+            // Third-party fees earn several times first-party retail's margin without carrying stock or leased
+            // warehouses.
+            'marketplace' => ['label' => 'Third-party marketplace', 'industry' => 'Online Marketplaces', 'streams' => ['third_party_seller'], 'margin' => 3.0, 'turnover' => 1.5],
             // A first-party retailer earns thinly; its data centres and ad book earn several times as much on heavier
             // plant.
             'ads_and_cloud' => ['label' => 'Advertising and cloud', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud'], 'margin' => 6.0, 'turnover' => 0.5],

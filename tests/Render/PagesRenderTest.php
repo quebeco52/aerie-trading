@@ -311,9 +311,34 @@ final class PagesRenderTest extends KernelTestCase
             ],
             'kpiSeries' => ['subscriber_index' => ['label' => 'Subscriber index', 'format' => \App\Service\View\FigureFormat::Index], 'quarterly_churn' => ['label' => 'Quarterly churn', 'format' => \App\Service\View\FigureFormat::Percent], 'net_adds' => ['label' => 'Net adds', 'format' => \App\Service\View\FigureFormat::SignedIndex], 'arpu_index' => ['label' => 'ARPU index', 'format' => \App\Service\View\FigureFormat::Index]],
         ])];
-        $pages['stock-insurer'] = ['/stock/GULL', 'stock/index.html.twig', array_replace($pages['stock'][2], [
-            'isInsurer' => true, 'businessModel' => 'insurance',
-            'industryCharts' => ['kpiHistoryChart', 'regulatoryRatiosChart', 'insuranceDualEngineChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['insurance'],
+        $pages['stock-insurer'] = ['/stock/DOVE', 'stock/index.html.twig', array_replace($pages['stock'][2], [
+            'asset' => array_replace($pages['stock'][2]['asset'], ['ticker' => 'DOVE', 'name' => 'White Dove Insurance', 'industry' => 'Insurance - Diversified']),
+            'isInsurer' => true, 'businessModel' => 'retail_insurance', 'generalInfo' => StockInfo::DESCRIPTIONS['DOVE'] ?? '',
+            'industryCharts' => ['kpiHistoryChart', 'regulatoryRatiosChart', 'insuranceDualEngineChart'], 'industryDescription' => \App\Data\Company\Sectors::BUSINESS_MODEL_DESCRIPTIONS['retail_insurance'],
+            'marketShare' => 0.248,
+            'industry' => [
+                'tracked' => true, 'pricesCapacity' => false, 'isFinancial' => true, 'hasFinancialBooks' => true, 'sharedMarket' => true, 'addressableShare' => 0.248,
+                'saturation' => ['threshold' => 0.45, 'penalty' => 0.0, 'severity' => 0.0, 'trueReturn' => 0.095, 'trailingReturn' => 0.092, 'marginalReturn' => 0.095, 'moat' => ['label' => 'Narrow', 'spread' => 0.01]],
+                'marketSize' => 3.54e11, 'marketGdpShare' => 0.059, 'marketShares' => ['DOVE' => 0.188],
+                'marketShareByIndustry' => ['Insurance - Diversified' => 0.188, 'Insurance - Life' => 0.144],
+                'otherMarkets' => [[
+                    'industry' => 'Insurance - Life', 'slug' => 'insurance-life', 'label' => 'Life and annuities', 'isFinancial' => true,
+                    'marketSize' => 3.78e11, 'marketGdpShare' => 0.063, 'marketShares' => ['WELL' => 0.238, 'DOVE' => 0.144],
+                    'ownShare' => 0.144, 'fringeShare' => 0.618, 'herfindahl' => 0.0774, 'highlyConcentrated' => false, 'concentrationLine' => 0.18,
+                ]],
+                'listedShare' => 0.188, 'fringeShare' => 0.812, 'herfindahl' => 0.0353, 'highlyConcentrated' => false, 'concentrationLine' => 0.18, 'listedCount' => 1,
+                'capacityRatio' => null, 'installedCapacity' => null, 'trendCapacity' => null, 'balance' => 'unknown', 'balanceTone' => 'neutral',
+                'priceMove' => null, 'rivalShareDrain' => -0.0012, 'ownPriceVolumeShift' => null, 'idlePlant' => null, 'outlook' => null,
+                'mergerReview' => ['herfindahl' => 0.0353, 'highlyConcentrated' => false, 'acquirerShare' => 0.188, 'fringeShare' => 0.812, 'clearedShare' => 0.10, 'reviewBinds' => true, 'screens' => ['delta' => 0.01, 'concentrated' => 0.18, 'shareCeiling' => 0.30]],
+            ],
+            'peers' => [
+                ['ticker' => 'WELL', 'name' => 'Wellspring Life', 'industry' => 'Insurance - Life', 'price' => 42.10, 'marketCap' => 6.0e10, 'peRatio' => 14.2, 'roic' => 0.091, 'totalEquity' => 6.0e10, 'isBankrupt' => false, 'sameIndustry' => false, 'sharedMarket' => true],
+                ['ticker' => 'SAFE', 'name' => 'Safe Harbor Reinsurance', 'industry' => 'Insurance - Reinsurance', 'price' => 118.4, 'marketCap' => 1.8e11, 'peRatio' => 11.4, 'roic' => 0.104, 'totalEquity' => 1.1e11, 'isBankrupt' => false, 'sameIndustry' => false, 'sharedMarket' => false],
+            ],
+            'segments' => [
+                ['label' => 'Property and casualty', 'industry' => 'Insurance - Diversified', 'outlook' => null, 'revenue' => 1.66e10, 'share' => 0.55, 'margin' => null, 'assets' => null],
+                ['label' => 'Life and annuities', 'industry' => 'Insurance - Life', 'outlook' => null, 'revenue' => 1.36e10, 'share' => 0.45, 'margin' => null, 'assets' => null],
+            ],
             'financialSummary' => [['label' => 'Capital ratio', 'value' => 0.25, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'ROE', 'value' => 0.09, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'Combined ratio', 'value' => 0.94, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'Loss ratio', 'value' => 0.63, 'format' => \App\Service\View\FigureFormat::Percent], ['label' => 'Expense ratio', 'value' => 0.31, 'format' => \App\Service\View\FigureFormat::Percent]],
             'kpiSeries' => ['loss_ratio' => ['label' => 'Loss ratio', 'format' => \App\Service\View\FigureFormat::Percent], 'expense_ratio' => ['label' => 'Expense ratio', 'format' => \App\Service\View\FigureFormat::Percent]],
         ])];

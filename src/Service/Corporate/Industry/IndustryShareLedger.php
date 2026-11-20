@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Industry;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\IndustryMarkets;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
@@ -102,6 +103,19 @@ class IndustryShareLedger
         return $address === null ? 0.0 : $this->drainAt($address[0], $address[1], max(1.0, $segmentRevenue), $tick, $ticksPerYear, $tick);
     }
 
+    /**
+     * The drain on one revenue book of a multi-market financial firm, from rivals in that book's industry, as a
+     * fraction of the book's revenue.
+     */
+    public function resolveBookRivalDrain(Stock $stock, string $book, float $bookRevenue, int $tick, int $ticksPerYear): float
+    {
+        $address = self::bookAddress($stock, $book);
+
+        return $address === null
+            ? 0.0
+            : $this->drainAt($address[0], $address[1], max(1.0, $bookRevenue), $tick, $ticksPerYear, $book === FinancialBooks::MAIN ? -1 : $tick);
+    }
+
     /** @param array<string, float>|null $ownMix The reading firm's revenue mix by line; null overlaps fully. */
     private function drainAt(string $industry, string $ticker, float $ownRevenue, int $tick, int $ticksPerYear, int $firstReadTick = -1, ?array $ownMix = null): float
     {
@@ -184,6 +198,19 @@ class IndustryShareLedger
     }
 
     /**
+     * Books one revenue book's sales and gain in its industry for a multi-market financial company.
+     *
+     * @param array{margin: float, turnover: float}|null $economics As recordIdiosyncraticGain().
+     */
+    public function recordBookGain(Stock $stock, string $book, float $annualRevenue, float $gainFraction, float $addressableShare, int $tick, ?array $economics = null): void
+    {
+        $address = self::bookAddress($stock, $book);
+        if ($address !== null) {
+            $this->gainAt($address[0], $address[1], $annualRevenue, $gainFraction, $addressableShare, $tick, $economics);
+        }
+    }
+
+    /**
      * @param array{margin: float, turnover: float}|null $economics
      * @param array<string, float>|null                  $mix       The firm's revenue mix by line; null for a segment.
      */
@@ -211,7 +238,7 @@ class IndustryShareLedger
      */
     private static function streamMix(Stock $stock): ?array
     {
-        if (Segments::forTicker($stock->getTicker()) !== null) {
+        if (Segments::forTicker($stock->getTicker()) !== null || FinancialBooks::hasBooks($stock)) {
             return null;
         }
 
@@ -957,8 +984,8 @@ class IndustryShareLedger
      */
     public function describeMergerMarket(Stock $stock, MacroStateDTO $macroState, float $secularExcessGrowth, int $tick, int $ticksPerYear, string $segment = Segments::MAIN): ?array
     {
-        // A company that keeps plant by segment buys into one of its segments' markets, reviewed in that market.
-        $address = self::segmentAddress($stock, $segment);
+        // A company that keeps plant or books by segment buys into one of its markets, reviewed in that market.
+        $address = self::marketAddress($stock, $segment);
         $own = $address === null ? null : ($this->store->readIndustry($address[0])[$address[1]] ?? null);
         if ($address === null || $own === null) {
             return null;
@@ -978,6 +1005,24 @@ class IndustryShareLedger
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
             'shares'         => $shares,
         ];
+    }
+
+    /**
+     * Current annual revenue market size for an IndustryMarkets board industry, grown along trend nominal GDP,
+     * secular excess growth and public outlook belief. Null for industries outside IndustryMarkets.
+     */
+    public function revenueMarketSize(string $industry, MacroStateDTO $macroState, float $secularExcessGrowth): ?float
+    {
+        if (!IndustryMarkets::hasIndustry($industry)) {
+            return null;
+        }
+
+        $growth = self::trendNominalGdp($macroState) * exp(
+            TimeSeries::fadedExcessIntegral($secularExcessGrowth, 0.0, $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)
+            + $this->outlook($industry)['belief'],
+        );
+
+        return IndustryMarkets::openingMarket($industry) * $growth;
     }
 
     /**
@@ -1014,12 +1059,9 @@ class IndustryShareLedger
         }
         $listedRevenue = array_sum($revenues);
 
-        if (IndustryMarkets::hasIndustry($industry)) {
-            $growth = self::trendNominalGdp($macroState) * exp(
-                TimeSeries::fadedExcessIntegral($secularExcessGrowth, 0.0, $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)
-                + $this->outlook($industry)['belief'],
-            );
-            $marketRevenue = max($listedRevenue, IndustryMarkets::openingMarket($industry) * $growth);
+        $sizedMarket = $this->revenueMarketSize($industry, $macroState, $secularExcessGrowth);
+        if ($sizedMarket !== null) {
+            $marketRevenue = max($listedRevenue, $sizedMarket);
         } else {
             $marketRevenue = max($listedRevenue, $ownRevenue / $ownShare);
         }
@@ -1139,6 +1181,17 @@ class IndustryShareLedger
             return;
         }
 
+        if (FinancialBooks::hasBooks($stock)) {
+            foreach (array_keys(FinancialBooks::industries($stock)) as $book) {
+                $address = self::bookAddress($stock, $book);
+                if ($address !== null) {
+                    $this->retireRecord($address[0], $address[1]);
+                }
+            }
+
+            return;
+        }
+
         // Every segment's plant leaves its industry with the company, and so does plant it was still building there; a
         // segment sold is the buyer's plant now.
         $pending = SegmentBooks::pending($stock->getEarningsMomentumZ() ?? []);
@@ -1178,7 +1231,7 @@ class IndustryShareLedger
      */
     public function recordAcquiredCapacity(Stock $stock, float $annualCapacity, MacroStateDTO $macroState, float $secularExcessGrowth, string $segment = Segments::MAIN): void
     {
-        $address = self::segmentAddress($stock, $segment);
+        $address = self::marketAddress($stock, $segment);
         if ($address !== null) {
             $this->transferCapacity($address[0], $address[1], max(0.0, $annualCapacity), $macroState, $secularExcessGrowth);
         }
@@ -1210,6 +1263,19 @@ class IndustryShareLedger
     public function recordDivestedFraction(Stock $stock, float $fraction, MacroStateDTO $macroState, float $secularExcessGrowth): void
     {
         $fraction = max(0.0, min(1.0, $fraction));
+        if (FinancialBooks::hasBooks($stock)) {
+            foreach (array_keys(FinancialBooks::industries($stock)) as $book) {
+                $address = self::bookAddress($stock, $book);
+                $own = $address === null ? null : ($this->store->readIndustry($address[0])[$address[1]] ?? null);
+                if ($address === null || $own === null) {
+                    continue;
+                }
+                $this->transferRevenue($address[0], $address[1], $own, -$fraction * (float) ($own['revenue'] ?? 0.0));
+            }
+
+            return;
+        }
+
         // A division sold off pro rata takes the same slice of every segment's plant it still holds.
         foreach (SegmentBooks::industries($stock) as $segment => $industry) {
             $address = SegmentBooks::holdsPlant($stock, $segment) ? self::segmentAddress($stock, $segment) : null;
@@ -1371,6 +1437,30 @@ class IndustryShareLedger
         $own['addressable_share'] = min(1.0, $newRevenue / ($revenue / $share));
 
         $this->store->writeRecord($industry, $ticker, $own);
+    }
+
+    /** @return array{0: string, 1: string}|null */
+    private static function marketAddress(Stock $stock, string $segment): ?array
+    {
+        return FinancialBooks::hasBooks($stock)
+            ? self::bookAddress($stock, $segment)
+            : self::segmentAddress($stock, $segment);
+    }
+
+    /**
+     * Where a multi-market financial firm's revenue book sits in its target industry's ledger.
+     *
+     * @return array{0: string, 1: string}|null
+     */
+    private static function bookAddress(Stock $stock, string $book): ?array
+    {
+        $industry = FinancialBooks::industries($stock)[$book] ?? '';
+        $ticker = $stock->getTicker();
+        if ($industry === '' || $ticker === '') {
+            return null;
+        }
+
+        return [$industry, FinancialBooks::recordKey($ticker, $book)];
     }
 
     /**

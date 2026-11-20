@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\Sectors;
 use App\Entity\Stock;
 use App\Repository\StockRepository;
+use App\Service\Corporate\Segment\SegmentBooks;
 
 /**
  * Builds the sector comparison table shown beside a company.
@@ -21,17 +23,20 @@ class PeerTableBuilder
     /**
      * @return list<array{
      *     ticker: string, name: string, industry: string|null, price: float,
-     *     marketCap: float, peRatio: float|null, roic: float, totalEquity: float, isBankrupt: bool, sameIndustry: bool
+     *     marketCap: float, peRatio: float|null, roic: float, totalEquity: float, isBankrupt: bool, sameIndustry: bool, sharedMarket: bool
      * }>
      */
     public function build(Stock $stock): array
     {
+        $ownMarkets = self::marketsOf($stock);
         $peers = [];
 
         foreach ($this->stocks->findPeersOf($stock) as $peer) {
             $price = (float) $peer->getPrice();
             $eps = (float) $peer->getEarningsPerShare();
             $isBankrupt = $peer->isBankrupt();
+            $sameIndustry = $peer->getIndustry() === $stock->getIndustry();
+            $sharedMarket = !$sameIndustry && array_intersect($ownMarkets, self::marketsOf($peer)) !== [];
 
             $peers[] = [
                 'ticker' => $peer->getTicker(),
@@ -45,15 +50,58 @@ class PeerTableBuilder
                 'roic' => $this->returnOnCapital($peer),
                 'totalEquity' => (float) $peer->getTotalEquity(),
                 'isBankrupt' => $isBankrupt,
-                'sameIndustry' => $peer->getIndustry() === $stock->getIndustry(),
+                'sameIndustry' => $sameIndustry,
+                'sharedMarket' => $sharedMarket,
             ];
         }
 
-        // Direct competitors first, the rest of the sector after, each by size: the return column only
-        // compares like with like inside one industry.
-        usort($peers, static fn(array $a, array $b): int => [$b['sameIndustry'], $b['marketCap']] <=> [$a['sameIndustry'], $a['marketCap']]);
+        // Direct competitors lead, followed by cross-market rivals, then the rest of the sector, each by size.
+        usort($peers, static fn(array $a, array $b): int => [
+            $b['sameIndustry'] || $b['sharedMarket'],
+            $b['sameIndustry'],
+            $b['marketCap'],
+        ] <=> [
+            $a['sameIndustry'] || $a['sharedMarket'],
+            $a['sameIndustry'],
+            $a['marketCap'],
+        ]);
 
         return $peers;
+    }
+
+    /**
+     * Distinct active product or book markets the stock sells into.
+     *
+     * @return list<string>
+     */
+    private static function marketsOf(Stock $stock): array
+    {
+        $primary = $stock->getIndustry();
+        if ($primary === null || $primary === '') {
+            return [];
+        }
+
+        $markets = [$primary];
+        if (!(new \ReflectionProperty(Stock::class, 'ticker'))->isInitialized($stock)) {
+            return $markets;
+        }
+
+        if (FinancialBooks::hasBooks($stock)) {
+            foreach (FinancialBooks::industries($stock) as $industry) {
+                if ($industry !== '') {
+                    $markets[] = $industry;
+                }
+            }
+        } elseif (SegmentBooks::keepsBooks($stock)) {
+            $hasPlant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null;
+            foreach (SegmentBooks::industries($stock) as $segment => $industry) {
+                if ($industry !== '' && (!$hasPlant || SegmentBooks::holdsPlant($stock, $segment))) {
+                    $markets[] = $industry;
+                }
+            }
+        }
+
+        return array_values(array_unique($markets));
     }
 
     /**

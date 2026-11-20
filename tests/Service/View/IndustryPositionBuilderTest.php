@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\IndustryMarkets;
+use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
@@ -13,6 +15,7 @@ use App\Repository\StockRepository;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\Industry\IndustryShareLedger;
 use App\Service\Corporate\Industry\InMemoryIndustryShareStore;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Math\FinancialConstants;
 use App\Service\View\IndustryPositionBuilder;
 use PHPUnit\Framework\Attributes\Group;
@@ -79,6 +82,15 @@ class IndustryPositionBuilderTest extends TestCase
                 $allStocks,
                 static fn(Stock $s): bool => $s->getIndustry() === $criteria['industry'],
             ));
+        });
+        $repo->method('findOneByTicker')->willReturnCallback(static function (string $ticker) use ($allStocks): ?Stock {
+            foreach ($allStocks as $s) {
+                if ($s->getTicker() === $ticker) {
+                    return $s;
+                }
+            }
+
+            return null;
         });
 
         return $repo;
@@ -323,5 +335,82 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertTrue($holdingIndustry['sharedMarket']);
         $this->assertNull($holdingIndustry['marketSize']);
         $this->assertNull($holdingIndustry['marketGdpShare']);
+    }
+
+    public function testFinancialBooksSlicePrimaryShareAndJoinSecondaryMarketBeforeAndAfterFilings(): void
+    {
+        $dove = $this->stock('DOVE', 'Insurance - Diversified', 121_000_000_000.0, 84_700_000_000.0)->setSamRatio('0.248');
+        $well = $this->stock('WELL', 'Insurance - Life', 90_000_000_000.0, 60_000_000_000.0)->setSamRatio('0.252');
+        $repo = $this->stockRepository([$dove, $well]);
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        $doveView = $this->builder(null, 0, $repo)->build($dove, $macro)['industry'];
+        $wellView = $this->builder(null, 0, $repo)->build($well, $macro)['industry'];
+
+        $expectedPcShare = (121_000_000_000.0 * 0.55) / IndustryMarkets::openingMarket('Insurance - Diversified');
+        $expectedWellShare = 90_000_000_000.0 / IndustryMarkets::openingMarket('Insurance - Life');
+        $expectedDoveLifeShare = (121_000_000_000.0 * 0.45) / IndustryMarkets::openingMarket('Insurance - Life');
+
+        $this->assertTrue($doveView['hasFinancialBooks']);
+        $this->assertFalse($wellView['hasFinancialBooks']);
+        $this->assertEqualsWithDelta($expectedPcShare, $doveView['marketShares']['DOVE'], 1e-6);
+        $this->assertEqualsWithDelta($expectedPcShare, $doveView['marketShareByIndustry']['Insurance - Diversified'], 1e-6);
+        $this->assertEqualsWithDelta($expectedDoveLifeShare, $doveView['marketShareByIndustry']['Insurance - Life'], 1e-6);
+        $this->assertCount(1, $doveView['otherMarkets']);
+        $this->assertSame('Insurance - Life', $doveView['otherMarkets'][0]['industry']);
+        $this->assertSame('Life and annuities', $doveView['otherMarkets'][0]['label']);
+        $this->assertEqualsWithDelta($expectedWellShare, $doveView['otherMarkets'][0]['marketShares']['WELL'], 1e-6);
+        $this->assertEqualsWithDelta($expectedDoveLifeShare, $doveView['otherMarkets'][0]['marketShares']['DOVE'], 1e-6);
+        $this->assertEqualsWithDelta(1.0 - $expectedWellShare - $expectedDoveLifeShare, $doveView['otherMarkets'][0]['fringeShare'], 1e-6);
+
+        $this->assertSame(2, $wellView['listedCount']);
+        $this->assertEqualsWithDelta($expectedWellShare, $wellView['marketShares']['WELL'], 1e-6);
+        $this->assertEqualsWithDelta($expectedDoveLifeShare, $wellView['marketShares']['DOVE'], 1e-6);
+        $this->assertEqualsWithDelta(1.0, $wellView['listedShare'] + $wellView['fringeShare'], 1e-12);
+
+        // Post-Q1: ledger records match the pre-Q1 whole-market split cleanly.
+        $lifeMarket = IndustryMarkets::openingMarket('Insurance - Life');
+        $pcMarket = IndustryMarkets::openingMarket('Insurance - Diversified');
+        $this->ledger->recordBookGain($dove, FinancialBooks::MAIN, 121_000_000_000.0 * 0.55, 0.0, $expectedPcShare, 20);
+        $this->ledger->recordBookGain($dove, 'life', 121_000_000_000.0 * 0.45, 0.0, $expectedDoveLifeShare, 20);
+        $this->ledger->recordIdiosyncraticGain($well, 90_000_000_000.0, 0.0, 90_000_000_000.0 / $lifeMarket, 16);
+
+        $wellPost = $this->builder(null, 30, $repo)->build($well, $macro)['industry'];
+        $dovePost = $this->builder(null, 30, $repo)->build($dove, $macro)['industry'];
+        $this->assertEqualsWithDelta($expectedWellShare, $wellPost['marketShares']['WELL'], 1e-6);
+        $this->assertEqualsWithDelta($expectedDoveLifeShare, $wellPost['marketShares']['DOVE'], 1e-6);
+        $this->assertEqualsWithDelta($pcMarket, $dovePost['marketSize'], 1.0);
+        $this->assertCount(1, $dovePost['otherMarkets']);
+        $this->assertEqualsWithDelta($expectedDoveLifeShare, $dovePost['marketShareByIndustry']['Insurance - Life'], 1e-6);
+        $this->assertEqualsWithDelta(($expectedWellShare ** 2) + ($expectedDoveLifeShare ** 2), $dovePost['otherMarkets'][0]['herfindahl'], 1e-9);
+    }
+
+    public function testOperatingSegmentsExposeSecondaryMarketsWhenLedgerIsAnchored(): void
+    {
+        $weav = $this->stock('WEAV', 'Internet Retail', 111_000_000_000.0);
+        $jdaw = $this->stock('JDAW', 'Online Marketplaces', 51_700_000_000.0);
+        $humm = $this->stock('HUMM', 'Internet Content & Information', 82_800_000_000.0);
+        $weav->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.30, 'marketplace' => 0.45, 'ads_and_cloud' => 0.25], 1.0, []));
+
+        $this->ledger->resolveIndustryCapacityRatio($weav, 3_330.0, 0.12, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveIndustryCapacityRatio($jdaw, 5_170.0, 0.33, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveSegmentSupply($weav, 'marketplace', 4_995.0, 4_995.0, 0.32, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveIndustryCapacityRatio($humm, 8_280.0, 0.29, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveSegmentSupply($weav, 'ads_and_cloud', 2_775.0, 2_775.0, 0.10, 1.0, 0.0, 0.0, 10, 252);
+
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+        $view = $this->builder(null, 20, $this->stockRepository([$weav, $jdaw, $humm]))->build($weav, $macro)['industry'];
+
+        $this->assertEqualsWithDelta(0.12, $view['marketShareByIndustry']['Internet Retail'], 1e-9);
+        $this->assertEqualsWithDelta(0.32, $view['marketShareByIndustry']['Online Marketplaces'], 1e-9);
+        $this->assertEqualsWithDelta(0.10, $view['marketShareByIndustry']['Internet Content & Information'], 1e-9);
+        $this->assertCount(2, $view['otherMarkets']);
+        $byInd = array_column($view['otherMarkets'], null, 'industry');
+        $this->assertSame('Third-party marketplace', $byInd['Online Marketplaces']['label']);
+        $this->assertEqualsWithDelta(0.33, $byInd['Online Marketplaces']['marketShares']['JDAW'], 1e-9);
+        $this->assertEqualsWithDelta(0.32, $byInd['Online Marketplaces']['marketShares']['WEAV'], 1e-9);
+        $this->assertEqualsWithDelta(0.35, $byInd['Online Marketplaces']['fringeShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.29, $byInd['Internet Content & Information']['marketShares']['HUMM'], 1e-9);
+        $this->assertEqualsWithDelta(0.10, $byInd['Internet Content & Information']['marketShares']['WEAV'], 1e-9);
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\View;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\IndustryMarkets;
 use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
@@ -197,6 +198,47 @@ final class IndustryPageBuilderTest extends TestCase
         );
 
         $this->assertNull($this->builder([$gdwt, $tstn, $avct], tick: 0)->build('No Such Trade'));
+    }
+
+    public function testFinancialBooksPopulateCrossIndustryEntrantInLifeInsurance(): void
+    {
+        $well = $this->stock('WELL', 'Wellspring Life', 'Insurance - Life', 'Financials', 90e9, 60_000_000_000.0)
+            ->setTotalRevenue('90000000000')
+            ->setSamRatio('0.252');
+        $dove = $this->stock('DOVE', 'White Dove Insurance', 'Insurance - Diversified', 'Financials', 121e9, 84_700_000_000.0)
+            ->setTotalRevenue('121000000000')
+            ->setSamRatio('0.248');
+
+        $expectedWell = 90_000_000_000.0 / IndustryMarkets::openingMarket('Insurance - Life');
+        $expectedDoveLife = (121_000_000_000.0 * 0.45) / IndustryMarkets::openingMarket('Insurance - Life');
+        $expectedDovePc = (121_000_000_000.0 * 0.55) / IndustryMarkets::openingMarket('Insurance - Diversified');
+
+        $preLife = $this->builder([$well, $dove], tick: 0)->build('Insurance - Life');
+        $preDiv = $this->builder([$well, $dove], tick: 0)->build('Insurance - Diversified');
+        $this->assertNotNull($preLife);
+        $this->assertNotNull($preDiv);
+        $this->assertCount(1, $preLife['companies']);
+        $this->assertCount(1, $preLife['entrants']);
+        $this->assertSame('DOVE', $preLife['entrants'][0]['ticker']);
+        $this->assertSame('Insurance - Diversified', $preLife['entrants'][0]['home']);
+        $this->assertSame('Life and annuities', $preLife['entrants'][0]['segmentLabel']);
+        $this->assertEqualsWithDelta($expectedWell, $preLife['companies'][0]['share'], 1e-6);
+        $this->assertEqualsWithDelta($expectedDoveLife, $preLife['entrants'][0]['share'], 1e-6);
+        $this->assertEqualsWithDelta(1.0, $expectedWell + $expectedDoveLife + $preLife['fringeShare'], 1e-6);
+        $this->assertEqualsWithDelta($expectedDovePc, $preDiv['companies'][0]['share'], 1e-6);
+        $this->assertSame([], $preDiv['entrants']);
+
+        // Post-Q1 ledger records preserve the entrant label and combined whole-market shares.
+        $this->ledger->recordIdiosyncraticGain($well, 90_000_000_000.0, 0.0, $expectedWell, 16);
+        $this->ledger->recordBookGain($dove, FinancialBooks::MAIN, 121_000_000_000.0 * 0.55, 0.0, $expectedDovePc, 20);
+        $this->ledger->recordBookGain($dove, 'life', 121_000_000_000.0 * 0.45, 0.0, $expectedDoveLife, 20);
+
+        $postLife = $this->builder([$well, $dove], tick: 30)->build('Insurance - Life');
+        $this->assertNotNull($postLife);
+        $this->assertSame('Life and annuities', $postLife['entrants'][0]['segmentLabel'] ?? null);
+        $this->assertEqualsWithDelta($expectedDoveLife, $postLife['entrants'][0]['share'], 1e-6);
+        $this->assertEqualsWithDelta($expectedWell, $postLife['companies'][0]['share'], 1e-6);
+        $this->assertEqualsWithDelta(1.0, $expectedWell + $expectedDoveLife + $postLife['fringeShare'], 1e-6);
     }
 
     /**

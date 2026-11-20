@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate;
 
+use App\Data\Company\FinancialBooks;
+use App\Data\Company\Sectors;
 use App\DTO\EarningsSimulationContext;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
@@ -263,8 +265,8 @@ class EarningsEngine
             return null;
         }
 
-        $businessModel = \App\Data\Company\Sectors::businessModelFor($stock->getIndustry());
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy($businessModel);
+        $businessModel = Sectors::businessModelFor($stock->getIndustry());
+        $strategy = Sectors::getBusinessModelStrategy($businessModel);
 
         $ctx = new EarningsSimulationContext(
             $stock,
@@ -386,7 +388,7 @@ class EarningsEngine
             return [];
         }
 
-        $strategy = \App\Data\Company\Sectors::getBusinessModelStrategy(\App\Data\Company\Sectors::businessModelFor($stock->getIndustry()));
+        $strategy = Sectors::getBusinessModelStrategy(Sectors::businessModelFor($stock->getIndustry()));
         $afterTax = 1.0 - $strategy->getEffectiveTaxRate($macroState->corporateTaxRate);
 
         // Owed back to earlier quarters that were papered over, already in net income terms. Accruals are
@@ -735,10 +737,34 @@ class EarningsEngine
         if ($this->industryShareLedger !== null && $ctx->expectedRevenue > 0.0) {
             $firmSurprise = (($revenueWithoutSector ?? $ctx->actualRevenue) - $ctx->expectedRevenue) / $ctx->expectedRevenue;
             if ($ctx->segments === []) {
-                $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount, [
-                    'margin' => $ctx->stableMargin,
-                    'turnover' => $ctx->assetTurnover * self::TTM_QUARTERS,
-                ]);
+                if (FinancialBooks::hasBooks($ctx->stock)) {
+                    $actualBookShares = FinancialBooks::shares($ctx->stock, $actuals->streamRevenue);
+                    $plannedBookShares = FinancialBooks::shares($streamBasis);
+                    $sectorDraw = ($ctx->actualRevenue - ($revenueWithoutSector ?? $ctx->actualRevenue)) / $ctx->expectedRevenue;
+                    foreach (FinancialBooks::industries($ctx->stock) as $book => $bookIndustry) {
+                        $bookRevenue = $ctx->actualRevenue * ($actualBookShares[$book] ?? 0.0);
+                        $planned = $ctx->expectedRevenue * ($plannedBookShares[$book] ?? 0.0);
+                        $gain = $planned > 0.0 ? ($bookRevenue / $planned) - 1.0 - $sectorDraw : $firmSurprise;
+                        $bookStrategy = $book === FinancialBooks::MAIN ? $ctx->strategy : Sectors::strategyFor($bookIndustry);
+                        $bookMarket = $this->industryShareLedger->revenueMarketSize(
+                            $bookIndustry,
+                            $ctx->macroState,
+                            IndustryShareLedger::secularExcessGrowth($bookStrategy, $ctx->stock),
+                        );
+                        $bookShare = $bookMarket !== null && $bookMarket > 0.0
+                            ? min(1.0, ($bookRevenue * 4.0) / $bookMarket)
+                            : $ctx->addressableShare;
+                        $this->industryShareLedger->recordBookGain($ctx->stock, $book, $bookRevenue * 4.0, $gain, $bookShare, $ctx->tickCount, [
+                            'margin' => $ctx->stableMargin,
+                            'turnover' => $ctx->assetTurnover * self::TTM_QUARTERS,
+                        ]);
+                    }
+                } else {
+                    $this->industryShareLedger->recordIdiosyncraticGain($ctx->stock, $ctx->actualRevenue * 4.0, $firmSurprise, $ctx->addressableShare, $ctx->tickCount, [
+                        'margin' => $ctx->stableMargin,
+                        'turnover' => $ctx->assetTurnover * self::TTM_QUARTERS,
+                    ]);
+                }
             } else {
                 // Plant kept by segment: each segment's industry books that segment's sales alone, so the company's
                 // revenue is counted once across its industries, and the gain it took there, its own lines' sales over

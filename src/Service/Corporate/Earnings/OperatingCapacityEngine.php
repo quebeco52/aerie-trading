@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Earnings;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\DTO\EarningsSimulationContext;
@@ -209,9 +210,11 @@ final class OperatingCapacityEngine
         // drain lands in EXPECTED revenue because analysts have already read the rivals' reports.
         $rivalShareDrain = 0.0;
         if ($this->industryShareLedger !== null) {
-            $rivalShareDrain = $ctx->segments === []
-                ? $strategy->getIndustrySubstitutability() * $this->industryShareLedger->resolveRivalShareDrain($stock, $ctx->tickCount, $ctx->ticksPerYear)
-                : $this->resolveSegmentRivalDrain($ctx, $this->industryShareLedger);
+            $rivalShareDrain = match (true) {
+                $ctx->segments !== [] => $this->resolveSegmentRivalDrain($ctx, $this->industryShareLedger),
+                FinancialBooks::hasBooks($stock) => $this->resolveBookRivalDrain($ctx, $this->industryShareLedger),
+                default => $strategy->getIndustrySubstitutability() * $this->industryShareLedger->resolveRivalShareDrain($stock, $ctx->tickCount, $ctx->ticksPerYear),
+            };
             $macroDemandShift += $rivalShareDrain;
         }
         $ctx->rivalShareDrain = $rivalShareDrain;
@@ -591,6 +594,28 @@ final class OperatingCapacityEngine
                 * $ledger->resolveSegmentRivalDrain($ctx->stock, $segment, $books['sales'] * (float) $ctx->stock->getTotalRevenue(), $ctx->tickCount, $ctx->ticksPerYear);
             $ctx->segments[$segment] = $books;
             $drain += $books['sales'] * $books['drain'];
+        }
+
+        return $drain;
+    }
+
+    /**
+     * The drain on a multi-market financial company: each revenue book absorbs what rivals in its industry took
+     * from it, scaled by that industry's substitutability and weighed by the book's share of total revenue.
+     */
+    private function resolveBookRivalDrain(EarningsSimulationContext $ctx, IndustryShareLedger $ledger): float
+    {
+        $weights = FinancialBooks::shares($ctx->stock);
+        $totalRevenue = (float) $ctx->stock->getTotalRevenue();
+        $drain = 0.0;
+        foreach (FinancialBooks::industries($ctx->stock) as $book => $industry) {
+            $weight = $weights[$book] ?? 0.0;
+            if ($weight <= 0.0) {
+                continue;
+            }
+            $strategy = $book === FinancialBooks::MAIN ? $ctx->strategy : Sectors::strategyFor($industry);
+            $drain += $weight * $strategy->getIndustrySubstitutability()
+                * $ledger->resolveBookRivalDrain($ctx->stock, $book, $weight * $totalRevenue, $ctx->tickCount, $ctx->ticksPerYear);
         }
 
         return $drain;

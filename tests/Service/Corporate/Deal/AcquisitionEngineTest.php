@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Deal;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\IndustryMarkets;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Segments;
@@ -940,6 +941,49 @@ class AcquisitionEngineTest extends TestCase
         $market = $ledger->describeMergerMarket($bank, $this->healthyMacro(), 0.0, 300, 252);
         $this->assertNotNull($market);
         $this->assertEqualsWithDelta(0.40 + $cleared, $market['acquirer_share'], 1e-9);
+    }
+
+    /**
+     * A multi-market financial acquirer is reviewed in every book market and bounded by the tightest screen: here
+     * Insurance - Life is already concentrated while Insurance - Diversified has room, so life's safe harbour sizes
+     * the whole deal and both books' ledger records grow pro rata.
+     */
+    public function testMultiMarketFinancialIsBoundedByTightestBookMergerReviewAndSlicesBooks(): void
+    {
+        $this->primeHealthyDeal(operatingBase: 20_000_000_000.0);
+        $dove = $this->cashRichBank(wholesaleDebt: 10_000_000_000.0);
+        $dove->setTicker('DOVE')
+            ->setName('White Dove Insurance')
+            ->setIndustry('Insurance - Diversified')
+            ->setTotalEquity('200000000000')
+            ->setCorporateTreasury('200000000000')
+            ->setTotalRevenue('100000000000')
+            ->setOperatingMargin('0.10');
+        $well = (new Stock())->setTicker('WELL')->setIndustry('Insurance - Life');
+
+        $pcMarket = IndustryMarkets::openingMarket('Insurance - Diversified');
+        $lifeMarket = IndustryMarkets::openingMarket('Insurance - Life');
+        $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
+        // Low P&C share (15% of $354B), high life concentration (WELL 40% + DOVE/life 25% of $378B => HHI 2,225).
+        $ledger->recordBookGain($dove, FinancialBooks::MAIN, 0.15 * $pcMarket, 0.0, 0.15, 290);
+        $ledger->recordIdiosyncraticGain($well, 0.40 * $lifeMarket, 0.0, 0.40, 290);
+        $ledger->recordBookGain($dove, 'life', 0.25 * $lifeMarket, 0.0, 0.25, 290);
+
+        $engine = new AcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
+        $deal = $engine->evaluatePrivateAcquisition($dove, $this->healthyMacro(), 1.0, 300, 252);
+
+        $this->assertIsArray($deal);
+        $this->assertStringEndsWith('Sized to ' . AcquisitionEngine::LIMIT_MERGER_REVIEW . '.', $deal['event']['description']);
+        $acquired = (float) $dove->getTotalRevenue() - 100_000_000_000.0;
+        $clearedLife = MergerReview::maxClearedTargetShare(0.25, (0.40 ** 2) + (0.25 ** 2));
+        $this->assertEqualsWithDelta(($clearedLife * $lifeMarket) / 0.45, $acquired, 1.0);
+
+        $lifeAfter = $ledger->describeMergerMarket($dove, $this->healthyMacro(), 0.0, 300, 252, 'life');
+        $pcAfter = $ledger->describeMergerMarket($dove, $this->healthyMacro(), 0.0, 300, 252, FinancialBooks::MAIN);
+        $this->assertNotNull($lifeAfter);
+        $this->assertNotNull($pcAfter);
+        $this->assertEqualsWithDelta(0.25 + $clearedLife, $lifeAfter['acquirer_share'], 1e-9);
+        $this->assertEqualsWithDelta(0.15 + ((0.55 * $acquired) / $pcMarket), $pcAfter['acquirer_share'], 1e-9);
     }
 
     /** A steward bank with cash well past its target, so the cash-funded strategic acquisition trades. */

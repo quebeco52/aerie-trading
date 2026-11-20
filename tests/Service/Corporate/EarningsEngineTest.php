@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate;
 
+use App\Data\Company\FinancialBooks;
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\LifecycleStage;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
@@ -429,8 +431,10 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta(6.0, $economics['margins']['ads_and_cloud'] / $economics['margins'][Segments::MAIN], 1e-9);
 
         $ads = $store->readIndustry('Internet Content & Information')['WEAV/ads_and_cloud'] ?? null;
+        $marketplace = $store->readIndustry('Online Marketplaces')['WEAV/marketplace'] ?? null;
         $retail = $store->readIndustry('Internet Retail')['WEAV'] ?? null;
         $this->assertNotNull($ads);
+        $this->assertNotNull($marketplace);
         $this->assertNotNull($retail);
         $this->assertNotEqualsWithDelta($retail['gain'], $ads['gain'], 1e-9, 'each segment\'s own lines, not the company\'s surprise');
     }
@@ -4414,5 +4418,66 @@ class EarningsEngineTest extends TestCase
             (float) $stock->getLongRunReturn(),
             1e-4,
         );
+    }
+
+    /**
+     * Multi-market financials record each book's gain in its own industry without opening plant books, and absorb
+     * rival surprises from peers in those book markets.
+     */
+    public function testFinancialBooksRecordSeparateMarketGainsAndAbsorbBookRivalDrain(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $captured = null;
+        $dispatcher = new EventDispatcher();
+        $dispatcher->addListener(EarningsReportedEvent::class, static function (EarningsReportedEvent $event) use (&$captured): void {
+            $captured = $event->getContext();
+        });
+        $engine = $this->buildEngine($dispatcher, new IndustryShareLedger($store));
+        mt_srand(17);
+
+        $dove = $this->buildMatureIndustrial('DOVE')
+            ->setIndustry('Insurance - Diversified')
+            ->setTotalEquity('80000000000')
+            ->setCustomerDeposits('300000000000')
+            ->setTotalRevenue('120000000000')
+            ->setOperatingMargin('0.05')
+            ->setSamRatio('0.25');
+        $well = $this->buildMatureIndustrial('WELL')
+            ->setIndustry('Insurance - Life')
+            ->setTotalEquity('60000000000')
+            ->setCustomerDeposits('300000000000')
+            ->setTotalRevenue('90000000000')
+            ->setOperatingMargin('0.04')
+            ->setSamRatio('0.25');
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+
+        $wellTick = EarningsEngine::resolveReportingTick('WELL', 252);
+        $doveTick = EarningsEngine::resolveReportingTick('DOVE', 252);
+        $engine->calculate($well, $macro, $wellTick, 252);
+        $engine->calculate($dove, $macro, $doveTick, 252);
+
+        $this->assertNull(SegmentBooks::plant($dove->getEarningsMomentumZ() ?? []), 'financial books never open plant ledgers');
+        $pc = $store->readIndustry('Insurance - Diversified')['DOVE'] ?? null;
+        $life = $store->readIndustry('Insurance - Life')['DOVE/life'] ?? null;
+        $this->assertNotNull($pc);
+        $this->assertNotNull($life);
+        $this->assertNotEqualsWithDelta($pc['gain'], $life['gain'], 1e-9, 'each book records its own stream surprise');
+        $lifeMarket = IndustryMarkets::openingMarket('Insurance - Life');
+        $this->assertEqualsWithDelta($life['revenue'] / $lifeMarket, $life['addressable_share'], 1e-4);
+
+        // Next quarter: WELL beats in Insurance - Life; DOVE absorbs weighted rival drain on its life book alone.
+        $well->setEarningsMomentumZ(
+            ['gain' => 0.0] + ($well->getEarningsMomentumZ() ?? []),
+        );
+        $ledger = new IndustryShareLedger($store);
+        $wellAnnual = 90_000_000_000.0;
+        $ledger->recordIdiosyncraticGain($well, $wellAnnual, 0.12, $wellAnnual / $lifeMarket, $doveTick + 10);
+
+        $lifeWeight = FinancialBooks::shares($dove)['life'];
+        $engine->calculate($dove, $macro, $doveTick + 63, 252);
+        $this->assertNotNull($captured);
+        $substitutability = Sectors::strategyFor('Insurance - Life')->getIndustrySubstitutability();
+        $expectedDrain = $lifeWeight * $substitutability * (-($wellAnnual * 0.12) / ($lifeMarket - $wellAnnual));
+        $this->assertEqualsWithDelta($expectedDrain, $captured->rivalShareDrain, 1e-6);
     }
 }

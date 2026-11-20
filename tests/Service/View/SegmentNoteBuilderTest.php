@@ -119,4 +119,31 @@ class SegmentNoteBuilderTest extends TestCase
     {
         $this->assertNull(SegmentNoteBuilder::fromReport(self::stock('LOON', 'Telecom Services'), new CorporateReport()));
     }
+
+    /** Multi-market financials show each book's industry and revenue share, with plant-only columns blank. */
+    public function testMultiMarketFinancialReportsItsBooksPreAndPostFiling(): void
+    {
+        $dove = self::stock('DOVE', 'Insurance - Diversified');
+
+        $pre = SegmentNoteBuilder::fromReport($dove, null);
+        $this->assertNotNull($pre);
+        $this->assertCount(2, $pre);
+        $this->assertSame(['Property and casualty', 'Life and annuities'], array_column($pre, 'label'));
+        $this->assertSame(['Insurance - Diversified', 'Insurance - Life'], array_column($pre, 'industry'));
+        $this->assertNull($pre[0]['revenue']);
+        $this->assertNull($pre[1]['revenue']);
+        $this->assertEqualsWithDelta(0.55, $pre[0]['share'], 1e-12);
+        $this->assertEqualsWithDelta(0.45, $pre[1]['share'], 1e-12);
+        $this->assertNull($pre[0]['outlook']);
+        $this->assertNull($pre[0]['margin']);
+        $this->assertNull($pre[0]['assets']);
+
+        $report = (new CorporateReport())->setRevenueStreams(['property_casualty_premiums' => 600.0, 'life_insurance_premiums' => 400.0]);
+        $post = SegmentNoteBuilder::fromReport($dove, $report);
+        $this->assertNotNull($post);
+        $this->assertEqualsWithDelta(600.0, $post[0]['revenue'], 1e-9);
+        $this->assertEqualsWithDelta(400.0, $post[1]['revenue'], 1e-9);
+        $this->assertEqualsWithDelta(0.60, $post[0]['share'], 1e-12);
+        $this->assertEqualsWithDelta(0.40, $post[1]['share'], 1e-12);
+    }
 }

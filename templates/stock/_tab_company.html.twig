@@ -21,32 +21,44 @@
 
 {# Lines that sell into a market of their own, grouped as an annual report's segment note (SegmentNoteBuilder). #}
 {% if segments|default(null) %}
+	{% set financialBooks = industry and industry.isFinancial %}
 	<div class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20" id="segments-card">
 		<h3 class="text-sm font-semibold text-on-surface">Segments</h3>
-		<p class="text-xs text-on-surface-variant mt-1">Each segment sells to its own customers against its own rivals, builds toward its own market and earns its own margin. Revenue and operating margin in the last quarterly report; assets as each segment's share of the company's plant.</p>
+		<p class="text-xs text-on-surface-variant mt-1">{{ financialBooks ? 'Each book sells into its own industry against its own rivals. Revenue from the last quarterly report; share of total revenue.' : 'Each segment sells to its own customers against its own rivals, builds toward its own market and earns its own margin. Revenue and operating margin in the last quarterly report; assets as each segment\'s share of the company\'s plant.' }}</p>
 		<div class="overflow-x-auto mt-4">
 			<table class="w-full text-left border-collapse">
 				<thead>
 					<tr class="table-head">
-						<th class="py-2">Segment</th>
+						<th class="py-2">{{ financialBooks ? 'Book' : 'Segment' }}</th>
 						<th class="py-2">Industry</th>
-						<th class="py-2 text-right">Outlook</th>
+						{% if not financialBooks %}
+							<th class="py-2 text-right">Outlook</th>
+						{% endif %}
 						<th class="py-2 text-right">Revenue</th>
-						<th class="py-2 text-right">Share</th>
-						<th class="py-2 text-right">Operating margin</th>
-						<th class="py-2 text-right">Assets</th>
+						<th class="py-2 text-right">Of sales</th>
+						<th class="py-2 text-right">Market share</th>
+						{% if not financialBooks %}
+							<th class="py-2 text-right">Operating margin</th>
+							<th class="py-2 text-right">Assets</th>
+						{% endif %}
 					</tr>
 				</thead>
 				<tbody class="divide-y divide-outline-variant/10 text-xs">
 					{% for segment in segments %}
+						{% set segMarketShare = industry ? ((industry.marketShareByIndustry|default([]))[segment.industry] ?? null) : null %}
 						<tr>
 							<td class="py-2 text-on-surface">{{ segment.label }}</td>
 							<td class="py-2 text-on-surface-variant"><a href="{{ path('app_industry', {slug: industry_slug(segment.industry)}) }}" class="hover:text-primary hover:underline">{{ segment.industry }}</a></td>
-							<td class="py-2 text-right font-mono tabular-nums {{ segment.outlook is null ? 'text-on-surface-faint' : (segment.outlook - 1)|signed_class }}">{{ segment.outlook|figure('index', 2) }}</td>
+							{% if not financialBooks %}
+								<td class="py-2 text-right font-mono tabular-nums {{ segment.outlook is null ? 'text-on-surface-faint' : (segment.outlook - 1)|signed_class }}">{{ segment.outlook|figure('index', 2) }}</td>
+							{% endif %}
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.revenue is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.revenue|format_large('$') }}</td>
 							<td class="py-2 text-right font-mono tabular-nums {{ segment.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.share|pct(1) }}</td>
-							<td class="py-2 text-right font-mono tabular-nums {{ segment.margin is null ? 'text-on-surface-faint' : segment.margin|signed_class }}">{{ segment.margin|pct(1) }}</td>
-							<td class="py-2 text-right font-mono tabular-nums {{ segment.assets is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.assets|pct(1) }}</td>
+							<td class="py-2 text-right font-mono tabular-nums {{ segMarketShare is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segMarketShare|pct(1) }}</td>
+							{% if not financialBooks %}
+								<td class="py-2 text-right font-mono tabular-nums {{ segment.margin is null ? 'text-on-surface-faint' : segment.margin|signed_class }}">{{ segment.margin|pct(1) }}</td>
+								<td class="py-2 text-right font-mono tabular-nums {{ segment.assets is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ segment.assets|pct(1) }}</td>
+							{% endif %}
 						</tr>
 					{% endfor %}
 				</tbody>
@@ -236,6 +248,41 @@
 			<p class="mt-4 pt-4 border-t border-outline-variant/15 text-xs text-on-surface-variant leading-relaxed">Its listed peers sell into different markets, so no share among them is shown.</p>
 		{% endif %}
 
+		{% set otherMarkets = industry.otherMarkets|default([]) %}
+		{% if otherMarkets is not empty %}
+			<div class="mt-4 pt-4 border-t border-outline-variant/15 space-y-4" id="other-markets">
+				<p class="text-xs font-semibold text-on-surface-variant">Position in other markets</p>
+				{% for market in otherMarkets %}
+					<div>
+						<div class="flex flex-wrap items-baseline justify-between gap-2 mb-2 text-xs">
+							<span><a href="{{ path('app_industry', {slug: market.slug}) }}" class="text-primary hover:underline font-medium">{{ market.industry }}</a> <span class="text-on-surface-faint">·</span> <span class="text-on-surface-variant">{{ market.label }}</span></span>
+							<span class="font-mono tabular-nums text-on-surface-variant">
+								{%- if market.marketSize is not null %}{{ market.marketSize|format_large('$') }}{% if market.marketGdpShare is not null %} <span class="text-on-surface-faint">·</span> {{ market.marketGdpShare|pct(1) }} GDP{% endif %}{% endif -%}
+								{%- if market.herfindahl is not null %}{% if market.marketSize is not null %} <span class="text-on-surface-faint">·</span> {% endif %}<span class="{{ market.highlyConcentrated ? 'text-warning' : '' }}">HHI {{ market.herfindahl|hhi }}</span>{% endif -%}
+							</span>
+						</div>
+						<ul class="space-y-1.5" aria-label="{{ market.industry }} shares">
+							{% for peerTicker, share in market.marketShares %}
+								{% set isSelf = peerTicker == asset.ticker %}
+								<li class="flex items-center gap-3 text-xs">
+									<span class="w-16 shrink-0 font-mono {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{% if isSelf %}{{ peerTicker }}{% else %}<a href="/stock/{{ peerTicker }}" class="hover:underline">{{ peerTicker }}</a>{% endif %}</span>
+									<span class="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><span class="block h-full rounded-full {{ isSelf ? 'bg-primary' : 'bg-on-surface-faint' }}" style="width: {{ (min(1, share) * 100)|round(1) }}%"></span></span>
+									<span class="w-14 shrink-0 text-right font-mono tabular-nums {{ isSelf ? 'text-primary font-bold' : 'text-on-surface-variant' }}">{{ share|pct(1) }}</span>
+								</li>
+							{% endfor %}
+							{% if market.fringeShare is not null and market.fringeShare >= 0.0005 %}
+								<li class="flex items-center gap-3 text-xs">
+									<span class="w-16 shrink-0 text-on-surface-faint">Unlisted</span>
+									<span class="flex-1 h-1.5 rounded-full bg-surface-container-highest overflow-hidden"><span class="block h-full rounded-full bg-outline-variant" style="width: {{ (min(1, market.fringeShare) * 100)|round(1) }}%"></span></span>
+									<span class="w-14 shrink-0 text-right font-mono tabular-nums text-on-surface-faint">{{ market.fringeShare|pct(1) }}</span>
+								</li>
+							{% endif %}
+						</ul>
+					</div>
+				{% endfor %}
+			</div>
+		{% endif %}
+
 		{# Merger review: the same ledger reading the M&A engine sizes this firm's deals on. #}
 		{% set review = industry.mergerReview %}
 		{% if review %}
@@ -254,6 +301,9 @@
 					{{ ui.tile('Fringe', review.fringeShare|pct(1), 'unlisted competitors, available to buy') }}
 					{{ ui.tile('Largest deal', review.clearedShare|pct(1), 'of the market · ' ~ (review.reviewBinds ? 'capped by review' : 'capped by the fringe'), {tone: review.clearedShare < 0.005 ? 'text-warning' : 'text-on-surface'}) }}
 				</div>
+				{% if industry.hasFinancialBooks|default(false) %}
+					<p class="mt-2.5 text-xs text-on-surface-variant leading-relaxed">Deals are also reviewed in each other industry the company's books sell into.</p>
+				{% endif %}
 			</div>
 		{% endif %}
 	</div>
@@ -335,8 +385,10 @@
 
 				{# Peer Companies #}
 				{% for peer in peers %}
-					{# One divider where the direct competitors end and the rest of the sector begins. #}
-					{% if not peer.sameIndustry and (loop.first or peers[loop.index0 - 1].sameIndustry) %}
+					{# One divider where the direct and cross-market competitors end and the rest of the sector begins. #}
+					{% set peerDirect = peer.sameIndustry or peer.sharedMarket|default(false) %}
+					{% set prevDirect = not loop.first and (peers[loop.index0 - 1].sameIndustry or peers[loop.index0 - 1].sharedMarket|default(false)) %}
+					{% if not peerDirect and (loop.first or prevDirect) %}
 						<tr>
 							<td colspan="8" class="pt-3 pb-1 text-xs font-semibold text-on-surface-faint">Elsewhere in {{ asset.sector }}</td>
 						</tr>
@@ -345,6 +397,9 @@
 						<th scope="row" class="py-2.5 flex items-center gap-2 text-left font-normal">
 							<a href="/stock/{{ peer.ticker }}" class="font-mono text-primary font-bold group-hover:underline outline-none after:absolute after:inset-0 after:content-[''] focus-visible:underline focus-visible:underline-offset-4">{{ peer.ticker }}</a>
 							<span class="text-on-surface-variant text-xs">{{ peer.name }}</span>
+							{% if peer.sharedMarket|default(false) and peer.industry %}
+								<span class="text-2xs text-on-surface-faint">{{ peer.industry }}</span>
+							{% endif %}
 						</th>
 						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.price|money(2) }}</td>
 						<td class="py-2.5 text-right font-mono tabular-nums text-on-surface">{{ peer.marketCap|format_large('$') }}</td>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\Segments;
 use App\Entity\CorporateReport;
 use App\Entity\Stock;
@@ -31,6 +32,9 @@ class SegmentNoteBuilder
     /** @return array{segments: list<SegmentRow>|null} */
     public function build(Stock $stock): array
     {
+        if (FinancialBooks::hasBooks($stock)) {
+            return ['segments' => self::financialRows($stock, $this->reports->findLatestFor($stock))];
+        }
         if (!SegmentBooks::keepsBooks($stock)) {
             return ['segments' => null];
         }
@@ -52,6 +56,9 @@ class SegmentNoteBuilder
      */
     public static function fromReport(Stock $stock, ?CorporateReport $report, array $outlooks = []): ?array
     {
+        if (FinancialBooks::hasBooks($stock)) {
+            return self::financialRows($stock, $report);
+        }
         if (!SegmentBooks::keepsBooks($stock)) {
             return null;
         }
@@ -102,6 +109,43 @@ class SegmentNoteBuilder
                 'share' => $total > 0.0 && $segment['revenue'] > 0.0 ? $segment['revenue'] / $total : null,
                 'margin' => $scale !== null && isset($margins[$key]) ? $margins[$key] * $scale : null,
                 'assets' => $plant[$key] ?? null,
+            ];
+        }
+
+        return $rows;
+    }
+
+    /**
+     * @return list<SegmentRow>|null
+     */
+    private static function financialRows(Stock $stock, ?CorporateReport $report): ?array
+    {
+        $industries = FinancialBooks::industries($stock);
+        if ($industries === []) {
+            return null;
+        }
+
+        $ticker = (string) $stock->getTicker();
+        $reportedStreams = $report?->getRevenueStreams();
+        $shares = FinancialBooks::shares($stock, $reportedStreams);
+        $bookRevenues = [];
+        foreach ($reportedStreams ?? [] as $stream => $revenue) {
+            $book = FinancialBooks::bookOf($ticker, (string) $stream);
+            $bookRevenues[$book] = ($bookRevenues[$book] ?? 0.0) + max(0.0, (float) $revenue);
+        }
+
+        $rows = [];
+        foreach ($industries as $key => $industry) {
+            $revenue = $bookRevenues[$key] ?? 0.0;
+            $share = $shares[$key] ?? 0.0;
+            $rows[] = [
+                'label' => FinancialBooks::label($stock, $key),
+                'industry' => $industry,
+                'outlook' => null,
+                'revenue' => $revenue > 0.0 ? $revenue : null,
+                'share' => $share > 0.0 ? $share : null,
+                'margin' => null,
+                'assets' => null,
             ];
         }
 

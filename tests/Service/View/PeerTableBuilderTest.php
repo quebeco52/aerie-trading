@@ -134,4 +134,31 @@ class PeerTableBuilderTest extends TestCase
     {
         $this->assertSame([], $this->builder([])->build(new Stock()));
     }
+
+    /**
+     * Cross-market rivals carry sharedMarket: true and rank ahead of unrelated sector peers while keeping sameIndustry
+     * intact.
+     */
+    public function testCrossMarketRivalsCarrySharedMarketAndSortBeforeUnrelatedPeers(): void
+    {
+        $dove = $this->peer('DOVE', 100.0, 1_000.0, 8.0, 'Insurance - Diversified');
+        $peers = $this->builder([
+            $this->peer('SAFE', 500.0, 1_000.0, 20.0, 'Insurance - Reinsurance'),
+            $this->peer('WELL', 100.0, 1_000.0, 6.0, 'Insurance - Life'),
+            $this->peer('PCIN', 50.0, 1_000.0, 4.0, 'Insurance - Diversified'),
+        ])->build($dove);
+
+        $this->assertSame(['PCIN', 'WELL', 'SAFE'], array_column($peers, 'ticker'));
+        $this->assertSame([true, false, false], array_column($peers, 'sameIndustry'));
+        $this->assertSame([false, true, false], array_column($peers, 'sharedMarket'));
+
+        $weav = $this->peer('WEAV', 120.0, 1_000.0, 5.0, 'Internet Retail');
+        $weavPeers = $this->builder([
+            $this->peer('FALC', 300.0, 1_000.0, 10.0, 'Auto Manufacturers'),
+            $this->peer('JDAW', 80.0, 1_000.0, 4.0, 'Online Marketplaces'),
+        ])->build($weav);
+
+        $this->assertSame(['JDAW', 'FALC'], array_column($weavPeers, 'ticker'));
+        $this->assertSame([true, false], array_column($weavPeers, 'sharedMarket'));
+    }
 }

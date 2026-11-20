@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Service\View;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\IndustryMarkets;
 use App\Data\Company\IndustryMoats;
 use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\CorporateReportRepository;
@@ -67,12 +69,15 @@ class IndustryPositionBuilder
      *         tracked: bool,
      *         pricesCapacity: bool,
      *         isFinancial: bool,
+     *         hasFinancialBooks: bool,
      *         sharedMarket: bool,
      *         addressableShare: float,
      *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, trailingReturn: ?float, marginalReturn: float, moat: array{label: string, spread: float}},
      *         marketSize: float|null,
      *         marketGdpShare: float|null,
      *         marketShares: array<string, float>,
+     *         marketShareByIndustry: array<string, float>,
+     *         otherMarkets: list<array{industry: string, slug: string, label: string, isFinancial: bool, marketSize: float|null, marketGdpShare: float|null, marketShares: array<string, float>, ownShare: float|null, fringeShare: float|null, herfindahl: float|null, highlyConcentrated: bool, concentrationLine: float}>,
      *         listedShare: float|null,
      *         fringeShare: float|null,
      *         herfindahl: float|null,
@@ -171,6 +176,17 @@ class IndustryPositionBuilder
             default => 'balanced',
         };
         $saturationPenalty = $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarketSaturationPenalty($stock, $evaluationCapital, $macroState);
+        $otherMarkets = $stock->isBankrupt() ? [] : $this->otherMarkets($stock, $macroState, $tick);
+        $marketShareByIndustry = [];
+        $ticker = (string) $stock->getTicker();
+        if ($structure['sharedMarket'] && isset($structure['shares'][$ticker])) {
+            $marketShareByIndustry[$industry] = $structure['shares'][$ticker];
+        }
+        foreach ($otherMarkets as $other) {
+            if ($other['ownShare'] !== null) {
+                $marketShareByIndustry[$other['industry']] = $other['ownShare'];
+            }
+        }
 
         return [
             'marketShare' => $addressableShare,
@@ -178,6 +194,7 @@ class IndustryPositionBuilder
                 'tracked' => $description !== null,
                 'pricesCapacity' => $pricesCapacity,
                 'isFinancial' => $strategy->isFinancial(),
+                'hasFinancialBooks' => FinancialBooks::hasBooks($stock),
                 'sharedMarket' => $structure['sharedMarket'],
                 'addressableShare' => $addressableShare,
                 'saturation' => [
@@ -192,6 +209,8 @@ class IndustryPositionBuilder
                 'marketSize' => $structure['marketSize'],
                 'marketGdpShare' => $structure['marketGdpShare'],
                 'marketShares' => $structure['shares'],
+                'marketShareByIndustry' => $marketShareByIndustry,
+                'otherMarkets' => $otherMarkets,
                 'listedShare' => $structure['listedShare'],
                 'fringeShare' => $structure['fringeShare'],
                 'herfindahl' => $structure['herfindahl'],
@@ -362,29 +381,43 @@ class IndustryPositionBuilder
             return $this->structureFromLedger($mergerMarket, $macroState, $concentrationLine);
         }
 
+        $trendGdp = IndustryShareLedger::trendNominalGdp($macroState);
+        $lead = $liveStocks[0];
+        $marketSize = IndustryMarkets::hasIndustry($industry)
+            ? IndustryMarkets::openingMarket($industry) * $trendGdp * CorporateMetrics::secularMarketGrowth($lead, $macroState->totalTime)
+            : null;
+
         $shares = [];
         foreach ($liveStocks as $member) {
-            $evalCap = $strategy->getEvaluationCapital((float) $member->getTotalEquity(), $member->getInvestedCapital());
-            $share = min(
-                FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
-                $this->corporateMetrics->calculateAddressableShare($member, $evalCap, $macroState),
-            );
+            $ticker = (string) $member->getTicker();
+            if ($ticker === '') {
+                continue;
+            }
+            if ($marketSize !== null && $marketSize > 0.0 && FinancialBooks::hasBooks($member)) {
+                $mainWeight = FinancialBooks::shares($member)[FinancialBooks::MAIN] ?? 1.0;
+                $share = min(1.0, ((float) $member->getTotalRevenue() * $mainWeight) / $marketSize);
+            } else {
+                $evalCap = $strategy->getEvaluationCapital((float) $member->getTotalEquity(), $member->getInvestedCapital());
+                $share = min(
+                    FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
+                    $this->corporateMetrics->calculateAddressableShare($member, $evalCap, $macroState),
+                );
+            }
             if ($share > 0.0) {
-                $shares[(string) $member->getTicker()] = $share;
+                $shares[$ticker] = $share;
             }
         }
+
+        if ($this->stocks !== null && $marketSize !== null && $marketSize > 0.0) {
+            $shares = $this->addFinancialBookSellers($industry, $marketSize, $shares);
+        }
+
         arsort($shares);
         $totalListed = array_sum($shares);
         $listedShare = min(1.0, $totalListed);
         $fringeShare = max(0.0, 1.0 - $totalListed);
         $herfindahl = min(1.0, array_sum(array_map(static fn(float $s): float => $s * $s, $shares)));
-        $trendGdp = IndustryShareLedger::trendNominalGdp($macroState);
-        if (IndustryMarkets::hasIndustry($industry)) {
-            $marketSize = IndustryMarkets::openingMarket($industry)
-                * $trendGdp
-                * CorporateMetrics::secularMarketGrowth($liveStocks[0], $macroState->totalTime);
-        } else {
-            $lead = $liveStocks[0];
+        if ($marketSize === null) {
             $leadRev = (float) $lead->getTotalRevenue();
             $leadShare = $shares[(string) $lead->getTicker()] ?? 0.0;
             $marketSize = $leadRev > 0.0 && $leadShare > 0.0 ? $leadRev / $leadShare : null;
@@ -398,7 +431,7 @@ class IndustryPositionBuilder
             $herfindahl,
             $trendGdp,
             $concentrationLine,
-            count($liveStocks),
+            $shares !== [] ? count($shares) : count($liveStocks),
         );
     }
 
@@ -509,5 +542,123 @@ class IndustryPositionBuilder
             'reviewBinds' => $reviewCap < $market['fringe_share'],
             'screens' => $screens,
         ];
+    }
+
+    /**
+     * Secondary markets this company sells into via FinancialBooks or held SegmentBooks, each with whole-market share
+     * breakdown (rivals and unlisted fringe) and HHI.
+     *
+     * @return list<array{industry: string, slug: string, label: string, isFinancial: bool, marketSize: float|null, marketGdpShare: float|null, marketShares: array<string, float>, ownShare: float|null, fringeShare: float|null, herfindahl: float|null, highlyConcentrated: bool, concentrationLine: float}>
+     */
+    private function otherMarkets(Stock $stock, MacroStateDTO $macroState, int $tick): array
+    {
+        $secondary = [];
+        if (FinancialBooks::hasBooks($stock)) {
+            foreach (FinancialBooks::industries($stock) as $book => $targetIndustry) {
+                if ($book !== FinancialBooks::MAIN) {
+                    $secondary[$book] = ['industry' => $targetIndustry, 'label' => FinancialBooks::label($stock, $book)];
+                }
+            }
+        } elseif (SegmentBooks::keepsBooks($stock)) {
+            $hasPlant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) !== null;
+            foreach (SegmentBooks::industries($stock) as $segment => $targetIndustry) {
+                if ($segment === Segments::MAIN || ($hasPlant && !SegmentBooks::holdsPlant($stock, $segment))) {
+                    continue;
+                }
+                $secondary[$segment] = ['industry' => $targetIndustry, 'label' => SegmentBooks::label($stock, $segment)];
+            }
+        }
+        if ($secondary === []) {
+            return [];
+        }
+
+        $ticker = (string) $stock->getTicker();
+        $concentrationLine = MergerReview::reviewScreens($macroState->mergerReviewLeniency)['concentrated'];
+        $markets = [];
+        foreach ($secondary as $key => ['industry' => $targetIndustry, 'label' => $label]) {
+            $targetStrategy = Sectors::strategyFor($targetIndustry);
+            $mergerMarket = $this->ledger->describeMergerMarket(
+                $stock,
+                $macroState,
+                IndustryShareLedger::secularExcessGrowth($targetStrategy, $stock),
+                $tick,
+                $this->ticksPerYear,
+                $key,
+            );
+            $otherStructure = null;
+            if ($mergerMarket !== null) {
+                $otherStructure = $this->structureFromLedger($mergerMarket, $macroState, $concentrationLine);
+            } elseif (FinancialBooks::hasBooks($stock) && $this->stocks !== null) {
+                $livePeers = array_values(array_filter(
+                    $this->stocks->findBy(['industry' => $targetIndustry]),
+                    static fn(Stock $s): bool => !$s->isBankrupt(),
+                ));
+                if ($livePeers !== []) {
+                    $otherStructure = $this->industryMarketStructure($targetIndustry, $livePeers, $macroState);
+                } elseif (IndustryMarkets::hasIndustry($targetIndustry)) {
+                    $trendGdp = IndustryShareLedger::trendNominalGdp($macroState);
+                    $marketSize = IndustryMarkets::openingMarket($targetIndustry)
+                        * $trendGdp
+                        * CorporateMetrics::secularMarketGrowth($stock, $macroState->totalTime);
+                    $shares = $marketSize > 0.0 ? $this->addFinancialBookSellers($targetIndustry, $marketSize, []) : [];
+                    arsort($shares);
+                    $totalListed = array_sum($shares);
+                    $otherStructure = $this->formatMarketStructure(
+                        $marketSize > 0.0 ? $marketSize : null,
+                        $shares,
+                        min(1.0, $totalListed),
+                        max(0.0, 1.0 - $totalListed),
+                        min(1.0, array_sum(array_map(static fn(float $s): float => $s * $s, $shares))),
+                        $trendGdp,
+                        $concentrationLine,
+                        count($shares),
+                    );
+                }
+            }
+
+            if ($otherStructure === null || !$otherStructure['sharedMarket'] || !isset($otherStructure['shares'][$ticker])) {
+                continue;
+            }
+            $markets[] = [
+                'industry' => $targetIndustry,
+                'slug' => Sectors::industrySlug($targetIndustry),
+                'label' => $label,
+                'isFinancial' => $targetStrategy->isFinancial(),
+                'marketSize' => $otherStructure['marketSize'],
+                'marketGdpShare' => $otherStructure['marketGdpShare'],
+                'marketShares' => $otherStructure['shares'],
+                'ownShare' => $otherStructure['shares'][$ticker],
+                'fringeShare' => $otherStructure['fringeShare'],
+                'herfindahl' => $otherStructure['herfindahl'],
+                'highlyConcentrated' => $otherStructure['highlyConcentrated'],
+                'concentrationLine' => $otherStructure['concentrationLine'],
+            ];
+        }
+
+        return $markets;
+    }
+
+    /**
+     * @param array<string, float> $shares
+     * @return array<string, float>
+     */
+    private function addFinancialBookSellers(string $industry, float $marketSize, array $shares): array
+    {
+        if ($this->stocks === null || $marketSize <= 0.0) {
+            return $shares;
+        }
+        foreach (FinancialBooks::sellersForIndustry($industry) as ['ticker' => $sellerTicker, 'book' => $book]) {
+            $seller = $this->stocks->findOneByTicker($sellerTicker);
+            if ($seller === null || $seller->isBankrupt() || isset($shares[$sellerTicker])) {
+                continue;
+            }
+            $weight = FinancialBooks::shares($seller)[$book] ?? 0.0;
+            $share = min(1.0, ((float) $seller->getTotalRevenue() * $weight) / $marketSize);
+            if ($share > 0.0) {
+                $shares[$sellerTicker] = $share;
+            }
+        }
+
+        return $shares;
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Deal;
 
+use App\Data\Company\FinancialBooks;
 use App\Data\Company\IndustryAdjacency;
 use App\Data\Company\Segments;
 use App\DTO\AcquisitionContext;
@@ -558,6 +559,10 @@ class AcquisitionEngine
             ];
         }
 
+        if ($ctx->segment === Segments::MAIN && FinancialBooks::hasBooks($ctx->acquirer)) {
+            return $this->resolveLargestFinancialBooksTarget($ctx, $price);
+        }
+
         $market = $this->industryShareLedger?->describeMergerMarket(
             $ctx->acquirer,
             $ctx->macroState,
@@ -576,6 +581,48 @@ class AcquisitionEngine
             'price' => $price(min($market['fringe_share'], $reviewShare) * $market['market_revenue']),
             'limit' => $reviewShare < $market['fringe_share'] ? self::LIMIT_MERGER_REVIEW : self::LIMIT_AVAILABLE_MARKET,
         ];
+    }
+
+    /**
+     * Multi-market financial acquisitions scale the whole firm pro rata, so merger review tests every priced book
+     * and binds to the tightest cleared target revenue across them.
+     *
+     * @param \Closure(float): float $price
+     * @return array{price: float, limit: string}
+     */
+    private function resolveLargestFinancialBooksTarget(AcquisitionContext $ctx, \Closure $price): array
+    {
+        $bestRevenue = INF;
+        $bestLimit = self::LIMIT_AVAILABLE_MARKET;
+        $anyPriced = false;
+
+        foreach (FinancialBooks::shares($ctx->acquirer) as $book => $weight) {
+            if ($weight <= 0.0) {
+                continue;
+            }
+            $market = $this->industryShareLedger?->describeMergerMarket(
+                $ctx->acquirer,
+                $ctx->macroState,
+                IndustryShareLedger::secularExcessGrowth($this->segmentStrategy($ctx->acquirer, $book), $ctx->acquirer),
+                $ctx->tickCount,
+                $ctx->ticksPerYear,
+                $book,
+            );
+            if ($market === null) {
+                continue;
+            }
+            $anyPriced = true;
+            $reviewShare = MergerReview::maxClearedTargetShare($market['acquirer_share'], $market['herfindahl'], $ctx->macroState->mergerReviewLeniency);
+            $capRevenue = (min($market['fringe_share'], $reviewShare) * $market['market_revenue']) / $weight;
+            if ($capRevenue < $bestRevenue) {
+                $bestRevenue = $capRevenue;
+                $bestLimit = $reviewShare < $market['fringe_share'] ? self::LIMIT_MERGER_REVIEW : self::LIMIT_AVAILABLE_MARKET;
+            }
+        }
+
+        return $anyPriced
+            ? ['price' => $price($bestRevenue), 'limit' => $bestLimit]
+            : ['price' => INF, 'limit' => self::LIMIT_AVAILABLE_MARKET];
     }
 
     /**
@@ -755,7 +802,11 @@ class AcquisitionEngine
         ProForma::restateOperatingHistory($stock, 1.0, $acquiredRevenue, $acquiredOperatingIncome);
         // Each segment the deal buys into books its slice in its own industry (an airline bought brings its holds).
         $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []);
-        $slices = $plant === null ? [$ctx->segment => 1.0] : SegmentBooks::boughtSlices($plant, $ctx->segment, SegmentBooks::jointSegments($stock));
+        $slices = match (true) {
+            $plant !== null => SegmentBooks::boughtSlices($plant, $ctx->segment, SegmentBooks::jointSegments($stock)),
+            $ctx->segment === Segments::MAIN && FinancialBooks::hasBooks($stock) => FinancialBooks::shares($stock),
+            default => [$ctx->segment => 1.0],
+        };
         foreach ($slices as $segment => $slice) {
             $this->industryShareLedger?->recordAcquiredCapacity($stock, $acquiredRevenue * $slice, $ctx->macroState, IndustryShareLedger::secularExcessGrowth($this->segmentStrategy($stock, $segment), $stock), $segment);
         }
@@ -936,10 +987,15 @@ class AcquisitionEngine
         return $outlook + (isset($state[$key]) ? [$key => $state[$key]] : []);
     }
 
-    /** The model of the market a deal buys into: the acquirer's own, or its segment's industry's. */
+    /** The model of the market a deal buys into: the acquirer's own, or its segment's or book's industry's. */
     private function segmentStrategy(Stock $acquirer, string $segment): BusinessModelInterface
     {
-        return \App\Data\Company\Sectors::strategyFor(Segments::enteredIndustry($segment) ?? SegmentBooks::industries($acquirer)[$segment] ?? (string) $acquirer->getIndustry());
+        return \App\Data\Company\Sectors::strategyFor(
+            Segments::enteredIndustry($segment)
+            ?? FinancialBooks::industries($acquirer)[$segment]
+            ?? SegmentBooks::industries($acquirer)[$segment]
+            ?? (string) $acquirer->getIndustry(),
+        );
     }
 
     private function finalizeAcquisitionEvent(AcquisitionContext $ctx): array
