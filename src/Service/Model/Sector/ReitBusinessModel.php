@@ -14,6 +14,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Event\ShockEvent;
 use App\Service\Market\Bond\RatingMethodology;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -31,6 +32,18 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
     // --- Credit Rating ---
     /** Rated on its capital on undepreciated real estate and S&P's real estate debt-to-EBITDA bands. */
     public const RATING_METHODOLOGY = RatingMethodology::RealEstate;
+
+    // --- Opening Books ---
+    /**
+     * A trust still states its operating margin: its return is historic-cost NOI yield before depreciation, not a
+     * DuPont moat spread.
+     */
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    /** What resolveOpeningBooks() builds for a trust; operating_margin remains a character input. */
+    public const OPENING_BOOK_KEYS = [
+        'baseline_roic', 'total_equity', 'wholesale_debt', 'customer_deposits', 'corporate_treasury', 'retained_earnings',
+        'sam_ratio',
+    ];
 
     // --- Operating Cyclicality & Demand Structure ---
     /**
@@ -293,6 +306,31 @@ class ReitBusinessModel extends StandardCorporateBusinessModel
             (float) $seedRow['depreciation_rate'],
             $openingMacro,
         );
+    }
+
+    /**
+     * Trusts state their operating margin directly instead of deriving it from IndustryTurnovers.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function assertOpeningCharacter(array $seedRow): void
+    {
+        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
+            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
+            'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
+            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
+            'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
+        ]);
+    }
+
+    /**
+     * Trusts open on the operating margin stated in their seed row.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function openingMargin(array $seedRow, float $openingReturn, float $taxRate): float
+    {
+        return (float) $seedRow['operating_margin'];
     }
 
     public function getMaintenanceCapexRate(float $bookDepreciationRate): float

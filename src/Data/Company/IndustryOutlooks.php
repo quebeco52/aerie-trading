@@ -64,6 +64,7 @@ final class IndustryOutlooks
         'Industrial Distribution' => ['drift_vol' => 0.06, 'learning_half_life' => 1.0],
         'Information Technology Services' => ['drift_vol' => 0.06, 'learning_half_life' => 1.0],
         'Internet Retail' => ['drift_vol' => 0.06, 'learning_half_life' => 1.0],
+        'Online Marketplaces' => ['drift_vol' => 0.06, 'learning_half_life' => 1.0],
         'Luxury Goods' => ['drift_vol' => 0.06, 'learning_half_life' => 1.0],
         'Marine Shipping' => ['drift_vol' => 0.06, 'learning_half_life' => 1.0],
         'REIT - Office' => ['drift_vol' => 0.06, 'learning_half_life' => 1.0],

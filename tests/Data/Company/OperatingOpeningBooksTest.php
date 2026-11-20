@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Tests\Data\Company;
 
+use App\Data\Company\CapitalIntensity;
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\IndustryMoats;
+use App\Data\Company\IndustryTurnovers;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
@@ -157,6 +159,48 @@ class OperatingOpeningBooksTest extends TestCase
     }
 
     /**
+     * @return array<string, array{array<string, mixed>}> Every in-scope operating firm (non-REIT) whose margin is
+     *                                                    derived from its moat and industry turnover, by ticker.
+     */
+    public static function inScopeProvider(): array
+    {
+        $firms = [];
+        foreach (InitialMarket::STOCKS as $row) {
+            $strategy = Sectors::strategyFor($row['industry']);
+            if (isset($row['revenue']) && $strategy instanceof StandardCorporateBusinessModel && !($strategy instanceof ReitBusinessModel)) {
+                $firms[$row['ticker']] = [$row];
+            }
+        }
+
+        return $firms;
+    }
+
+    /**
+     * Every in-scope firm opens at its industry turnover times its capital-intensity step, earns CAPM + moat on its
+     * invested capital, and passes the exact rounded derived margin through to Stock.
+     *
+     * @param array<string, mixed> $row
+     */
+    #[DataProvider('inScopeProvider')]
+    public function testEveryInScopeFirmOpensAtItsIndustryTurnoverAndRoundedMargin(array $row): void
+    {
+        $resolved = SeedRows::for($row['ticker']);
+        $stock = $this->open($row);
+        $opening = new MacroStateDTO();
+        $expectedRoic = Valuation::calculateCAPM($opening->equityRiskFreeRate, IndustryBetas::seedBetaFor($row), MacroConstants::BASE_EQUITY_RISK_PREMIUM)
+            + IndustryMoats::forRow($row)->spread();
+
+        $this->assertEqualsWithDelta($expectedRoic, $resolved['baseline_roic'], 1e-9, $row['ticker']);
+        $this->assertSame((float) $resolved['operating_margin'], (float) $stock->getOperatingMargin(), $row['ticker']);
+        $this->assertEqualsWithDelta(
+            1.0,
+            ((float) $stock->getTotalRevenue() / $stock->getInvestedCapital()) / (IndustryTurnovers::BY_INDUSTRY[$row['industry']] * CapitalIntensity::STEP_FACTOR ** IndustryTurnovers::intensityForRow($row)->steps()),
+            2.0e-3,
+            $row['ticker'],
+        );
+    }
+
+    /**
      * A row it cannot build from is refused, not opened on a guess: a book stated beside the character, an input
      * missing, or one out of its range.
      *
@@ -165,19 +209,27 @@ class OperatingOpeningBooksTest extends TestCase
     public static function refusedCharacterProvider(): array
     {
         $grip = null;
+        $shor = null;
         foreach (InitialMarket::STOCKS as $row) {
             if ($row['ticker'] === 'GRIP') {
                 $grip = $row;
             }
+            if ($row['ticker'] === 'SHOR') {
+                $shor = $row;
+            }
         }
         self::assertNotNull($grip);
+        self::assertNotNull($shor);
         $missing = $grip;
         unset($missing['addressable_share']);
 
         return [
             'a book beside the character' => [['total_equity' => 3.5e10] + $grip],
+            'operating margin stated on an in-scope row' => [['operating_margin' => 0.14] + $grip],
+            'capital intensity off the ladder' => [['capital_intensity' => 'ultralight'] + $grip],
+            'industry without a turnover entry' => [['industry' => 'General'] + $grip],
             'an input missing' => [$missing],
-            'no margin to earn' => [['operating_margin' => 0.0] + $grip],
+            'no margin to earn on a REIT' => [['operating_margin' => 0.0] + $shor],
             'retained earnings past its equity' => [['retained_share' => 1.5] + $grip],
             'no revenue' => [['revenue' => 0.0] + $grip],
             'a moat off the ladder' => [['moat' => 'impregnable'] + $grip],

@@ -432,6 +432,32 @@ class FirmEconomicsTest extends TestCase
     }
 
     /**
+     * Derived operating margin and structural asset turnover invert each other exactly inside the margin clamp, and
+     * clamp at MIN_TURNOVER_MARGIN / MAX_TURNOVER_MARGIN outside it.
+     */
+    public function testStructuralOperatingMarginAndStructuralAssetTurnoverInvertEachOther(): void
+    {
+        foreach ([
+            [0.08, 0.45, 0.17],
+            [0.14, 1.38, 0.17],
+            [0.24, 0.53, 0.17],
+            [0.12, 3.25, 0.21],
+            [0.09, 4.59, 0.00],
+        ] as [$return, $turnover, $taxRate]) {
+            $margin = FirmEconomics::structuralOperatingMargin($return, $turnover, $taxRate);
+            $roundTripTurnover = FirmEconomics::structuralAssetTurnover($return, $margin, $taxRate);
+            $this->assertEqualsWithDelta($turnover, $roundTripTurnover, 1e-12);
+
+            $roundTripMargin = FirmEconomics::structuralOperatingMargin($return, $roundTripTurnover, $taxRate);
+            $this->assertEqualsWithDelta($margin, $roundTripMargin, 1e-12);
+        }
+
+        $this->assertSame(FirmEconomics::MIN_TURNOVER_MARGIN, FirmEconomics::structuralOperatingMargin(0.0, 1.5, 0.17));
+        $this->assertSame(FirmEconomics::MAX_TURNOVER_MARGIN, FirmEconomics::structuralOperatingMargin(0.30, 0.05, 0.17));
+        $this->assertSame(FirmEconomics::MAX_TURNOVER_MARGIN, FirmEconomics::structuralOperatingMargin(0.15, 0.0, 0.17));
+    }
+
+    /**
      * A business's new plant earns the company's return scaled by its margin times its turnover over the company's,
      * plus the after-tax margin its industry's price adds on what that plant turns over.
      */

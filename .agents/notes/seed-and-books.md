@@ -30,3 +30,10 @@
   rescues"; the bank-levy lore's "public guarantee" is deposit protection, which does not reach wholesale creditors).
 - A lender whose opening loan spread comes out negative is telling you its moat is too narrow for what its deposit and
   fee book already earns (EGRT, 11-20: narrow -> moderate). Fix the moat, not `TargetCapitalRatio`.
+- No seeded operating margin on an operating firm (11-20). The row states moat and, optionally, `capital_intensity`
+  (±2 steps of 1.25x); the margin is (CAPM + moat) / ((1 - t) x turnover), with turnover from `IndustryTurnovers`.
+  Keyed by board industry, not Damodaran: capital per sales dollar is a property of the business, and Damodaran's
+  buckets mix ports with logistics and law firms with prisons. Board turnovers sit 1.5-2x under Damodaran US on
+  purpose (moat ladder caps opening ROIC near 25%). A firm whose margin will not fit is a different business, not a
+  bigger step: JDAW became Online Marketplaces (revenue is commission, not merchandise). Financials and REITs keep a
+  stated margin; it means something else there.

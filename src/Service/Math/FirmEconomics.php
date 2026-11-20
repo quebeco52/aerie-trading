@@ -27,6 +27,10 @@ final class FirmEconomics
     // --- Structural Turnover ---
     /** Floor on the operating margin a turnover is struck at: 1%, so a firm at a zero margin keeps a finite one. */
     public const MIN_TURNOVER_MARGIN = 0.01;
+    /** Ceiling on a derived operating margin (99%), keeping cost of goods strictly positive. */
+    public const MAX_TURNOVER_MARGIN = 0.99;
+    /** Floor on the asset turnover divisor in structuralOperatingMargin() to prevent division by zero. */
+    public const MIN_TURNOVER_DIVISOR = 1.0e-9;
 
     // --- Regulated Tariffs: the Rate Case Cycle (regulatory lag and earnings attrition) ---
     /** Unrecovered non-fuel cost at which management files a general rate case rather than absorb further attrition. */
@@ -66,6 +70,17 @@ final class FirmEconomics
     public static function structuralAssetTurnover(float $afterTaxReturn, float $operatingMargin, float $taxRate): float
     {
         return max(0.0, $afterTaxReturn) / (max(self::MIN_TURNOVER_MARGIN, $operatingMargin) * (1.0 - $taxRate));
+    }
+
+    /**
+     * Operating margin at which a firm turning over its invested capital at an annual rate earns an after-tax return:
+     * the return grossed up for tax, over the turnover — structuralAssetTurnover()'s inverse.
+     */
+    public static function structuralOperatingMargin(float $afterTaxReturn, float $assetTurnover, float $taxRate): float
+    {
+        $raw = max(0.0, $afterTaxReturn) / (max(self::MIN_TURNOVER_DIVISOR, $assetTurnover) * (1.0 - $taxRate));
+
+        return max(self::MIN_TURNOVER_MARGIN, min(self::MAX_TURNOVER_MARGIN, $raw));
     }
 
     /**

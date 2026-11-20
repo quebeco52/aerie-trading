@@ -68,6 +68,7 @@ final class IndustryPayoutPolicies
         'Nuclear Power Equipment' => PayoutPolicy::Income,
         'Oil & Gas E&P' => PayoutPolicy::Balanced,
         'Oil & Gas Refining & Marketing' => PayoutPolicy::Balanced,
+        'Online Marketplaces' => PayoutPolicy::Low,
         'Packaged Foods' => PayoutPolicy::Income,
         'Private Banks' => PayoutPolicy::Income,
         'Private Equity' => PayoutPolicy::Income,

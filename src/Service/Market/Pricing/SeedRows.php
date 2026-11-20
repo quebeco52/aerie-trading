@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Market\Pricing;
 
 use App\Data\Company\IndustryRisks;
+use App\Data\Company\IndustryTurnovers;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Moat;
 use App\Data\Company\Sectors;
@@ -60,6 +61,7 @@ final class SeedRows
         }
 
         IndustryRisks::assertRow($row);
+        IndustryTurnovers::assertCapitalIntensity($row);
 
         $row += [
             'shares_outstanding' => self::SHARES_OUTSTANDING,

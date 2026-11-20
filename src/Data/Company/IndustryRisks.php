@@ -107,6 +107,7 @@ final class IndustryRisks
         'Oil & Gas E&P' => ['business' => BusinessRisk::VeryHigh, 'events' => EventRisk::Frequent],
         // Judgement: on the idiosyncratic floor today; refining crack spreads swing on their own.
         'Oil & Gas Refining & Marketing' => ['business' => BusinessRisk::Moderate, 'events' => EventRisk::Frequent],
+        'Online Marketplaces' => ['business' => BusinessRisk::High, 'events' => EventRisk::Frequent],
         'Packaged Foods' => ['business' => BusinessRisk::Low, 'events' => EventRisk::Occasional],
         // Judgement: deposit-taking private bank is not a high-risk business.
         'Private Banks' => ['business' => BusinessRisk::Moderate, 'events' => EventRisk::Occasional],

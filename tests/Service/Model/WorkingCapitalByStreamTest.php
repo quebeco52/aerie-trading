@@ -30,7 +30,7 @@ class WorkingCapitalByStreamTest extends TestCase
     {
         return [
             'WEAV marketplace with a shop' => ['WEAV', 'Internet Retail', true],
-            'JDAW marketplace only' => ['JDAW', 'Internet Retail', false],
+            'JDAW marketplace only' => ['JDAW', 'Online Marketplaces', false],
             'HUMM ads and cloud' => ['HUMM', 'Internet Content & Information', false],
             'TICK terminals' => ['TICK', 'Financial Data & Ratings', false],
             'SHRK ratings' => ['SHRK', 'Financial Data & Ratings', false],
@@ -79,9 +79,8 @@ class WorkingCapitalByStreamTest extends TestCase
     /** The fulfilment centres are leased for the shop, so a marketplace that holds no stock leases offices only. */
     public function testOnlineLeasesFollowTheFirstPartyShop(): void
     {
-        $strategy = Sectors::strategyFor('Internet Retail');
-        $marketplace = $strategy->getLeaseIntensity(self::firm('JDAW', 'Internet Retail'));
-        $withShop = $strategy->getLeaseIntensity(self::firm('WEAV', 'Internet Retail'));
+        $marketplace = Sectors::strategyFor('Online Marketplaces')->getLeaseIntensity(self::firm('JDAW', 'Online Marketplaces'));
+        $withShop = Sectors::strategyFor('Internet Retail')->getLeaseIntensity(self::firm('WEAV', 'Internet Retail'));
 
         // JDAW: 80% marketplace at the default, 20% ads on data-centre leases.
         $this->assertEqualsWithDelta(0.80 * AbstractBusinessModel::LEASE_LIABILITY_INTENSITY + 0.20 * 0.10, $marketplace, 1e-12);

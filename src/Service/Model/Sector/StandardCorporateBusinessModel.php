@@ -6,6 +6,7 @@ namespace App\Service\Model\Sector;
 
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\IndustryMoats;
+use App\Data\Company\IndustryTurnovers;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
@@ -15,6 +16,7 @@ use App\Service\Corporate\CorporateMetrics;
 use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
+use App\Service\Math\FirmEconomics;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\TimeSeries;
@@ -44,12 +46,14 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     public const OPENING_BOOK_TOLERANCE = 1.0e-9;
     /** Most passes of the opening solve; the books are near scale-free, so a few suffice. */
     public const MAX_OPENING_BOOK_PASSES = 12;
+    /** Decimal places the derived opening margin is rounded to, matching Stock::$operatingMargin (NUMERIC(6,4)). */
+    public const OPENING_MARGIN_SCALE = 4;
     /** What an operating firm's seed row states when its books are built from its character (resolveOpeningBooks()). */
-    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
+    public const OPENING_CHARACTER_KEYS = ['revenue', 'addressable_share'];
     /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
     public const OPENING_BOOK_KEYS = [
-        'baseline_roic', 'total_equity', 'wholesale_debt', 'customer_deposits', 'corporate_treasury', 'retained_earnings',
-        'sam_ratio',
+        'baseline_roic', 'operating_margin', 'total_equity', 'wholesale_debt', 'customer_deposits', 'corporate_treasury',
+        'retained_earnings', 'sam_ratio',
     ];
 
     // --- Pricing Power & Macro Physics ---
@@ -84,12 +88,13 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
     public const REVENUE_VARIANCE_SCALAR = 0.15;
 
     /**
-     * An operating firm's opening books from its character: the revenue it earns at its margin, its moat
-     * (IndustryMoats) over what its business must earn (CAPM on its asset beta at the base premium), and the share of
-     * its addressable market its capital spans. Its invested capital is what earns that revenue at that return; its
-     * manager's leverage target, capped where its net debt reaches its manager's share of the covenant, splits it into
-     * debt and equity; it holds the cash its treasury targets, and half its equity, or the share its row states, is
-     * retained earnings. A row that states its books (no revenue key) is handed back as it is.
+     * An operating firm's opening books from its character: the revenue it earns at its industry's capital intensity
+     * (IndustryTurnovers), its moat (IndustryMoats) over what its business must earn (CAPM on its asset beta at the
+     * base premium), the operating margin implied by both, and the share of its addressable market its capital spans.
+     * Its invested capital is what earns that revenue at that return; its manager's leverage target, capped where its
+     * net debt reaches its manager's share of the covenant, splits it into debt and equity; it holds the cash its
+     * treasury targets, and half its equity, or the share its row states, is retained earnings. A row that states its
+     * books (no revenue key) is handed back as it is.
      */
     public function resolveOpeningBooks(array $seedRow, MacroStateDTO $openingMacro): array
     {
@@ -97,27 +102,22 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
             return $seedRow;
         }
 
-        SeedRows::assertCharacter($seedRow, self::OPENING_CHARACTER_KEYS, self::OPENING_BOOK_KEYS, [
-            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
-            'operating_margin' => (float) ($seedRow['operating_margin'] ?? 0.0) > 0.0 && (float) ($seedRow['operating_margin'] ?? 1.0) < 1.0,
-            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
-            'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
-        ]);
+        $this->assertOpeningCharacter($seedRow);
 
         $ticker = (string) $seedRow['ticker'];
         $industry = $seedRow['industry'] ?? null;
         $revenue = (float) $seedRow['revenue'];
-        $margin = (float) $seedRow['operating_margin'];
         $addressableShare = (float) $seedRow['addressable_share'];
         $taxRate = $this->getEffectiveTaxRate($openingMacro->corporateTaxRate);
         $baselineRoic = $this->openingReturn($seedRow, $openingMacro);
+        $margin = $this->openingMargin($seedRow, $baselineRoic, $taxRate);
 
         $stock = (new Stock())
             ->setTicker($ticker)
             ->setIndustry($industry)
             ->setBeta((string) IndustryBetas::seedBetaFor($seedRow))
             ->setManagementStyle(ManagementStyle::tryFromNullable($seedRow['management_style'] ?? null))
-            ->setOperatingMargin((string) $margin)
+            ->setOperatingMargin(Decimal::format($margin, self::OPENING_MARGIN_SCALE))
             ->setTotalRevenue(Decimal::format($revenue))
             ->setDepreciationRate((string) $seedRow['depreciation_rate'])
             ->setBaselineRoic((string) $baselineRoic)
@@ -136,14 +136,14 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
         // depreciates.
         $workingCapital = CorporateMetrics::getInstance()->buildWorkingCapitalBalances($stock, $this->getWorkingCapitalDays($stock), $revenue, $revenue * (1.0 - $margin));
 
-        // Trial capital at the stated return, then scaled until the capital earns the stated revenue as the opening
-        // strikes it (OpeningBoardBuilder: invested capital at its structural turnover, net of saturation).
+        // Trial capital at the derived margin and opening turnover, then scaled until the capital earns the stated
+        // revenue as the opening strikes it (OpeningBoardBuilder: invested capital at its structural turnover, net of
+        // saturation).
         $bookDepRate = (float) $seedRow['depreciation_rate'];
-        $investedCapital = $revenue * $margin * (1.0 - $taxRate) / max(0.01, $baselineRoic);
-        if ($this->reportsFundsFromOperations()) {
-            $openingTurnover = $this->resolveStructuralAssetTurnover($baselineRoic, $margin, $taxRate, $bookDepRate);
-            $investedCapital = $openingTurnover > 0.0 ? $revenue / $openingTurnover : $investedCapital;
-        }
+        $openingTurnover = $this->resolveStructuralAssetTurnover($baselineRoic, $margin, $taxRate, $bookDepRate);
+        $investedCapital = $openingTurnover > 0.0
+            ? $revenue / $openingTurnover
+            : ($revenue * $margin * (1.0 - $taxRate) / max(0.01, $baselineRoic));
         $equity = $investedCapital;
         $debt = 0.0;
         $cash = 0.0;
@@ -188,6 +188,7 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
 
         return array_merge($seedRow, [
             'baseline_roic' => $baselineRoic,
+            'operating_margin' => $margin,
             'total_equity' => $equity,
             'wholesale_debt' => $debt,
             'customer_deposits' => 0.0,
@@ -195,6 +196,36 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
             'retained_earnings' => (float) ($seedRow['retained_share'] ?? self::OPENING_RETAINED_SHARE) * $equity,
             'sam_ratio' => (float) $stock->getSamRatio(),
         ]);
+    }
+
+    /**
+     * Validates a character row before building its books: Standard firms omit operating_margin and sit in an industry
+     * listed in IndustryTurnovers; REITs override this to keep operating_margin as a character input.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function assertOpeningCharacter(array $seedRow): void
+    {
+        SeedRows::assertCharacter($seedRow, static::OPENING_CHARACTER_KEYS, static::OPENING_BOOK_KEYS, [
+            'revenue' => (float) ($seedRow['revenue'] ?? 0.0) > 0.0,
+            'addressable_share' => (float) ($seedRow['addressable_share'] ?? 0.0) > 0.0,
+            'retained_share' => (float) ($seedRow['retained_share'] ?? 0.0) >= 0.0 && (float) ($seedRow['retained_share'] ?? 0.0) <= 1.0,
+        ]);
+        IndustryTurnovers::assertRow($seedRow);
+    }
+
+    /**
+     * The operating margin implied by the firm's opening return and its industry's capital turnover, rounded to the
+     * column precision of Stock::$operatingMargin so invested capital, OpeningBoardBuilder and tick 1 share one figure.
+     *
+     * @param array<string, mixed> $seedRow
+     */
+    protected function openingMargin(array $seedRow, float $openingReturn, float $taxRate): float
+    {
+        return round(
+            FirmEconomics::structuralOperatingMargin($openingReturn, IndustryTurnovers::forRow($seedRow), $taxRate),
+            self::OPENING_MARGIN_SCALE,
+        );
     }
 
     /**

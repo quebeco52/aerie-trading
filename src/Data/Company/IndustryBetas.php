@@ -233,6 +233,8 @@ final class IndustryBetas
         'Oil & Gas Integrated' => 'Oil/Gas (Integrated)',
         'Oil & Gas Midstream' => 'Oil/Gas Distribution',
         'Oil & Gas Refining & Marketing' => 'Oil/Gas Distribution',
+        // Damodaran files online marketplaces inside Retail (General) alongside online retail.
+        'Online Marketplaces' => 'Retail (General)',
         'Packaged Foods' => 'Food Processing',
         'Packaging & Containers' => 'Packaging & Container',
         'Passenger Transit' => 'Transportation (Railroads)',

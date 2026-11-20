@@ -34,6 +34,7 @@ final class IndustryMoats
     public const INDUSTRY_MAP = [
         'Internet Content & Information' => 'Information Services',
         'Internet Retail' => 'Retail (Special Lines)',
+        'Online Marketplaces' => 'Retail (Special Lines)',
     ];
 
     /**
