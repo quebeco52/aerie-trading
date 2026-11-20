@@ -35,6 +35,13 @@ final class SeedRows
      */
     public const DERIVED_KEYS = ['credit_spread'];
 
+    /**
+     * Retired seed keys a row must never state; standing and visibility are read from live size instead.
+     *
+     * @var list<string>
+     */
+    public const RETIRED_KEYS = ['systemic_importance'];
+
     /** Share of a listing that trades when no founder, mutual or state block holds the rest (85%, insiders aside). */
     public const DEFAULT_PUBLIC_FLOAT = 0.85;
 
@@ -72,6 +79,15 @@ final class SeedRows
                 '%s states %s, which is derived at opening rather than seeded.',
                 (string) ($row['ticker'] ?? '?'),
                 implode(', ', $derived),
+            ));
+        }
+
+        $retired = array_intersect(self::RETIRED_KEYS, array_keys($row));
+        if ($retired !== []) {
+            throw new \DomainException(sprintf(
+                '%s states %s, which has been retired; size and visibility are read live.',
+                (string) ($row['ticker'] ?? '?'),
+                implode(', ', $retired),
             ));
         }
 

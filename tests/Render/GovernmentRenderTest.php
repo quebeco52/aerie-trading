@@ -104,12 +104,12 @@ final class GovernmentRenderTest extends KernelTestCase
         $reports->method('inflation')->willReturnCallback(static fn(int $quarters): array => array_slice($inflation, -$quarters));
         // The opening board, each firm through one quarter's report so its models record what each law reaches.
         $opening = $container->get(OpeningBoardBuilder::class);
+        $openingMacro = new MacroStateDTO();
         $earnings = self::earningsEngine($math);
         $board = [];
         foreach (InitialMarket::STOCKS as $row) {
             $stock = (new Stock())->setTicker($row['ticker']);
-            $opening->applyListing($stock, $row);
-            $opening->open($stock, $row, $macro);
+            $opening->open($stock, $row, $openingMacro);
             $earnings->calculate($stock, $macro, EarningsEngine::resolveReportingTick($row['ticker'], self::TICKS_PER_YEAR), self::TICKS_PER_YEAR);
             $board[] = $stock;
         }

@@ -108,7 +108,7 @@ class DistrictRoster
      *
      * @param  Stock[] $stocks
      * @return array{
-     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int}>,
+     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}>,
      *     viewboxWidth: int,
      *     rowCount: int,
      * }

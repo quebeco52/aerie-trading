@@ -29,7 +29,7 @@ final class ConfiguredStandardModel extends BareStandardModel
     public const UNDERLEVERAGED_DEBT_RATIO = 0.30;
 
     // --- Operating Physics: Coverage ---
-    /** Analyst visibility into the quarter before the systemic-importance uplift. */
+    /** Analyst visibility into the quarter before the live size uplift. */
     public const BASE_COVERAGE_VISIBILITY = 0.55;
     /** Standard deviation of the analyst's own forecast error. */
     public const BASE_COVERAGE_ERROR = 0.02;

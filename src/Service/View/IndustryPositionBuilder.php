@@ -66,7 +66,7 @@ class IndustryPositionBuilder
      *         tracked: bool,
      *         pricesCapacity: bool,
      *         addressableShare: float,
-     *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, trailingReturn: ?float, marginalReturn: float, sizeShelter: float, moat: array{label: string, spread: float}},
+     *         saturation: array{threshold: float, penalty: float, severity: float, trueReturn: float, trailingReturn: ?float, marginalReturn: float, moat: array{label: string, spread: float}},
      *         rosterShare: float|null,
      *         peerShares: array<string, float>,
      *         rosterSize: int,
@@ -157,7 +157,6 @@ class IndustryPositionBuilder
                     'trueReturn' => $trueReturn,
                     'trailingReturn' => $filedReturns === [] ? null : array_sum($filedReturns) / count($filedReturns),
                     'marginalReturn' => $stock->isBankrupt() ? 0.0 : $this->corporateMetrics->calculateMarginalReturn($stock, $trueReturn, $evaluationCapital, $macroState),
-                    'sizeShelter' => FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS[$stock->getSystemicImportance()] ?? FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS['default'],
                     'moat' => ['label' => IndustryMoats::forStock($stock)->label(), 'spread' => IndustryMoats::forStock($stock)->spread()],
                 ],
                 // Only a share of something when there is someone else in the roster to share it with, selling

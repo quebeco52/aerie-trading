@@ -111,12 +111,26 @@ abstract class AbstractBusinessModel implements BusinessModelInterface
     public const UNMEASURED_LABOR_SHARE = 0.65;
 
     // --- Analyst Coverage ---
-    /** Analysts' visibility into a routine quarter before the systemic-importance uplift (20%). */
+    /** Analysts' visibility into a routine quarter before the size uplift (20%). */
     public const BASE_COVERAGE_VISIBILITY = 0.20;
     /** Standard deviation of the analysts' own forecast error (6%). */
     public const BASE_COVERAGE_ERROR = 0.06;
-    /** Visibility floor a routine quarter never falls below before the systemic-importance uplift: none. */
+    /** Visibility floor a routine quarter never falls below before the size uplift: none. */
     public const BASE_COVERAGE_MIN_VISIBILITY = 0.0;
+    /**
+     * Real market cap as a share of District GDP below which a firm gets no size uplift to analyst coverage (1%, $60B
+     * at open).
+     */
+    public const COVERAGE_SIZE_FLOOR_GDP_SHARE = 0.01;
+    /**
+     * Real market cap as a share of District GDP at which the analyst coverage size uplift reaches its ceiling (15%,
+     * $900B at open).
+     */
+    public const COVERAGE_SIZE_CEILING_GDP_SHARE = 0.15;
+    /** Maximum uplift to base routine-quarter visibility for the largest listed firms (+15pp, Bhushan 1989). */
+    public const COVERAGE_MAX_VISIBILITY_BOOST = 0.15;
+    /** Maximum uplift to the routine-quarter visibility floor for the largest listed firms (+10pp). */
+    public const COVERAGE_MAX_MIN_VISIBILITY_BOOST = 0.10;
     /**
      * Visibility of a quarter carrying an announced event (a trial readout, a recall, a missed hurdle); null for a
      * model whose quarters carry none.

@@ -407,12 +407,6 @@ class Stock
     private ?string $description = null;
 
     /**
-     * @var string Determines the bailout tier and market gravity strength (e.g., 'titan', 'systemic', 'none').
-     */
-    #[ORM\Column(length: 255, options: ['default' => 'none'])]
-    private string $systemicImportance = 'none';
-
-    /**
      * @var string The share of net income the board's dividend policy targets now: a PayoutPolicy step, which the board
      * reviews once a year.
      */
@@ -1028,10 +1022,6 @@ class Stock
         return $this;
     }
 
-    public function getSystemicImportance(): string
-    {
-        return $this->systemicImportance;
-    }
     public function getLifecycleStage(): ?\App\Data\Company\LifecycleStage
     {
         return $this->lifecycleStage !== null ? \App\Data\Company\LifecycleStage::tryFrom($this->lifecycleStage) : null;
@@ -1041,12 +1031,6 @@ class Stock
     {
         $this->lifecycleStage = $stage?->value;
 
-        return $this;
-    }
-
-    public function setSystemicImportance(string $systemicImportance): static
-    {
-        $this->systemicImportance = $systemicImportance;
         return $this;
     }
 

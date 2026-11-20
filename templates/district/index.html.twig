@@ -489,7 +489,7 @@
 										data-rank="{{ plot.rank }}"
 										data-sector="{{ plot.sector }}"
 										data-industry="{{ plot.industry }}"
-										data-importance="{{ plot.systemicImportance }}"
+										data-moat="{{ plot.moatLabel ?? '' }}"
 										data-rating="{{ plot.creditRating }}"
 										data-price="{{ plot.price }}"
 										data-mcap="{{ plot.marketCap }}"
@@ -553,7 +553,7 @@
 												width="{{ roofFurniture.width }}" height="{{ roofFurniture.height }}"
 												style="color: {{ palette.window }}"/>
 
-											{% if plot.systemicImportance == 'titan' and plot.condition != 'ruin' %}
+											{% if plot.hasBeacon and plot.condition != 'ruin' %}
 												<circle class="beacon" cx="{{ plot.x + plot.width / 2 }}" cy="{{ plot.y - 20 }}" r="9"/>
 											{% endif %}
 
@@ -744,8 +744,8 @@
 						<dd class="text-on-surface tabular-nums" data-district-target="detailRoc"></dd></div>
 					<div><dt class="text-on-surface-variant text-xs">Street rank</dt>
 						<dd class="text-on-surface tabular-nums" data-district-target="detailRank"></dd></div>
-					<div class="col-span-2"><dt class="text-on-surface-variant text-xs">Standing</dt>
-						<dd class="text-on-surface" data-district-target="detailImportance"></dd></div>
+					<div class="col-span-2"><dt class="text-on-surface-variant text-xs">Moat</dt>
+						<dd class="text-on-surface" data-district-target="detailMoat"></dd></div>
 					<div class="col-span-2 border-t border-outline-variant/15 pt-2" data-district-target="detailPositionWrap">
 						<dt class="text-on-surface-variant text-xs">Your position</dt>
 						<dd class="text-on-surface tabular-nums font-medium" data-district-target="detailPosition">None</dd></div>

@@ -944,7 +944,6 @@ class InsuranceBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('TEST');
         $stock->setIndustry('Insurance - Specialty');
-        $stock->setSystemicImportance('base');
         $stock->setTotalEquity((string) $equity);
         $stock->setCustomerDeposits((string) ($equity * 2.0));
         $stock->setOperatingMargin('0.10');
@@ -982,7 +981,6 @@ class InsuranceBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('TEST');
         $stock->setIndustry('Insurance - Specialty');
-        $stock->setSystemicImportance('base');
         $stock->setSamRatio((string) $samRatio);
         $stock->setTotalEquity((string) $equity);
         $stock->setCustomerDeposits((string) $equity);
@@ -1013,7 +1011,6 @@ class InsuranceBusinessModelTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('TEST');
         $stock->setIndustry('Insurance - Reinsurance');
-        $stock->setSystemicImportance('titan');
         $stock->setTotalEquity((string) $equity);
         $stock->setCustomerDeposits((string) ($equity * 2.0));
         $stock->setOperatingMargin((string) $operatingMargin);

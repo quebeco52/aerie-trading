@@ -295,7 +295,6 @@ class ClearingHouseBusinessModelTest extends TestCase
         $this->assertSame('Aerie Central Clearing', $accConfig['name']);
         $this->assertSame('Financials', $accConfig['sector']);
         $this->assertSame('Financial Clearinghouses', $accConfig['industry']);
-        $this->assertSame('titan', $accConfig['systemic_importance']);
 
         $industryConfig = \App\Data\Company\Sectors::INDUSTRY_METRICS['Financial Clearinghouses'] ?? null;
         $this->assertNotNull($industryConfig);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\District;
 
+use App\Data\Company\IndustryMoats;
 use App\Data\Company\Sectors;
 use App\Data\Company\StockInfo;
 use App\Data\District\DistrictMap;
@@ -45,7 +46,7 @@ class DistrictMapBuilder
      * Draw it against the same envelope and canvas resolved for these slots, or the gridlines,
      * the lanes and the client's live resize will disagree with the facades.
      *
-     * @param  list<array{ticker: string, x: int, width: int, row: int, rank: int}> $slots
+     * @param  list<array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}> $slots
      * @param  Stock[]                                                              $stocks
      * @param  array<string, float>                                                 $changeByTicker fractional price change per ticker
      * @return list<DistrictPlotDTO>
@@ -76,7 +77,7 @@ class DistrictMapBuilder
      * has to bracket every roster a long-running market might produce, which parks whichever end
      * the real roster occupies in a compressed tail.
      *
-     * @param list<array{ticker: string, x: int, width: int, row: int, rank: int}> $slots
+     * @param list<array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}> $slots
      * @param Stock[]                                                              $stocks
      */
     public function resolveEnvelope(array $slots, array $stocks): DistrictHeightEnvelope
@@ -116,7 +117,7 @@ class DistrictMapBuilder
      * headroom-sized cap move would add, capped at MAX_FACADE_HEIGHT. A row with no tenants is
      * given the shortest facade's height, so an empty street still draws a kerb.
      *
-     * @param list<array{ticker: string, x: int, width: int, row: int, rank: int}> $slots
+     * @param list<array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}> $slots
      * @param Stock[]                                                              $stocks
      * @param int                                                                  $rowCount rows the composer wrapped the frontage into
      */
@@ -172,9 +173,9 @@ class DistrictMapBuilder
      * of lots — so a slot whose stock has since vanished (a data race against the query that
      * supplied $stocks) is simply skipped.
      *
-     * @param  list<array{ticker: string, x: int, width: int, row: int, rank: int}> $slots
+     * @param  list<array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}> $slots
      * @param  Stock[]                                                              $stocks
-     * @return list<array{0: array{ticker: string, x: int, width: int, row: int, rank: int}, 1: Stock}>
+     * @return list<array{0: array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}, 1: Stock}>
      */
     private function occupiedSlots(array $slots, array $stocks): array
     {
@@ -470,7 +471,7 @@ class DistrictMapBuilder
     /**
      * Builds the facade for a plot held by a listed company.
      *
-     * @param array{ticker: string, x: int, width: int, row: int, rank: int} $slot
+     * @param array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool} $slot
      */
     private function buildOccupiedPlot(
         string $plotId,
@@ -521,7 +522,9 @@ class DistrictMapBuilder
             sector: $stock->getSector(),
             district: DistrictMap::districtFor($businessModel),
             industry: $stock->getIndustry(),
-            systemicImportance: $stock->getSystemicImportance(),
+            streetCapShare: $slot['capShare'],
+            hasBeacon: $slot['hasBeacon'],
+            moatLabel: IndustryMoats::forStock($stock)->label(),
             creditRating: $stock->getCreditRating(),
             condition: $this->determineCondition($stock),
             price: $price,
@@ -649,7 +652,7 @@ class DistrictMapBuilder
      * institution declaration order — so the drops arrive in the same left-to-right order the
      * institutions stand in and never overlay one another.
      *
-     * @param  array{ticker: string, x: int, width: int, row: int, rank: int} $slot
+     * @param  array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool} $slot
      * @param  list<string>                                                   $conduits
      * @return array<string, float>
      */

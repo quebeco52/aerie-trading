@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\District;
 
+use App\Data\Company\IndustryMoats;
 use App\Data\Company\Sectors;
 use App\Data\District\DistrictMap;
 use App\DTO\DistrictCanvasDTO;
@@ -55,7 +56,6 @@ class DistrictMapBuilderTest extends TestCase
         float $shares = 1_000_000_000.0,
         string $rating = 'BBB',
         bool $bankrupt = false,
-        string $importance = 'none',
     ): Stock {
         $stock = new Stock();
         $stock->setTicker($ticker);
@@ -65,7 +65,6 @@ class DistrictMapBuilderTest extends TestCase
         $stock->setPrice((string) $price);
         $stock->setSharesOutstanding((string) $shares);
         $stock->setCreditRating($rating);
-        $stock->setSystemicImportance($importance);
         $stock->setBaselineRoe('0.15');
         $stock->setIsBankrupt($bankrupt);
 
@@ -457,7 +456,7 @@ class DistrictMapBuilderTest extends TestCase
 
     public function testATenantsDropsAreSpreadAcrossItsRoofInInstitutionOrder(): void
     {
-        $plot = $this->findPlot('LAKE', [$this->makeStock('LAKE', importance: 'titan')]);
+        $plot = $this->findPlot('LAKE', [$this->makeStock('LAKE')]);
 
         $this->assertGreaterThan(1, count($plot->conduits), 'A bank draws several conduits');
         $this->assertSame($plot->conduits, array_keys($plot->conduitDropX));
@@ -574,12 +573,23 @@ class DistrictMapBuilderTest extends TestCase
 
     public function testPlotsCarryTheirWindowGridAndLighting(): void
     {
-        $stock = $this->makeStock('LAKE', importance: 'titan');
+        $stock = $this->makeStock('LAKE');
         $stock->setCurrentRoe('0.30');
         $stock->setBaselineRoe('0.15');
         $plot = $this->findPlot('LAKE', [$stock]);
 
-        $this->assertSame(intdiv(190 - DistrictMap::WINDOW_WALL_ALLOWANCE, DistrictMap::WINDOW_PITCH), $plot->windowColumns);
+        $this->assertSame(intdiv(DistrictMap::PLOT_WIDTH_LANDMARK - DistrictMap::WINDOW_WALL_ALLOWANCE, DistrictMap::WINDOW_PITCH), $plot->windowColumns);
+        $this->assertTrue($plot->hasBeacon);
+        $this->assertEqualsWithDelta(1.0, $plot->streetCapShare, 1e-12);
+        $this->assertSame(IndustryMoats::forStock($stock)->label(), $plot->moatLabel);
+
+        // Small tenant on a dominant street gets no beacon and reports its true share and moat.
+        $small = $this->makeStock('RIVR', price: 0.5);
+        $small->setIndustry('Banks - Regional');
+        $smallPlot = $this->findPlot('RIVR', [$stock, $small]);
+        $this->assertFalse($smallPlot->hasBeacon);
+        $this->assertEqualsWithDelta(0.5 / 100.5, $smallPlot->streetCapShare, 1e-12);
+        $this->assertSame(IndustryMoats::forStock($small)->label(), $smallPlot->moatLabel);
         $this->assertCount($plot->floors, $plot->litWindows);
         $this->assertCount($plot->windowColumns, $plot->litWindows[0]);
         $this->assertEqualsWithDelta(1.0, $plot->litShare, 1.0e-9, 'Twice the baseline lights every window');
@@ -718,13 +728,13 @@ class DistrictMapBuilderTest extends TestCase
 
     public function testARunCarriesItsNameOnlyWhereItIsWideEnough(): void
     {
-        $narrow = $this->buildPlots([$this->makeStock('LAKE')]);          // one 100-unit plot
+        $narrow = $this->buildPlots([$this->makeStock('LAKE')]);          // one 190-unit plot
         $wide = $this->buildPlots(array_slice($this->fullStreet(), 0, 4)); // four plots on one row
 
         $narrowRuns = $this->builder->buildDistrictRuns($narrow);
         $wideRuns = $this->builder->buildDistrictRuns($wide);
 
-        $this->assertNull($narrowRuns[0]['label'], '"Capital Markets" at 20 units a glyph does not fit a 100-unit plot');
+        $this->assertNull($narrowRuns[0]['label'], '"Capital Markets" at 20 units a glyph does not fit a single plot');
         $this->assertSame('Capital Markets', $wideRuns[0]['label']);
     }
 

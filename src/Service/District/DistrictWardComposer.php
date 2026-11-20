@@ -36,7 +36,7 @@ class DistrictWardComposer
      *                         DistrictMap::FRONTAGE_ORDER are ignored (defensive — every model
      *                         actually carried by a listed company is required to be present).
      * @return array{
-     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int}>,
+     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}>,
      *     viewboxWidth: int,
      *     rowCount: int,
      * }
@@ -77,7 +77,7 @@ class DistrictWardComposer
      * @param  Stock[]      $stocks  The listed universe (only roster members are used).
      * @param  list<string> $tickers Street order as stored by DistrictRoster.
      * @return array{
-     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int}>,
+     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}>,
      *     viewboxWidth: int,
      *     rowCount: int,
      * }
@@ -136,12 +136,12 @@ class DistrictWardComposer
     }
 
     /**
-     * Geometry for tenants already in street order: street rank from market cap, plot widths from
-     * systemic importance, then the balanced wrap across DistrictMap::rowCountForTenants() rows.
+     * Geometry for tenants already in street order: street rank and plot widths from live market capitalisation,
+     * then the balanced wrap across DistrictMap::rowCountForTenants() rows.
      *
      * @param  list<array{stock: Stock, order: int, marketCap: float, district: string}> $tenants in street order
      * @return array{
-     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int}>,
+     *     slots: list<array{ticker: string, x: int, width: int, row: int, rank: int, capShare: float, hasBeacon: bool}>,
      *     viewboxWidth: int,
      *     rowCount: int,
      * }
@@ -157,10 +157,14 @@ class DistrictWardComposer
             $streetRank[$entry['stock']->getTicker()] = $position + 1;
         }
 
-        $widths = array_map(
-            static fn(array $entry): int => DistrictMap::plotWidthForImportance($entry['stock']->getSystemicImportance()),
-            $tenants,
-        );
+        $totalCap = array_sum(array_column($tenants, 'marketCap'));
+        $capShares = [];
+        $widths = [];
+        foreach ($tenants as $entry) {
+            $capShare = $totalCap > 0.0 ? $entry['marketCap'] / $totalCap : 0.0;
+            $capShares[] = $capShare;
+            $widths[] = DistrictMap::plotWidthForCapShare($capShare);
+        }
 
         $rowCount = DistrictMap::rowCountForTenants(count($tenants));
         $splitIndices = $this->wrapIndices($widths, $rowCount, array_column($tenants, 'district'));
@@ -178,12 +182,15 @@ class DistrictWardComposer
             }
 
             $ticker = $entry['stock']->getTicker();
+            $capShare = $capShares[$i];
             $slots[] = [
                 'ticker' => $ticker,
                 'x' => $x,
                 'width' => $widths[$i],
                 'row' => $row,
                 'rank' => $streetRank[$ticker],
+                'capShare' => $capShare,
+                'hasBeacon' => DistrictMap::hasBeaconForCapShare($capShare),
             ];
 
             $x += $widths[$i] + DistrictMap::FRONTAGE_GAP;
@@ -262,7 +269,7 @@ class DistrictWardComposer
      * Finds the wrap points whose rows render closest in width — the partition that minimises the
      * widest row, since the widest row alone sets the viewBox and with it the street's rendered
      * pixels-per-unit. Balanced rather than an equal count per row because plot widths vary
-     * 100..190: a titan-heavy prefix can leave an even split's canvas a couple of hundred units
+     * 100..190: a landmark-heavy prefix can leave an even split's canvas a couple of hundred units
      * wider than it needs to be. Sequence is never reordered — the authored frontage order
      * survives the wrap intact, so this is a partition of a fixed sequence into contiguous runs.
      *

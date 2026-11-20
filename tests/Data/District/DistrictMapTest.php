@@ -146,7 +146,7 @@ class DistrictMapTest extends TestCase
         $this->assertGreaterThan(0, DistrictMap::CONDUIT_LANE_TOP_INSET);
         $this->assertGreaterThan(0, DistrictMap::CONDUIT_DROP_INSET);
         $this->assertLessThan(
-            min(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE) / 2,
+            DistrictMap::PLOT_WIDTH_STANDARD / 2,
             DistrictMap::CONDUIT_DROP_INSET,
             'The drop inset must leave the narrowest roof some width to spread drops across',
         );
@@ -154,7 +154,7 @@ class DistrictMapTest extends TestCase
 
     public function testWindowGeometryFitsAtLeastOneColumnOnTheNarrowestPlot(): void
     {
-        $narrowest = min(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE);
+        $narrowest = DistrictMap::PLOT_WIDTH_STANDARD;
 
         $this->assertGreaterThanOrEqual(1, intdiv($narrowest - DistrictMap::WINDOW_WALL_ALLOWANCE, DistrictMap::WINDOW_PITCH));
         $this->assertLessThan(DistrictMap::WINDOW_PITCH, DistrictMap::WINDOW_WIDTH);
@@ -226,7 +226,7 @@ class DistrictMapTest extends TestCase
 
     public function testRoofFurnitureFitsBetweenTheRankPlateAndTheBadgeOnTheNarrowestRoof(): void
     {
-        $narrowest = min(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE);
+        $narrowest = DistrictMap::PLOT_WIDTH_STANDARD;
         $furnitureWest = $narrowest - DistrictMap::ROOF_FURNITURE_EAST_MARGIN - DistrictMap::ROOF_FURNITURE_WIDTH;
 
         // "#30" at 24px in a 0.6em face is ~43 units from x+4.
@@ -255,7 +255,7 @@ class DistrictMapTest extends TestCase
         $this->assertGreaterThan(0, DistrictMap::POSITION_PENNANT_HEIGHT);
         $this->assertGreaterThan(0, DistrictMap::POSITION_PENNANT_INSET);
         // The flag must stay inside the narrowest plot so it never overhangs the neighbour.
-        $this->assertLessThan(min(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE), DistrictMap::POSITION_PENNANT_INSET + DistrictMap::POSITION_PENNANT_WIDTH);
+        $this->assertLessThan(DistrictMap::PLOT_WIDTH_STANDARD, DistrictMap::POSITION_PENNANT_INSET + DistrictMap::POSITION_PENNANT_WIDTH);
     }
 
     public function testEveryMacroSectorHasAPaletteEntry(): void
@@ -317,15 +317,29 @@ class DistrictMapTest extends TestCase
         $this->assertLessThanOrEqual(1.0, DistrictMap::EVENT_BADGE_WINDOW_YEARS);
     }
 
-    public function testPlotWidthForImportanceCoversEveryTierInUse(): void
+    public function testPlotWidthAndBeaconFollowLiveCapShare(): void
     {
-        foreach (InitialMarket::STOCKS as $stock) {
-            $width = DistrictMap::plotWidthForImportance($stock['systemic_importance'] ?? null);
-            $this->assertGreaterThan(0, $width);
-        }
+        $this->assertLessThan(DistrictMap::LANDMARK_CAP_SHARE, DistrictMap::WIDE_CAP_SHARE);
+        $this->assertLessThan(DistrictMap::PLOT_WIDTH_WIDE, DistrictMap::PLOT_WIDTH_STANDARD);
+        $this->assertLessThan(DistrictMap::PLOT_WIDTH_LANDMARK, DistrictMap::PLOT_WIDTH_WIDE);
 
-        $this->assertSame(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE['none'], DistrictMap::plotWidthForImportance(null));
-        $this->assertSame(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE['none'], DistrictMap::plotWidthForImportance('unrecognised-tier'));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_STANDARD, DistrictMap::plotWidthForCapShare(0.0));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_STANDARD, DistrictMap::plotWidthForCapShare(0.01));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_STANDARD, DistrictMap::plotWidthForCapShare(DistrictMap::WIDE_CAP_SHARE - 1e-6));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_WIDE, DistrictMap::plotWidthForCapShare(DistrictMap::WIDE_CAP_SHARE));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_WIDE, DistrictMap::plotWidthForCapShare(0.02));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_WIDE, DistrictMap::plotWidthForCapShare(DistrictMap::LANDMARK_CAP_SHARE - 1e-6));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_LANDMARK, DistrictMap::plotWidthForCapShare(DistrictMap::LANDMARK_CAP_SHARE));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_LANDMARK, DistrictMap::plotWidthForCapShare(0.03));
+        $this->assertSame(DistrictMap::PLOT_WIDTH_LANDMARK, DistrictMap::plotWidthForCapShare(1.0));
+
+        $this->assertFalse(DistrictMap::hasBeaconForCapShare(0.0));
+        $this->assertFalse(DistrictMap::hasBeaconForCapShare(DistrictMap::WIDE_CAP_SHARE));
+        $this->assertFalse(DistrictMap::hasBeaconForCapShare(0.024));
+        $this->assertFalse(DistrictMap::hasBeaconForCapShare(DistrictMap::LANDMARK_CAP_SHARE - 1e-6));
+        $this->assertTrue(DistrictMap::hasBeaconForCapShare(DistrictMap::LANDMARK_CAP_SHARE));
+        $this->assertTrue(DistrictMap::hasBeaconForCapShare(0.03));
+        $this->assertTrue(DistrictMap::hasBeaconForCapShare(1.0));
     }
 
     /**
@@ -336,8 +350,8 @@ class DistrictMapTest extends TestCase
         $checked = 0;
         foreach (DistrictMap::INSTITUTIONS as $id => $institution) {
             foreach ($institution['readouts'] ?? [] as $readout) {
-                $catalogued = MacroFieldCatalog::FIELDS[$readout['field']] ?? null;
-                if ($catalogued === null || !in_array($catalogued['unit'], [MacroFieldCatalog::UNIT_PERCENT, MacroFieldCatalog::UNIT_BPS], true)) {
+                $catalogued = MacroFieldCatalog::FIELDS[$readout['field']];
+                if (!in_array($catalogued['unit'], [MacroFieldCatalog::UNIT_PERCENT, MacroFieldCatalog::UNIT_BPS], true)) {
                     continue;
                 }
                 $this->assertSame($catalogued['unit'], $readout['unit'], "{$id} reads {$readout['field']}");

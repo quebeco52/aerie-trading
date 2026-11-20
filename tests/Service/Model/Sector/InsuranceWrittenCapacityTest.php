@@ -141,7 +141,6 @@ final class InsuranceWrittenCapacityTest extends TestCase
         $stock = new Stock();
         $stock->setTicker('TEST');
         $stock->setIndustry('Insurance - Specialty');
-        $stock->setSystemicImportance('base');
         $stock->setSamRatio((string) $samRatio);
         $stock->setTotalEquity((string) $equity);
         $stock->setWholesaleDebt('0');

@@ -227,7 +227,6 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
             ->setTicker((string) $seedRow['ticker'])
             ->setIndustry($seedRow['industry'] ?? null)
             ->setManagementStyle(ManagementStyle::tryFromNullable($seedRow['management_style'] ?? null))
-            ->setSystemicImportance($seedRow['systemic_importance'] ?? 'none')
             ->setFixedCostRatio((float) ($seedRow['fixed_cost_ratio'] ?? 0.0))
             ->setBaselineRoe((string) $baselineRoe)
             ->setRoeTtm((string) $baselineRoe);

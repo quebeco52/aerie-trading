@@ -489,7 +489,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             ->setTicker($ticker)
             ->setIndustry($seedRow['industry'] ?? null)
             ->setManagementStyle(ManagementStyle::tryFromNullable($seedRow['management_style'] ?? null))
-            ->setSystemicImportance($seedRow['systemic_importance'] ?? 'none')
             ->setFloatingDebtRatio((string) $seedRow['floating_debt_ratio'])
             ->setHistoricalFixedRate((string) $seedRow['historical_fixed_rate'])
             ->setBaselineRoe((string) $books['baseline_roe']);

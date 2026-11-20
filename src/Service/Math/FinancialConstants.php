@@ -61,15 +61,6 @@ class FinancialConstants
     public const MAX_ADDRESSABLE_MARKET_SHARE = 0.9999;
     /** Market share threshold (50%) beyond which Penrose bureaucratic bloat accelerates. */
     public const DISECONOMY_OPTIMAL_SHARE_THRESHOLD = 0.50;
-    /**
-     * Share of the drag from size a firm pays by its standing: a titan's scale pays 70% of the bloat another's does.
-     */
-    public const SYSTEMIC_SATURATION_DAMPENERS = [
-        'titan'    => 0.70,
-        'systemic' => 0.80,
-        'base'     => 0.90,
-        'default'  => 1.00,
-    ];
 
     // --- Reporting Calendar ---
     /** Reporting quarters in a year: the factor between a quarterly flow and its annual rate. */

@@ -170,7 +170,7 @@ class DistrictMap
     /**
      * Clear sky in user units between one row's kerb (or the conduit lane band) and the tallest
      * facade of the row below, allowing for everything that rides above a roofline: the rank
-     * label, the titan beacon, the event badge and the roof furniture (ROOF_FURNITURE_HEIGHT) —
+     * label, the landmark beacon, the event badge and the roof furniture (ROOF_FURNITURE_HEIGHT) —
      * see DistrictMapTest::testRowSpacingLeavesRoomForTheRoofFurniture.
      *
      * Every row's ground line, and with it the viewBox height, is derived per request by
@@ -189,7 +189,7 @@ class DistrictMap
      * bracket beneath them (SECTOR_BRACKET_RULE_OFFSET / SECTOR_BRACKET_LABEL_OFFSET). The three
      * cannot share lines: the narrowest plot is 100 units, and at a legible size "$326.91 -59.2%"
      * alone runs to ~218 units. Anything paired left-and-right on one line collides on every
-     * base-tier plot.
+     * standard-width plot.
      */
     public const KERB_DEPTH = 130;
     /** Air in user units below the lowest kerb, so its bottom rule is not clipped by the canvas edge. */
@@ -206,13 +206,22 @@ class DistrictMap
     public const FRONTAGE_MARGIN = 60;
     /** Uniform gap in user units between adjacent plots, and between adjacent institutions. */
     public const FRONTAGE_GAP = 14;
-    /** Plot width in user units keyed by systemic importance tier (Stock::getSystemicImportance()). */
-    public const PLOT_WIDTH_BY_IMPORTANCE = [
-        'titan' => 190,
-        'systemic' => 130,
-        'base' => 100,
-        'none' => 100,
-    ];
+    /** Plot width in user units for a standard tenant below WIDE_CAP_SHARE. */
+    public const PLOT_WIDTH_STANDARD = 100;
+    /** Plot width in user units for a large tenant at or above WIDE_CAP_SHARE. */
+    public const PLOT_WIDTH_WIDE = 130;
+    /** Plot width in user units for a landmark tenant at or above LANDMARK_CAP_SHARE. */
+    public const PLOT_WIDTH_LANDMARK = 190;
+    /**
+     * Share of Glasswater Row's total market capitalisation at or above which a tenant earns a landmark plot and
+     * roofline beacon (2.5%, roughly the six largest houses on a 45-tenant street).
+     */
+    public const LANDMARK_CAP_SHARE = 0.025;
+    /**
+     * Share of Glasswater Row's total market capitalisation at or above which a tenant earns a wide plot (1.25%,
+     * roughly the upper half of the street).
+     */
+    public const WIDE_CAP_SHARE = 0.0125;
 
     // --- Institution Layout ---
     /**
@@ -828,9 +837,19 @@ class DistrictMap
         return min($rows, self::ROW_COUNT, max(1, $tenants));
     }
 
-    /** Returns the plot width in user units for a given systemic importance tier. */
-    public static function plotWidthForImportance(?string $systemicImportance): int
+    /** Returns the plot width in user units for a tenant's live share of street market capitalisation. */
+    public static function plotWidthForCapShare(float $capShare): int
     {
-        return self::PLOT_WIDTH_BY_IMPORTANCE[$systemicImportance ?? 'none'] ?? self::PLOT_WIDTH_BY_IMPORTANCE['none'];
+        return match (true) {
+            $capShare >= self::LANDMARK_CAP_SHARE => self::PLOT_WIDTH_LANDMARK,
+            $capShare >= self::WIDE_CAP_SHARE => self::PLOT_WIDTH_WIDE,
+            default => self::PLOT_WIDTH_STANDARD,
+        };
+    }
+
+    /** Whether a tenant's live share of street market capitalisation earns a roofline beacon. */
+    public static function hasBeaconForCapShare(float $capShare): bool
+    {
+        return $capShare >= self::LANDMARK_CAP_SHARE;
     }
 }

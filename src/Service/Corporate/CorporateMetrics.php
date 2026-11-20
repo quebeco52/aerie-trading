@@ -156,28 +156,22 @@ class CorporateMetrics
         if ($segmentShares !== null) {
             $penalty = 0.0;
             foreach ($segmentShares as $segment => $share) {
-                $penalty += $share['plant'] * $this->saturationPenaltyAt($stock, $share['market']);
+                $penalty += $share['plant'] * $this->saturationPenaltyAt($share['market']);
             }
 
             return $penalty;
         }
 
-        return $this->saturationPenaltyAt($stock, $this->calculateAddressableShare($stock, $investedCapital, $macroState));
+        return $this->saturationPenaltyAt($this->calculateAddressableShare($stock, $investedCapital, $macroState));
     }
 
-    private function saturationPenaltyAt(Stock $stock, float $marketShare): float
+    private function saturationPenaltyAt(float $marketShare): float
     {
-        $dampener = FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS[$stock->getSystemicImportance()]
-            ?? FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS['default'];
-
         // Penrose Effect / Hayashi Quadratic Adjustment Costs: C(I) ∝ I^2
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         $excessRatio = max(0.0, ($marketShare - $optimalThreshold) / max(0.01, 1.0 - $optimalThreshold));
-        $convexBloat = ($excessRatio * $excessRatio) * self::DISECONOMY_FRICTION_COEFF;
 
-        $saturationPenalty = $convexBloat * $dampener;
-
-        return $saturationPenalty;
+        return ($excessRatio * $excessRatio) * self::DISECONOMY_FRICTION_COEFF;
     }
 
     /**
@@ -195,7 +189,7 @@ class CorporateMetrics
             $cost = 0.0;
             foreach ($segmentShares as $segment => $share) {
                 $substitutability = \App\Data\Company\Sectors::strategyFor($industries[$segment] ?? $stock->getIndustry())->getIndustrySubstitutability();
-                $cost += $share['plant'] * ($this->calculateMarginalSaturationDrag($stock, $share['market'])
+                $cost += $share['plant'] * ($this->calculateMarginalSaturationDrag($share['market'])
                     + $this->cournotHaircutAt($stock, $share['market'], $investedCapital, $macroState, $substitutability));
             }
 
@@ -204,7 +198,7 @@ class CorporateMetrics
 
         $marketShare = $this->calculateAddressableShare($stock, $investedCapital, $macroState);
 
-        return max(0.0, $trueReturn - $this->calculateMarginalSaturationDrag($stock, $marketShare) - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
+        return max(0.0, $trueReturn - $this->calculateMarginalSaturationDrag($marketShare) - $this->calculateCournotPriceHaircut($stock, $marketShare, $investedCapital, $macroState));
     }
 
     /**
@@ -234,18 +228,16 @@ class CorporateMetrics
      * of the quadratic penalty, nothing below the optimal share. A firm growing with its market keeps its share and
      * never pays it.
      */
-    public function calculateMarginalSaturationDrag(Stock $stock, float $marketShare): float
+    public function calculateMarginalSaturationDrag(float $marketShare): float
     {
         $optimalThreshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
         if ($marketShare <= $optimalThreshold) {
             return 0.0;
         }
 
-        $dampener = FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS[$stock->getSystemicImportance()]
-            ?? FinancialConstants::SYSTEMIC_SATURATION_DAMPENERS['default'];
         $span = max(0.01, 1.0 - $optimalThreshold);
 
-        return 2.0 * self::DISECONOMY_FRICTION_COEFF * $dampener * $marketShare * ($marketShare - $optimalThreshold) / ($span * $span);
+        return 2.0 * self::DISECONOMY_FRICTION_COEFF * $marketShare * ($marketShare - $optimalThreshold) / ($span * $span);
     }
 
     /**

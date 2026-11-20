@@ -186,7 +186,6 @@ class RevenueDrainSimulationTest extends TestCase
         $stock->setTicker($ticker);
         $stock->setName($ticker);
         $stock->setIndustry($industry);
-        $stock->setSystemicImportance($data['systemic_importance'] ?? 'base');
         $stock->setEarningsPerShare('2.50');
         $stock->setSharesOutstanding((string) ($data['shares_outstanding'] ?? 1000000000));
         $stock->setPrice('50.00');

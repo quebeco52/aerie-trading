@@ -54,3 +54,6 @@
   - CASC stays near 0.025, because the refiner charges crude separately; above about 0.04 it double-counts.
   - Open lore questions: the REIT spread (0.25-0.85, gross vs triple-net leases?), ACC 0.30 vs ROOK 0.75, PHIL, CROP,
     LYRE and CLAW.
+- No `systemic_importance` (11-20). Column and all 103 seed keys retired; Penrose saturation runs un-dampened (`1.0x`),
+  analyst coverage scales smoothly with log live real market cap (`COVERAGE_SIZE_*_GDP_SHARE`), and Glasswater Row
+  plot widths/beacons follow live share of street market cap (`LANDMARK_CAP_SHARE` / `WIDE_CAP_SHARE`).

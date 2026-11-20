@@ -102,7 +102,6 @@ final class CapitalSaturationInvariantTest extends TestCase
         $stock->setBeta((string) $beta);
         $stock->setJumpIntensity((string) $eventRisk->intensity());
         $stock->setJumpVol((string) \App\Service\Market\Pricing\VarianceBudget::jumpScaleForVarianceShare($businessRisk->vol(), $eventRisk->intensity()));
-        $stock->setSystemicImportance($row['systemic_importance']);
         $stock->setBaselineRoic((string) $row['baseline_roic']);
         $stock->setCurrentRoic((string) $row['baseline_roic']);
         $stock->setRoicTtm((string) $row['baseline_roic']);

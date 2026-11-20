@@ -210,6 +210,7 @@ class InitialMarketTest extends TestCase
             $this->assertArrayNotHasKey('target_payout_ratio', $row, "{$ticker} states a payout ratio; it names a dividend policy step.");
             $this->assertArrayNotHasKey('dividendSpeed', $row, "{$ticker} states a dividend speed; its business model sets it.");
             $this->assertArrayNotHasKey('credit_spread', $row, "{$ticker} states credit_spread; it is derived from the opening rating and LGD.");
+            $this->assertArrayNotHasKey('systemic_importance', $row, "{$ticker} states systemic_importance; standing is retired and read from live size.");
             $strategy = Sectors::strategyFor($industry);
             $isLender = Sectors::isFinancial(Sectors::businessModelFor($industry));
             $this->assertSame($isLender, isset($row['capex_ratio']), $isLender ? "{$ticker} is a lender with no reinvestment rate." : "{$ticker} states a reinvestment rate its capital budget never reads.");
@@ -324,6 +325,15 @@ class InitialMarketTest extends TestCase
             $this->assertArrayHasKey('floating_debt_ratio', $resolved, $ticker);
         }
         $this->assertArrayHasKey('historical_fixed_rate', SeedRows::resolve($byTicker['LAKE']));
+
+        foreach (['WING', 'LAKE', 'BRKW'] as $ticker) {
+            try {
+                SeedRows::resolve($byTicker[$ticker] + ['systemic_importance' => 'titan']);
+                $this->fail("SeedRows::resolve() should refuse retired 'systemic_importance' on {$ticker}.");
+            } catch (\DomainException) {
+                $this->addToAssertionCount(1);
+            }
+        }
     }
 
     /**

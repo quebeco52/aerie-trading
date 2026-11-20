@@ -101,41 +101,65 @@ final class StandardOperatingPhysicsTraitTest extends TestCase
     // --- Analyst coverage ---
 
     /**
-     * Systemic importance buys coverage: a titan is better understood than an anonymous small cap, and both
-     * the base visibility and the floor move with it. Everything stays a probability.
+     * Live real market cap buys coverage (Bhushan 1989): firms at or below the GDP-share floor get the sector's base
+     * visibility, larger houses climb on log size up to the cap ceiling, nominal GDP scales the yardstick so long-run
+     * growth does not inflate coverage, and probabilities clamp at one.
      */
-    public function testCoverageProfileLiftsWithSystemicImportanceAndStaysBounded(): void
+    public function testCoverageProfileLiftsWithRealMarketCapAndStaysBounded(): void
     {
-        $plain = (new Stock())->setTicker('SMALL');
-        $base = $this->model->getCoverageProfile($plain);
-        $this->assertSame(0.20, $base->baseVisibility, 'The fallback visibility applies when no constant is declared.');
-        $this->assertSame(0.06, $base->errorStdDev);
-        $this->assertSame(0.0, $base->minVisibility, 'With no declared floor a sector can go dark.');
+        $unpriced = (new Stock())->setTicker('UNPR');
+        $plain = $this->model->getCoverageProfile($unpriced);
+        $this->assertSame(0.20, $plain->baseVisibility, 'The fallback visibility applies when no constant is declared.');
+        $this->assertSame(0.06, $plain->errorStdDev);
+        $this->assertSame(0.0, $plain->minVisibility, 'With no declared floor a sector can go dark.');
 
-        $systemic = (new Stock())->setTicker('SYS');
-        $systemic->setSystemicImportance('systemic');
-        $titan = (new Stock())->setTicker('TITAN');
-        $titan->setSystemicImportance('titan');
+        // At or below 1% of District GDP ($60B at open) gets no uplift.
+        $atFloor = $this->sizedStock('FLOOR', MacroConstants::DISTRICT_GDP_USD * AbstractBusinessModel::COVERAGE_SIZE_FLOOR_GDP_SHARE);
+        $floorProfile = $this->model->getCoverageProfile($atFloor);
+        $this->assertSame(0.20, $floorProfile->baseVisibility);
+        $this->assertSame(0.0, $floorProfile->minVisibility);
 
-        $this->assertGreaterThan($base->baseVisibility, $this->model->getCoverageProfile($systemic)->baseVisibility);
-        $this->assertGreaterThan(
-            $this->model->getCoverageProfile($systemic)->baseVisibility,
-            $this->model->getCoverageProfile($titan)->baseVisibility,
-            'A titan must be better covered than a merely systemic firm.',
-        );
-        $this->assertGreaterThan($base->minVisibility, $this->model->getCoverageProfile($titan)->minVisibility, 'The floor rises with importance too.');
+        // Mid cap at 4% of real GDP ($240B at open) gets exact log-interpolated boost.
+        $midCap = $this->sizedStock('MIDC', MacroConstants::DISTRICT_GDP_USD * 0.04);
+        $expectedScale = log(0.04 / AbstractBusinessModel::COVERAGE_SIZE_FLOOR_GDP_SHARE)
+            / log(AbstractBusinessModel::COVERAGE_SIZE_CEILING_GDP_SHARE / AbstractBusinessModel::COVERAGE_SIZE_FLOOR_GDP_SHARE);
+        $midProfile = $this->model->getCoverageProfile($midCap);
+        $this->assertEqualsWithDelta(0.20 + AbstractBusinessModel::COVERAGE_MAX_VISIBILITY_BOOST * $expectedScale, $midProfile->baseVisibility, 1e-12);
+        $this->assertEqualsWithDelta(AbstractBusinessModel::COVERAGE_MAX_MIN_VISIBILITY_BOOST * $expectedScale, $midProfile->minVisibility, 1e-12);
 
-        // A declared sector profile reaches the calculation, and the uplift cannot push past certainty.
+        // Real scale-invariance: doubling nominal cap beside nominalGdpIndex = 2.0 leaves coverage identical.
+        $inflatedMidCap = $this->sizedStock('INFL', MacroConstants::DISTRICT_GDP_USD * 0.08);
+        $inflatedProfile = $this->model->getCoverageProfile($inflatedMidCap, 2.0);
+        $this->assertEqualsWithDelta($midProfile->baseVisibility, $inflatedProfile->baseVisibility, 1e-12);
+        $this->assertEqualsWithDelta($midProfile->minVisibility, $inflatedProfile->minVisibility, 1e-12);
+
+        // Mega cap past the 15% GDP ceiling saturates at +0.15 / +0.10.
+        $mega = $this->sizedStock('MEGA', MacroConstants::DISTRICT_GDP_USD * 0.25);
+        $megaProfile = $this->model->getCoverageProfile($mega);
+        $this->assertEqualsWithDelta(0.20 + AbstractBusinessModel::COVERAGE_MAX_VISIBILITY_BOOST, $megaProfile->baseVisibility, 1e-12);
+        $this->assertEqualsWithDelta(AbstractBusinessModel::COVERAGE_MAX_MIN_VISIBILITY_BOOST, $megaProfile->minVisibility, 1e-12);
+
+        // A declared sector profile reaches the calculation, and extreme overrides still clamp into [minVis, 1.0].
         $configured = new ConfiguredStandardModel();
-        $this->assertSame(0.55, $configured->getCoverageProfile($plain)->baseVisibility, 'A declared visibility must be used.');
-        $this->assertSame(0.02, $configured->getCoverageProfile($plain)->errorStdDev);
-        $this->assertLessThanOrEqual(1.0, $configured->getCoverageProfile($titan)->baseVisibility, 'Visibility is a probability and must clamp at one.');
-        $this->assertLessThanOrEqual(1.0, $configured->getCoverageProfile($titan)->minVisibility);
-        $this->assertLessThanOrEqual(
-            $configured->getCoverageProfile($titan)->baseVisibility,
-            $configured->getCoverageProfile($titan)->minVisibility,
-            'The floor can never exceed the base visibility.',
-        );
+        $this->assertSame(0.55, $configured->getCoverageProfile($unpriced)->baseVisibility, 'A declared visibility must be used.');
+        $this->assertSame(0.02, $configured->getCoverageProfile($unpriced)->errorStdDev);
+
+        $highVisibility = new class extends BareStandardModel {
+            public const BASE_COVERAGE_VISIBILITY = 0.92;
+            public const BASE_COVERAGE_MIN_VISIBILITY = 0.96;
+        };
+        $clamped = $highVisibility->getCoverageProfile($mega);
+        $this->assertSame(1.0, $clamped->baseVisibility, 'Visibility is a probability and must clamp at one.');
+        $this->assertSame(1.0, $clamped->minVisibility);
+        $this->assertLessThanOrEqual($clamped->baseVisibility, $clamped->minVisibility, 'The floor can never exceed the base visibility.');
+    }
+
+    private function sizedStock(string $ticker, float $marketCap): Stock
+    {
+        return (new Stock())
+            ->setTicker($ticker)
+            ->setSharesOutstanding('1000000000')
+            ->setPrice((string) ($marketCap / 1_000_000_000.0));
     }
 
     // --- Demand transmission ---

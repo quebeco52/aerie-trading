@@ -46,13 +46,6 @@ function formatReading(reading) {
     return value.toFixed(1);
 }
 
-const IMPORTANCE_LABELS = {
-    titan: 'Titan — systemically irreplaceable',
-    systemic: 'Systemically important',
-    base: 'Baseline constituent',
-    none: 'Unclassified',
-};
-
 /**
  * Evaluates one stress rule against a live macro snapshot. Mirrors
  * App\Service\District\DistrictStressEvaluator::ruleTriggered() exactly, but the rules
@@ -178,7 +171,7 @@ export default class extends Controller {
         'tooltipPrice', 'tooltipChange', 'tooltipCap',
         'empty', 'detail', 'detailTicker', 'detailPlot', 'detailName', 'detailIndustry',
         'detailPrice', 'detailChange', 'detailMcap', 'detailRating', 'detailRoc',
-        'detailImportance', 'detailRank', 'detailBlurb', 'detailLink', 'detailEvents', 'noEvents',
+        'detailMoat', 'detailRank', 'detailBlurb', 'detailLink', 'detailEvents', 'noEvents',
         'detailRevenueMix', 'detailRevenueTotal', 'noRevenueMix', 'detailRevenuePeriod',
         'detailRevenueHeadline', 'detailRevenueQoq', 'detailRevenueYoy', 'detailRevenueMeta',
         'detailRevenueMixBar', 'detailRevenueFootnote',
@@ -446,7 +439,7 @@ export default class extends Controller {
         this.detailIndustryTarget.innerText = plot.dataset.industry || '';
         this.detailRatingTarget.innerText = plot.dataset.rating || '—';
         this.detailRankTarget.innerText = `#${plot.dataset.rank}`;
-        this.detailImportanceTarget.innerText = IMPORTANCE_LABELS[plot.dataset.importance] || 'Unclassified';
+        this.detailMoatTarget.innerText = plot.dataset.moat || '—';
         this.detailBlurbTarget.innerText = plot.dataset.blurb || '';
         this.detailLinkTarget.href = `/stock/${plot.dataset.ticker}`;
 

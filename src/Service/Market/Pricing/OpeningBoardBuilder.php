@@ -113,7 +113,6 @@ class OpeningBoardBuilder
         $stock->setBeta((string) IndustryBetas::seedBetaFor($stockData));
         $stock->setJumpIntensity(Decimal::format($eventRisk->intensity(), 2));
         $stock->setJumpVol(Decimal::format(VarianceBudget::jumpScaleForVarianceShare($businessRisk->vol(), $eventRisk->intensity()), 4));
-        $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');
 
         $stock->setImpactVarianceEma(0.0);
         $stock->setAnnouncementVarianceEma(0.0);

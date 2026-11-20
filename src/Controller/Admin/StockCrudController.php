@@ -54,14 +54,6 @@ class StockCrudController extends AbstractCrudController
             ChoiceField::new('industry')
                 ->setChoices(array_combine(array_keys(Sectors::INDUSTRY_METRICS), array_keys(Sectors::INDUSTRY_METRICS))),
 
-            ChoiceField::new('systemic_importance')
-            ->setChoices([
-                'titan' => 'titan',
-                'base' => 'base',
-                'systemic' => 'systemic',
-                'none' => 'none',
-            ]),
-
             // --- SECTION 2: LIVE DATA (LOCKED) ---
             FormField::addFieldset('Live Market Data (Protected)')->setIcon('fas fa-chart-line')
                 ->setHelp('These values are actively managed by the simulation engine and cannot be edited manually.'),

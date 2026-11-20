@@ -155,7 +155,6 @@ class DistrictRosterTest extends TestCase
             $stock->setIndustry('Banks - Diversified');
             $stock->setPrice((string) (100.0 - $i));
             $stock->setSharesOutstanding('1000000');
-            $stock->setSystemicImportance('none');
             $stocks[] = $stock;
         }
 

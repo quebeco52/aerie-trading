@@ -139,7 +139,6 @@ class ReturnReversionTest extends TestCase
         $lender->setIndustry('Credit Services');
         $lender->setBaselineRoe('0.15');
         $lender->setSamRatio('0.10');
-        $lender->setSystemicImportance('default');
         $lender->setTotalEquity((string) (3.0 * CorporateMetrics::BASELINE_SECTOR_TAM * 0.10));
 
         $model = Sectors::strategyFor('Credit Services');
@@ -159,7 +158,6 @@ class ReturnReversionTest extends TestCase
         $bank->setIndustry('Banks - Regional');
         $bank->setBaselineRoe('0.15');
         $bank->setSamRatio('0.10');
-        $bank->setSystemicImportance('default');
         $bank->setTotalEquity((string) (3.0 * CorporateMetrics::BASELINE_SECTOR_TAM * 0.10));
         $bank->setCustomerDeposits('2000000000000');
         $bank->setCorporateTreasury('100000000000');

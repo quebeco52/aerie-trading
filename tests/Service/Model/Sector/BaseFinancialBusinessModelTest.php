@@ -17,7 +17,7 @@ class BaseFinancialBusinessModelTest extends TestCase
     protected function setUp(): void
     {
         $this->model = new class extends BaseFinancialBusinessModel {
-            public function getCoverageProfile(Stock $stock): \App\DTO\SectorCoverageProfile
+            public function getCoverageProfile(Stock $stock, float $nominalGdpIndex = 1.0): \App\DTO\SectorCoverageProfile
             {
                 return new \App\DTO\SectorCoverageProfile(0.65, 0.06);
             }

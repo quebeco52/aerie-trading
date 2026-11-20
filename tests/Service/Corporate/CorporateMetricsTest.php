@@ -24,8 +24,7 @@ class CorporateMetricsTest extends TestCase
 
     /**
      * The next unit of capital earns the return the whole base earns less what it adds to the saturation penalty on
-     * that base: the derivative of E x (r - p(E)), nothing below the optimal share, and a softer drag for a firm whose
-     * position defends the extra scale.
+     * that base: the derivative of E x (r - p(E)), nothing below the optimal share.
      */
     public function testTheMarginalReturnIsTheDerivativeOfWhatTheCapitalEarns(): void
     {
@@ -50,12 +49,15 @@ class CorporateMetricsTest extends TestCase
         $farPast = 0.90 * CorporateMetrics::BASELINE_SECTOR_TAM * (float) $bank->getSamRatio();
         $this->assertSame(0.0, $this->metrics->calculateMarginalReturn($bank, $baseReturn, $farPast, $macroState));
 
-        $titan = $this->scaledFirm('TITN');
-        $titan->setSystemicImportance('titan');
-        $this->assertLessThan(
-            $this->metrics->calculateMarginalSaturationDrag($bank, 0.90),
-            $this->metrics->calculateMarginalSaturationDrag($titan, 0.90),
-        );
+        // Exact Penrose quadratic penalty and derivative directly from the threshold and friction coefficient.
+        $threshold = FinancialConstants::DISECONOMY_OPTIMAL_SHARE_THRESHOLD;
+        $span = 1.0 - $threshold;
+        $excess = (0.90 - $threshold) / $span;
+        $expectedPenalty = ($excess ** 2) * CorporateMetrics::DISECONOMY_FRICTION_COEFF;
+        $expectedDrag = 2.0 * CorporateMetrics::DISECONOMY_FRICTION_COEFF * 0.90 * (0.90 - $threshold) / ($span ** 2);
+
+        $this->assertEqualsWithDelta($expectedPenalty, $this->metrics->calculateMarketSaturationPenalty($bank, $farPast, $macroState), 1e-12);
+        $this->assertEqualsWithDelta($expectedDrag, $this->metrics->calculateMarginalSaturationDrag(0.90), 1e-12);
     }
 
     /**
@@ -143,7 +145,6 @@ class CorporateMetricsTest extends TestCase
     {
         $stock = new Stock();
         $stock->setSamRatio('1.0');
-        $stock->setSystemicImportance('default');
 
         $macro = new MacroStateDTO(nominalGdpIndex: 1.0);
 
@@ -170,7 +171,6 @@ class CorporateMetricsTest extends TestCase
         $stock = new Stock();
         $stock->setIndustry('Internet Retail');
         $stock->setSamRatio('0.375');
-        $stock->setSystemicImportance('base');
 
         $excess = IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor('Internet Retail'), $stock);
         $this->assertGreaterThan(0.03, $excess, 'online retail outgrows the economy at the open');
@@ -195,7 +195,6 @@ class CorporateMetricsTest extends TestCase
     {
         $stock = new Stock();
         $stock->setSamRatio('1.0');
-        $stock->setSystemicImportance('default');
 
         $macro = new MacroStateDTO(nominalGdpIndex: 1.0);
 
@@ -214,7 +213,6 @@ class CorporateMetricsTest extends TestCase
         $stock = new Stock();
         $stock->setIndustry('Steel');
         $stock->setSamRatio('1.0');
-        $stock->setSystemicImportance('default');
         $stock->setTotalRevenue((string) (450_000_000_000.0));
         $macro = new MacroStateDTO(nominalGdpIndex: 1.0, corporateTaxRate: 0.21);
         $capital = 300_000_000_000.0;

@@ -139,7 +139,7 @@ trait StandardOperatingPhysicsTrait
         return $macroTaxRate;
     }
 
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile
+    public function getCoverageProfile(Stock $stock, float $nominalGdpIndex = 1.0): SectorCoverageProfile
     {
         $params = $this->resolveModelParameters($stock, [
             ModelParam::BaseVisibility->value => static::BASE_COVERAGE_VISIBILITY,
@@ -151,22 +151,27 @@ trait StandardOperatingPhysicsTrait
         $error      = $params[ModelParam::CoverageError];
         $minVis     = $params[ModelParam::MinVisibility];
 
-        // Systemic importance modifier: titans get more analyst coverage
-        $importance = $stock->getSystemicImportance();
-        if ($importance === 'titan') {
-            $visibility += 0.15;
-            $minVis += 0.10;
-        } elseif ($importance === 'systemic') {
-            $visibility += 0.10;
-            $minVis += 0.05;
+        // Analyst following scales with log firm size (Bhushan 1989), deflated by nominal GDP to stay scale-invariant.
+        $marketCap = max(0.0, (float) $stock->getPrice() * (float) $stock->getSharesOutstanding());
+        $gdpShare = $marketCap / (MacroConstants::DISTRICT_GDP_USD * max(0.01, $nominalGdpIndex));
+        if ($gdpShare > static::COVERAGE_SIZE_FLOOR_GDP_SHARE) {
+            $scale = min(
+                1.0,
+                log($gdpShare / static::COVERAGE_SIZE_FLOOR_GDP_SHARE)
+                    / log(static::COVERAGE_SIZE_CEILING_GDP_SHARE / static::COVERAGE_SIZE_FLOOR_GDP_SHARE),
+            );
+            $visibility += static::COVERAGE_MAX_VISIBILITY_BOOST * $scale;
+            $minVis += static::COVERAGE_MAX_MIN_VISIBILITY_BOOST * $scale;
         }
 
         // A model whose quarters can carry an announced event (a trial readout, a recall, a missed hurdle) declares how
-        // visible such a quarter is; the systemic boost above applies to its routine quarters either way.
+        // visible such a quarter is; the size uplift above applies to its routine quarters either way.
+        $clampedVis = min(1.0, $visibility);
+
         return new SectorCoverageProfile(
-            baseVisibility: min(1.0, $visibility),
+            baseVisibility: $clampedVis,
             errorStdDev: $error,
-            minVisibility: min(1.0, $minVis),
+            minVisibility: min($clampedVis, $minVis),
             eventBaseVisibility: static::EVENT_BASE_VISIBILITY,
             eventMinVisibility: static::EVENT_MIN_VISIBILITY,
         );

@@ -46,7 +46,6 @@ final class DistrictRenderTest extends KernelTestCase
             $stock->setPrice((string) round((float) $s['total_equity'] * mt_rand(80, 400) / 100 / $shares, 2));
             $stock->setSharesOutstanding((string) $shares);
             $stock->setCreditRating(self::RATINGS[mt_rand(0, count(self::RATINGS) - 1)]);
-            $stock->setSystemicImportance($s['systemic_importance'] ?? 'none');
             $stock->setBaselineRoe((string) $baselineRoe);
             $stock->setCurrentRoe((string) ($baselineRoe * mt_rand(20, 160) / 100));
             $stock->setBaselineRoic((string) $baselineRoic);

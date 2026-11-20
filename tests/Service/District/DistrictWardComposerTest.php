@@ -13,8 +13,8 @@ use PHPUnit\Framework\TestCase;
  * Pins the two independent rules the street's frontage is derived from: *qualification* is a
  * live top-DistrictMap::STREET_ROSTER_SIZE ranking by market cap (recomputed every request, no
  * company authored on or off), while *position* is DistrictMap::FRONTAGE_ORDER — see that
- * constant's docblock. Geometry itself is a pure function of systemic importance and position,
- * reproducing the pre-rework hand-authored coordinates exactly from the same formula.
+ * constant's docblock. Plot widths and beacons are a pure function of live share of street market
+ * capitalisation, and row wrapping balances total frontage width.
  */
 class DistrictWardComposerTest extends TestCase
 {
@@ -25,7 +25,7 @@ class DistrictWardComposerTest extends TestCase
         $this->composer = new DistrictWardComposer();
     }
 
-    private function makeStock(string $ticker, string $industry, float $price, float $shares, string $importance = 'none'): Stock
+    private function makeStock(string $ticker, string $industry, float $price, float $shares): Stock
     {
         $stock = new Stock();
         $stock->setTicker($ticker);
@@ -34,7 +34,6 @@ class DistrictWardComposerTest extends TestCase
         $stock->setIndustry($industry);
         $stock->setPrice((string) $price);
         $stock->setSharesOutstanding((string) $shares);
-        $stock->setSystemicImportance($importance);
 
         return $stock;
     }
@@ -69,20 +68,47 @@ class DistrictWardComposerTest extends TestCase
     public function testFewerThanRosterSizeStocksFillsExactlyAsManySlots(): void
     {
         $frontage = $this->composer->composeFrontage([
-            $this->makeStock('LAKE', 'Banks - Diversified', 100.0, 1_000_000_000.0, 'titan'),
+            $this->makeStock('LAKE', 'Banks - Diversified', 100.0, 1_000_000_000.0),
         ]);
 
         $this->assertCount(1, $frontage['slots']);
         $this->assertSame('LAKE', $frontage['slots'][0]['ticker']);
     }
 
-    public function testEveryOccupiedSlotWidthMatchesSystemicImportance(): void
+    public function testSlotWidthsAndBeaconsFollowLiveStreetCapShare(): void
     {
-        $frontage = $this->composer->composeFrontage([
-            $this->makeStock('LAKE', 'Banks - Diversified', 100.0, 1.0, 'titan'),
+        $soloSolvent = $this->composer->composeFrontage([
+            $this->makeStock('LAKE', 'Banks - Diversified', 100.0, 1.0),
         ]);
+        $this->assertSame(DistrictMap::PLOT_WIDTH_LANDMARK, $soloSolvent['slots'][0]['width']);
+        $this->assertTrue($soloSolvent['slots'][0]['hasBeacon']);
+        $this->assertEqualsWithDelta(1.0, $soloSolvent['slots'][0]['capShare'], 1e-12);
 
-        $this->assertSame(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE['titan'], $frontage['slots'][0]['width']);
+        $zeroCap = $this->composer->composeFrontage([
+            $this->makeStock('DEAD', 'Banks - Diversified', 0.0, 1.0),
+        ]);
+        $this->assertSame(DistrictMap::PLOT_WIDTH_STANDARD, $zeroCap['slots'][0]['width']);
+        $this->assertFalse($zeroCap['slots'][0]['hasBeacon']);
+        $this->assertSame(0.0, $zeroCap['slots'][0]['capShare']);
+
+        // Four banks on one street with total cap $100B => shares 94.5% & 3.0% (>= 2.5% landmark), 1.5% (>= 1.25%
+        // wide), 1.0% (< 1.25% standard).
+        $street = $this->composer->composeFrontage([
+            $this->makeStock('TINY', 'Banks - Regional', 1.0, 1_000_000_000.0),
+            $this->makeStock('MIDL', 'Banks - Regional', 1.5, 1_000_000_000.0),
+            $this->makeStock('LARG', 'Banks - Regional', 3.0, 1_000_000_000.0),
+            $this->makeStock('MEGA', 'Banks - Diversified', 94.5, 1_000_000_000.0),
+        ]);
+        $byTicker = array_column($street['slots'], null, 'ticker');
+
+        $this->assertSame(DistrictMap::PLOT_WIDTH_LANDMARK, $byTicker['MEGA']['width']);
+        $this->assertTrue($byTicker['MEGA']['hasBeacon']);
+        $this->assertSame(DistrictMap::PLOT_WIDTH_LANDMARK, $byTicker['LARG']['width']);
+        $this->assertTrue($byTicker['LARG']['hasBeacon']);
+        $this->assertSame(DistrictMap::PLOT_WIDTH_WIDE, $byTicker['MIDL']['width']);
+        $this->assertFalse($byTicker['MIDL']['hasBeacon']);
+        $this->assertSame(DistrictMap::PLOT_WIDTH_STANDARD, $byTicker['TINY']['width']);
+        $this->assertFalse($byTicker['TINY']['hasBeacon']);
     }
 
     public function testPositionOrdersByFrontageOrderThenMarketCapDescendingAmongQualifiers(): void
@@ -131,9 +157,9 @@ class DistrictWardComposerTest extends TestCase
     public function testGeometryIsSequentialWithNoOverlap(): void
     {
         $stocks = [
-            $this->makeStock('LAKE', 'Banks - Diversified', 100.0, 1.0, 'titan'),
-            $this->makeStock('RIVR', 'Banks - Regional', 50.0, 1.0, 'systemic'),
-            $this->makeStock('STRK', 'Credit Services', 10.0, 1.0, 'none'),
+            $this->makeStock('LAKE', 'Banks - Diversified', 100.0, 1.0),
+            $this->makeStock('RIVR', 'Banks - Regional', 50.0, 1.0),
+            $this->makeStock('STRK', 'Credit Services', 10.0, 1.0),
         ];
         $frontage = $this->composer->composeFrontage($stocks);
 
@@ -155,15 +181,15 @@ class DistrictWardComposerTest extends TestCase
     }
 
     /**
-     * Width by importance tier, uniform FRONTAGE_GAP, and a canvas of
+     * Width by live market-cap share, uniform FRONTAGE_GAP, and a canvas of
      * gutter + widest row + margin — the gutter being wider than the margin because the
      * market-cap gridline labels are printed in it.
      */
     public function testViewboxWidthMatchesTheDerivationFormula(): void
     {
         $stocks = [
-            $this->makeStock('LAKE', 'Banks - Diversified', 100.0, 1.0, 'titan'),
-            $this->makeStock('RIVR', 'Banks - Regional', 50.0, 1.0, 'systemic'),
+            $this->makeStock('LAKE', 'Banks - Diversified', 100.0, 1.0),
+            $this->makeStock('RIVR', 'Banks - Regional', 50.0, 1.0),
         ];
         $frontage = $this->composer->composeFrontage($stocks);
 
@@ -249,7 +275,7 @@ class DistrictWardComposerTest extends TestCase
         $narrowest = min($edges);
 
         $this->assertLessThanOrEqual(
-            max(DistrictMap::PLOT_WIDTH_BY_IMPORTANCE) + DistrictMap::FRONTAGE_GAP,
+            DistrictMap::PLOT_WIDTH_LANDMARK + DistrictMap::FRONTAGE_GAP,
             $widest - $narrowest,
             'The rows should differ by at most one plot\'s worth of width',
         );

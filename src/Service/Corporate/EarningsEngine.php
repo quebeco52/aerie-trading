@@ -758,7 +758,7 @@ class EarningsEngine
             }
         }
 
-        $coverage = $ctx->strategy->getCoverageProfile($ctx->stock);
+        $coverage = $ctx->strategy->getCoverageProfile($ctx->stock, $ctx->macroState->nominalGdpIndex);
         $seasonalRatio = $ctx->seasonalFactor / max(0.01, $ctx->priorSeasonalFactor);
         // The base the LAST consensus was struck against, still the opening state here: the stream map on
         // the stock is only replaced once the report is booked below.

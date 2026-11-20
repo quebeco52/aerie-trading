@@ -72,7 +72,12 @@ class DistrictPlotDTO
          */
         public readonly ?string $district = null,
         public readonly ?string $industry = null,
-        public readonly ?string $systemicImportance = null,
+        /** Share of the street's total market capitalisation this tenant holds at render time. */
+        public readonly float $streetCapShare = 0.0,
+        /** Whether this tenant's live share of street market capitalisation earns a roofline beacon. */
+        public readonly bool $hasBeacon = false,
+        /** Plain-English label for the firm's moat (IndustryMoats::forStock()). */
+        public readonly ?string $moatLabel = null,
         public readonly ?string $creditRating = null,
         public readonly string $condition = 'sound',
         public readonly float $price = 0.0,

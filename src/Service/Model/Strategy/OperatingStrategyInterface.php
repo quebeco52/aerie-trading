@@ -56,7 +56,7 @@ interface OperatingStrategyInterface
      * what is published: the base the analyst anchor is carried forward on.
      */
     public function measureMarketQuarterRevenue(Stock $stock, float $expectedRevenue, float $expectedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, ?int $calendarQuarter = null, int $seed = 0): float;
-    public function getCoverageProfile(Stock $stock): SectorCoverageProfile;
+    public function getCoverageProfile(Stock $stock, float $nominalGdpIndex = 1.0): SectorCoverageProfile;
     public function getMacroPhysics(Stock $stock, MacroStateDTO $macroState): array;
     /**
      * The systematic volume swing this model applies inside its own sector physics rather than through

@@ -162,7 +162,7 @@
 		{% set saturated = industry.addressableShare > sat.threshold %}
 		<div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs mb-3">
 			{{ ui.tile('Addressable share', industry.addressableShare|pct(2), (saturated ? 'past' : 'under') ~ ' the ' ~ sat.threshold|pct(0) ~ ' saturation line', {tone: saturated ? 'text-warning' : 'text-on-surface'}) }}
-			{{ ui.tile('Drag from size', (-sat.penalty)|pp(2), 'margin lost to the friction of size · ' ~ sat.severity|pct(0) ~ ' of return' ~ (sat.sizeShelter < 1 ? ' · its standing pays ' ~ sat.sizeShelter|pct(0) ~ ' of it' : ''), {tone: sat.penalty > 0.0005 ? 'text-warning' : 'text-on-surface'}) }}
+			{{ ui.tile('Drag from size', (-sat.penalty)|pp(2), 'margin lost to the friction of size · ' ~ sat.severity|pct(0) ~ ' of return', {tone: sat.penalty > 0.0005 ? 'text-warning' : 'text-on-surface'}) }}
 			{{ ui.tile('Marginal return', sat.marginalReturn|pct(2), 'next dollar of capital' ~ (sat.trailingReturn is null ? '' : ' · trailing ' ~ sat.trailingReturn|pct(2)), {tone: sat.marginalReturn < sat.trueReturn - 0.0005 ? 'text-warning' : 'text-on-surface'}) }}
 			{{ ui.tile('Moat', sat.moat.label, 'the edge its franchise keeps over its cost of capital · ' ~ sat.moat.spread|pp(0, true), {mono: false}) }}
 		</div>
