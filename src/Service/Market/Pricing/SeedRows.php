@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Market\Pricing;
 
+use App\Data\Company\IndustryFixedCosts;
 use App\Data\Company\IndustryRisks;
 use App\Data\Company\IndustryTurnovers;
 use App\Data\Company\InitialMarket;
@@ -63,6 +64,9 @@ final class SeedRows
         if ($strategy->derivesOpeningFloatingShare() && array_key_exists('floating_debt_ratio', $row)) {
             $derived[] = 'floating_debt_ratio';
         }
+        if ($strategy->derivesOpeningFixedCostRatio() && array_key_exists('fixed_cost_ratio', $row)) {
+            $derived[] = 'fixed_cost_ratio';
+        }
         if ($derived !== []) {
             throw new \DomainException(sprintf(
                 '%s states %s, which is derived at opening rather than seeded.',
@@ -73,6 +77,13 @@ final class SeedRows
 
         IndustryRisks::assertRow($row);
         IndustryTurnovers::assertCapitalIntensity($row);
+        IndustryFixedCosts::assertCostStructure($row);
+        if (!$strategy->derivesOpeningFixedCostRatio() && array_key_exists('cost_structure', $row)) {
+            throw new \DomainException(sprintf(
+                '%s states cost_structure, but its model keeps fixed_cost_ratio seeded.',
+                (string) ($row['ticker'] ?? '?'),
+            ));
+        }
 
         $row += [
             'sector' => Sectors::sectorFor($row['industry'] ?? null),
@@ -80,6 +91,9 @@ final class SeedRows
             'shares_outstanding' => self::SHARES_OUTSTANDING,
             'depreciation_rate' => Sectors::metricsFor($row['industry'] ?? null)['depreciation'],
         ];
+        if ($strategy->derivesOpeningFixedCostRatio()) {
+            $row['fixed_cost_ratio'] = IndustryFixedCosts::forRow($row);
+        }
 
         return [self::RESOLVED => true] + Sectors::strategyFor($row['industry'] ?? null)->resolveOpeningBooks($row, $openingMacro ?? new MacroStateDTO());
     }

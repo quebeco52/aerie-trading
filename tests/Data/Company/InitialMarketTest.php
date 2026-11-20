@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Data\Company;
 
+use App\Data\Company\CostStructure;
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\IndustryPayoutPolicies;
 use App\Data\Company\InitialMarket;
@@ -222,6 +223,14 @@ class InitialMarketTest extends TestCase
                 array_key_exists('floating_debt_ratio', $row),
                 "{$ticker} floating_debt_ratio presence must match whether its model derives it at opening.",
             );
+            $this->assertSame(
+                !$strategy->derivesOpeningFixedCostRatio(),
+                array_key_exists('fixed_cost_ratio', $row),
+                "{$ticker} fixed_cost_ratio presence must match whether its model derives it at opening.",
+            );
+            if (isset($row['cost_structure'])) {
+                $this->assertNotSame(CostStructure::Typical->value, $row['cost_structure'], "{$ticker} states typical cost_structure; omit the default.");
+            }
         }
     }
 

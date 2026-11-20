@@ -1112,4 +1112,13 @@ trait StandardOperatingPhysicsTrait
     {
         return true;
     }
+
+    /**
+     * Most firms derive opening fixed_cost_ratio from their board industry and lore step in IndustryFixedCosts;
+     * deposit lenders and insurers keep it seeded where the ratio means something else or sizes the opening book.
+     */
+    public function derivesOpeningFixedCostRatio(): bool
+    {
+        return true;
+    }
 }

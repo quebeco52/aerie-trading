@@ -391,4 +391,10 @@ interface OperatingStrategyInterface
      * from it and from leverage, never an input to the operating physics.
      */
     public function getOperatingCyclicality(Stock $stock): float;
+    /**
+     * Whether opening fixed_cost_ratio is derived from IndustryFixedCosts rather than seeded on the row. False for
+     * deposit lenders (whose cost base is struck on earning assets) and insurers (whose ratio splits losses from
+     * underwriting overhead and shapes their opening reserves and receivables/payables).
+     */
+    public function derivesOpeningFixedCostRatio(): bool;
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\Model\Sector;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\IndustryFixedCosts;
 use App\Data\Company\IndustryMoats;
 use App\Data\Company\IndustryTurnovers;
 use App\Data\Company\ManagementStyle;
@@ -123,6 +124,10 @@ class StandardCorporateBusinessModel extends AbstractBusinessModel
             ->setBaselineRoic((string) $baselineRoic)
             ->setRoicTtm((string) $baselineRoic)
             ->setLongRunReturn((string) $baselineRoic);
+        // Working capital below reads the fixed share; SeedRows has filled it in (IndustryFixedCosts) before the books.
+        if (isset($seedRow['fixed_cost_ratio'])) {
+            $stock->setFixedCostRatio((float) $seedRow['fixed_cost_ratio']);
+        }
 
         // The manager the engine recapitalises toward, at the typical intensity of its style
         // (DebtEngine::analyzeDebtHealth()).

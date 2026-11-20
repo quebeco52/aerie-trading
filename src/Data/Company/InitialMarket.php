@@ -42,7 +42,6 @@ class InitialMarket
             'beta_tilt' => 0.25, // leveraged long/short books
             'moat' => 'wide',
             'capex_ratio' => 0.05,
-            'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.40,
             'public_float' => 0.50,
             'floating_debt_ratio' => 0.50,
@@ -59,7 +58,6 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'beta_tilt' => -0.25, // steadier cloud contracts, less volatile than smaller software names
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.85,
             'revenue' => 82_800_000_000.00,
             'addressable_share' => 0.293,
             'public_float' => 0.90,
@@ -73,7 +71,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // a contrarian holder that buys when prices fall
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.35,
             'revenue' => 61_400_000_000.00,
             'addressable_share' => 0.204,
             'public_float' => 0.80,
@@ -89,7 +86,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
             'payout' => 'low',
-            'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.40,
             'public_float' => 0.95,
             'addressable_share' => 0.333,
@@ -107,7 +103,6 @@ class InitialMarket
             'risk' => -1,
             'moat' => 'moderate',
             'capex_ratio' => 0.15,
-            'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.35,
             'public_float' => 0.88,
             'addressable_share' => 0.267,
@@ -125,7 +120,6 @@ class InitialMarket
             'risk' => -1,
             'moat' => 'moderate',
             'capex_ratio' => 0.10,
-            'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.45,
             'addressable_share' => 0.28,
             'floating_debt_ratio' => 0.85,
@@ -221,7 +215,7 @@ class InitialMarket
             'industry' => 'Financial Data & Ratings',
             'systemic_importance' => 'systemic',
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.55,
+            'cost_structure' => 'flexible', // analyst staff scales with new-issue ratings volume
             'revenue' => 8_670_000_000.00,
             'addressable_share' => 0.132,
             'public_float' => 0.92,
@@ -233,7 +227,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             // a regulated electric utility: 15.0% (Damodaran, Utility (General), US, January 2026)
             'moat' => 'narrow',
-            'fixed_cost_ratio' => 0.80,
             'revenue' => 63_600_000_000.00,
             'addressable_share' => 0.281,
             'public_float' => 0.99,
@@ -245,7 +238,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // multi-year retainers held through recessions
             'risk' => -1,
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 27_100_000_000.00,
             'addressable_share' => 0.288,
         ],
@@ -255,7 +247,6 @@ class InitialMarket
             'industry' => 'Steel',
             'systemic_importance' => 'base',
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 48_800_000_000.00,
             'addressable_share' => 0.203,
             'public_float' => 0.90,
@@ -267,7 +258,6 @@ class InitialMarket
             'industry' => 'Computer Hardware',
             'systemic_importance' => 'none',
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.55,
             'revenue' => 33_800_000_000.00,
             'addressable_share' => 0.232,
             'public_float' => 0.75,
@@ -278,7 +268,6 @@ class InitialMarket
             'industry' => 'REIT - Residential',
             'systemic_importance' => 'none',
             'moat' => 'narrow',
-            'fixed_cost_ratio' => 0.25,
             'operating_margin' => 0.55,
             'revenue' => 15_300_000_000.00,
             'addressable_share' => 0.280,
@@ -291,7 +280,6 @@ class InitialMarket
             'systemic_importance' => 'none',
             'moat' => 'very_wide',
             'payout' => 'low',
-            'fixed_cost_ratio' => 0.60,
             // sixty percent long-term robotics service contracts over a lighter plant base
             'capital_intensity' => 'light',
             'revenue' => 52_300_000_000.00,
@@ -308,7 +296,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // orders follow mainland and allied budgets, not the District cycle
             'events' => -1,
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.65,
             'revenue' => 85_600_000_000.00,
             'addressable_share' => 0.293,
             'public_float' => 0.95,
@@ -323,7 +310,6 @@ class InitialMarket
             'beta_tilt' => 0.25, // a growth stock: its value is mostly years away, so it moves with risk appetite
             'moat' => 'narrow',
             // engineering, the factory and the launch pads; propellant, recovery and ground crews follow the launches
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 11_300_000_000.00,
             'addressable_share' => 0.3,
             'public_float' => 0.95,
@@ -333,7 +319,6 @@ class InitialMarket
             'name' => 'Loon Call Telecom',
             'industry' => 'Telecom Services',
             'systemic_importance' => 'systemic',
-            'fixed_cost_ratio' => 0.75, // Verizon 2024: device cost is 25% of operating costs
             'revenue' => 68_200_000_000.00,
             'addressable_share' => 0.352,
             'public_float' => 0.98,
@@ -345,7 +330,6 @@ class InitialMarket
             'name' => 'Pheasant & Morris International',
             'industry' => 'Tobacco',
             'systemic_importance' => 'none',
-            'fixed_cost_ratio' => 0.25,
             'revenue' => 23_400_000_000.00,
             'addressable_share' => 0.284,
             'public_float' => 0.95,
@@ -361,7 +345,6 @@ class InitialMarket
             'risk' => -1,
             'moat' => 'moderate',
             'payout' => 'income',
-            'fixed_cost_ratio' => 0.40,
             // one-third fast-turning household staples and adhesives, lighter than rail and utility holdings
             'capital_intensity' => 'light',
             'revenue' => 59_000_000_000.00,
@@ -375,7 +358,6 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'beta_tilt' => 0.25, // heavy fixed costs on a thin margin
             'moat' => 'narrow',
-            'fixed_cost_ratio' => 0.60,
             'revenue' => 233_000_000_000.00,
             'addressable_share' => 0.315,
             'public_float' => 0.45,
@@ -396,7 +378,7 @@ class InitialMarket
             'beta_tilt' => 0.25, // priced with technology stocks though subscriptions hold
             'moat' => 'very_wide',
             'payout' => 'low',
-            'fixed_cost_ratio' => 0.85,
+            'cost_structure' => 'rigid', // terminal network and low-latency data feeds are largely fixed
             'revenue' => 8_870_000_000.00,
             'addressable_share' => 0.108,
         ],
@@ -407,7 +389,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.10, // deepwater cost base, partly hedged
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.75,
             'revenue' => 62_300_000_000.00,
             'addressable_share' => 0.276,
             'public_float' => 0.95,
@@ -418,7 +399,6 @@ class InitialMarket
             'industry' => 'Oil & Gas Refining & Marketing',
             'systemic_importance' => 'base',
             'beta_tilt' => 0.25, // crack-spread earnings swing from losses to records
-            'fixed_cost_ratio' => 0.025,
             // A merchant refiner at a $22 crack: Valero's margin (-$0.41 + 0.598 x crack) less its ~$6.5/bbl of costs,
             // over the refiner's own barrel revenue. Break-even near an $11.6 crack, as Valero ran in 2020.
             'revenue' => 569_000_000_000.00,
@@ -438,7 +418,6 @@ class InitialMarket
             'systemic_importance' => 'none',
             'beta_tilt' => -0.15, // fixed lease income steadies the casino book
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.70,
             'revenue' => 47_000_000_000.00,
             'addressable_share' => 0.305,
         ],
@@ -450,7 +429,6 @@ class InitialMarket
             'industry' => 'Utilities - Regulated Water',
             'systemic_importance' => 'base',
             'moat' => 'narrow',
-            'fixed_cost_ratio' => 0.80,
             'revenue' => 24_700_000_000.00,
             'addressable_share' => 0.303,
             'public_float' => 0.98,
@@ -462,7 +440,6 @@ class InitialMarket
             'industry' => 'Waste Management',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.25, // waste volumes barely move in a recession
-            'fixed_cost_ratio' => 0.50,
             'revenue' => 24_800_000_000.00,
             'addressable_share' => 0.296,
             'public_float' => 0.88,
@@ -474,7 +451,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => -0.10, // volumes follow health programmes, not the cycle
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.65,
             'revenue' => 102_000_000_000.00,
             'addressable_share' => 0.283,
             'public_float' => 0.92,
@@ -504,7 +480,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.15, // surge-priced volumes on a fixed network
             'moat' => 'narrow',
-            'fixed_cost_ratio' => 0.55,
             'revenue' => 88_700_000_000.00,
             'addressable_share' => 0.27,
             'public_float' => 0.90,
@@ -515,8 +490,6 @@ class InitialMarket
             'industry' => 'Airlines',
             'systemic_importance' => 'none',
             'beta_tilt' => 0.15, // business travel and full planes turn with the cycle
-            // aircraft ownership, maintenance bases and salaried staff; fuel, crews and fees follow the flying
-            'fixed_cost_ratio' => 0.30,
             // network carriers earn 8-10% before interest in a good year
             'revenue' => 80_200_000_000.00,
             'addressable_share' => 0.37,
@@ -531,7 +504,6 @@ class InitialMarket
             'industry' => 'Packaged Foods',
             'systemic_importance' => 'none',
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.25,
             'revenue' => 45_200_000_000.00,
             'addressable_share' => 0.3,
             'public_float' => 0.88,
@@ -562,7 +534,6 @@ class InitialMarket
             'systemic_importance' => 'none',
             'beta_tilt' => -0.15, // steadier than most restaurants
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.50,
             // company-operated shops book full retail coffee sales on owned sites, turning over more revenue than a
             // franchisor
             'capital_intensity' => 'light',
@@ -579,7 +550,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // retainer income holds through the cycle
             'events' => 1,
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.25,
             'revenue' => 2_260_000_000.00,
             'addressable_share' => 0.045,
             'public_float' => 0.60,
@@ -593,7 +563,6 @@ class InitialMarket
             'beta_tilt' => 0.20, // retail trading and margin balances rise and fall with the market
             'moat' => 'moderate',
             'capex_ratio' => 0.08,
-            'fixed_cost_ratio' => 0.70,
             'operating_margin' => 0.45,
             'public_float' => 0.75,
             'addressable_share' => 0.10,
@@ -611,7 +580,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // rent paid from public budgets
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.85,
             'operating_margin' => 0.55,
             'revenue' => 21_300_000_000.00,
             'addressable_share' => 0.295,
@@ -625,7 +593,6 @@ class InitialMarket
             'systemic_importance' => 'none',
             'beta_tilt' => -0.25, // retainers and crisis work steady a recession
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.25,
             'revenue' => 18_800_000_000.00,
             'addressable_share' => 0.25,
         ],
@@ -637,7 +604,6 @@ class InitialMarket
             'beta_tilt' => 0.10, // the airtime half sells at the going ad rate
             'moat' => 'moderate',
             // sports rights, newsrooms and the stations are paid for whatever the airtime sells for
-            'fixed_cost_ratio' => 0.55,
             // news-led networks earn about 20% before interest (Fox, fiscal 2024-25)
             'revenue' => 59_300_000_000.00,
             'addressable_share' => 0.352,
@@ -650,7 +616,6 @@ class InitialMarket
             'industry' => 'Education & Training Services',
             'systemic_importance' => 'base',
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.65,
             'revenue' => 16_300_000_000.00,
             'addressable_share' => 0.13,
             'public_float' => 0.75,
@@ -664,7 +629,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => 0.25, // thin margin on fixed fulfilment costs
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.70,
             'revenue' => 111_000_000_000.00,
             'addressable_share' => 0.347,
             'public_float' => 0.88,
@@ -677,7 +641,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => 0.10, // pure commission on discretionary sales, no fixed fulfilment base
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.55,
             'revenue' => 51_700_000_000.00,
             'addressable_share' => 0.327,
             'public_float' => 0.95,
@@ -689,7 +652,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => -0.15, // volumes hold in a downturn
             'moat' => 'narrow',
-            'fixed_cost_ratio' => 0.60,
             'revenue' => 105_000_000_000.00,
             'addressable_share' => 0.3,
             'public_float' => 0.90,
@@ -724,7 +686,6 @@ class InitialMarket
             'moat' => 'none',
             // The Foundation's grants run on the dividend, and a trust whose stakes are fixed has nowhere to put what
             // it keeps: at 40% the rest piled up as cash, a quarter of NAV.
-            'fixed_cost_ratio' => 0.03,
             // The subsidiaries' margin: their sales are the whole revenue line, and dividends and interest arrive
             // below it with no cost of goods.
             'operating_margin' => 0.35,
@@ -746,7 +707,6 @@ class InitialMarket
             'industry' => 'REIT - Healthcare Facilities',
             'systemic_importance' => 'none',
             'beta_tilt' => -0.10, // ageing-population rents trade like a long bond
-            'fixed_cost_ratio' => 0.75,
             'operating_margin' => 0.55,
             'revenue' => 8_490_000_000.00,
             'addressable_share' => 0.275,
@@ -769,7 +729,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // diners trade down to it in a recession
             'events' => -1,
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.60,
             // owns the high-traffic franchise sites and finances automated equipment, booking rent and royalties
             'capital_intensity' => 'heavy',
             'revenue' => 31_100_000_000.00,
@@ -785,7 +744,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // deploys into distress, but is still long credit
             'moat' => 'wide',
             'capex_ratio' => 0.05,
-            'fixed_cost_ratio' => 0.35,
             'operating_margin' => 0.40,
             'public_float' => 0.80,
             'floating_debt_ratio' => 0.85,
@@ -804,7 +762,6 @@ class InitialMarket
             'payout' => 'retain',
             // An OEM's plant, tooling and contracted line labour are roughly two fifths of its cost base; at
             // 0.58 the fleet broke even on a 15% volume drop and any ordinary slowdown put it in the red.
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 280_000_000_000.00,
             'addressable_share' => 0.304,
             'public_float' => 0.75,
@@ -818,7 +775,6 @@ class InitialMarket
             'risk' => 1,
             'moat' => 'moderate',
             'payout' => 'income',
-            'fixed_cost_ratio' => 0.40,
             // mechanised offshore field force with its own vehicles, aircraft, escort ships and supply lines
             'capital_intensity' => 'very_heavy',
             'revenue' => 40_300_000_000.00,
@@ -833,7 +789,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // notes are drawn in a bank scare as well as spent in a boom
             'moat' => 'narrow',
             // depots, vaults and the armoured fleet; crews follow the rounds
-            'fixed_cost_ratio' => 0.40,
             // cash carriers earn 9-14% before interest (Brink's, Loomis, Prosegur Cash)
             'revenue' => 34_900_000_000.00,
             'addressable_share' => 0.0725,
@@ -848,7 +803,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // the District pays for every place whatever the economy does
             'moat' => 'narrow',
             // owned prisons and the minimum staffing each must keep, full or not
-            'fixed_cost_ratio' => 0.55,
             // prison operators earn 15-20% before interest on owned estates (GEO, CoreCivic, Serco custodial)
             'revenue' => 16_900_000_000.00,
             'addressable_share' => 0.0525,
@@ -862,7 +816,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // fraud and crisis work arrives when markets break
             'risk' => 1,
             // investigators and analysts are kept on whether the cases come or not
-            'fixed_cost_ratio' => 0.50,
             // risk and investigations firms earn 15-20% before interest (Kroll, Control Risks, FTI forensic)
             'revenue' => 20_700_000_000.00,
             'addressable_share' => 0.0517,
@@ -879,7 +832,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // short books offset part of a market that sets its assets
             'moat' => 'wide',
             'capex_ratio' => 0.05,
-            'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.48,
             'floating_debt_ratio' => 0.90,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
@@ -894,7 +846,6 @@ class InitialMarket
             'industry' => 'Copper',
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.10, // heavy capital spending against a metal price
-            'fixed_cost_ratio' => 0.80,
             // A low-cost major: copper majors earn 25-35% at mid-cycle on ~0.5x asset turnover, which is what
             // carries them through a metals slump that sinks the high-cost producers.
             'revenue' => 29_200_000_000.00,
@@ -911,7 +862,6 @@ class InitialMarket
             'industry' => 'Semiconductors',
             'systemic_importance' => 'systemic',
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.70,
             'revenue' => 58_300_000_000.00,
             'addressable_share' => 0.293,
             'public_float' => 0.90,
@@ -924,7 +874,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // half its revenue is commuter subscriptions
             'risk' => -1,
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.80,
             'revenue' => 18_500_000_000.00,
             'addressable_share' => 0.288,
         ],
@@ -935,7 +884,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.25, // wholesale-funded, falls steeply in credit crises
             'capex_ratio' => 0.05,
-            'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.50,
             'addressable_share' => 0.314,
             'floating_debt_ratio' => 0.70,
@@ -956,7 +904,6 @@ class InitialMarket
             'events' => -1,
             'moat' => 'very_wide',
             'capex_ratio' => 0.05,
-            'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.55,
             // The closely held block is the District's (StrategicHoldings), taken off in AnchorHoldings::tradableFloat
             'public_float' => 1.00,
@@ -972,7 +919,6 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'beta_tilt' => 0.05, // turnover rises in a sell-off as the value it is charged on falls
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.75,
             'revenue' => 7_630_000_000.00,
             'addressable_share' => 0.317, // the only licensed venue: the District's own turnover is the room it has
             // Control sits in unlisted Class B voting shares (the District, LAKE, SWAN, SAFE), which carry little of
@@ -1009,7 +955,6 @@ class InitialMarket
             'systemic_importance' => 'none',
             'beta_tilt' => -0.15, // commissions follow the insurance cycle, not the business cycle
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.60,
             'revenue' => 11_600_000_000.00,
             'addressable_share' => 0.15,
             // The partners who sold their firms to it keep part of the equity.
@@ -1024,7 +969,6 @@ class InitialMarket
             'beta_tilt' => 0.25, // spot freight on a fixed fleet
             'moat' => 'moderate',
             'payout' => 'low',
-            'fixed_cost_ratio' => 0.65,
             'revenue' => 53_000_000_000.00,
             'addressable_share' => 0.258,
             'public_float' => 0.88,
@@ -1035,7 +979,6 @@ class InitialMarket
             'industry' => 'Drug Manufacturers - General',
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.15, // prescription demand ignores the cycle
-            'fixed_cost_ratio' => 0.70,
             'revenue' => 63_300_000_000.00,
             'addressable_share' => 0.307,
             'depreciation_rate' => 0.10,
@@ -1046,7 +989,6 @@ class InitialMarket
             'industry' => 'Luxury Goods',
             'systemic_importance' => 'systemic',
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.50,
             'revenue' => 43_100_000_000.00,
             'addressable_share' => 0.32,
             'public_float' => 0.55,
@@ -1060,7 +1002,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // among the least volatile on the exchange
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 86_700_000_000.00,
             'addressable_share' => 0.314,
         ],
@@ -1074,7 +1015,6 @@ class InitialMarket
             // equity and priced its 37% return on equity below the tools sector multiple.
             'beta_tilt' => -0.15, // falls by less than most equipment makers
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.60,
             'revenue' => 36_100_000_000.00,
             'addressable_share' => 0.3,
             'depreciation_rate' => 0.08,
@@ -1086,7 +1026,6 @@ class InitialMarket
             'systemic_importance' => 'none',
             'beta_tilt' => -0.10, // demand barely moves with the cycle
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 34_500_000_000.00,
             'addressable_share' => 0.315,
         ],
@@ -1098,7 +1037,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // food is bought whatever the economy does
             'moat' => 'moderate',
             // store rents, depots and head office; suppliers, fuel and store payroll follow the baskets sold
-            'fixed_cost_ratio' => 0.10,
             // supermarket chains earn 3-4% before interest (Kroger, Tesco, Ahold Delhaize)
             'revenue' => 175_000_000_000.00,
             'addressable_share' => 0.353,
@@ -1112,7 +1050,6 @@ class InitialMarket
             'industry' => 'REIT - Industrial',
             'systemic_importance' => 'base',
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.52,
             'revenue' => 20_500_000_000.00,
             'addressable_share' => 0.358,
@@ -1126,7 +1063,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => -0.10, // trade-down softens a downturn
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.55,
             'revenue' => 59_000_000_000.00,
             'addressable_share' => 0.178,
             'public_float' => 0.88,
@@ -1137,7 +1073,6 @@ class InitialMarket
             'industry' => 'Chemicals',
             'systemic_importance' => 'base',
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.60,
             'revenue' => 67_800_000_000.00,
             'addressable_share' => 0.25,
         ],
@@ -1151,7 +1086,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // fleet replacement, parts and subscriptions
             'risk' => -1,
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.40,
             'revenue' => 124_000_000_000.00,
             'addressable_share' => 0.253,
             'public_float' => 0.80,
@@ -1165,7 +1099,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // royalties steady the equipment cycle
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.35, // Ericsson 2022: cost of sales 65% of operating costs
             'revenue' => 62_800_000_000.00,
             'addressable_share' => 0.119,
             'public_float' => 0.88,
@@ -1178,7 +1111,6 @@ class InitialMarket
             'industry' => 'Specialty Industrial Machinery',
             'systemic_importance' => 'systemic',
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.55,
             // vertically integrated tungsten-carbide sintering plants and heavy tunnel borers
             'capital_intensity' => 'heavy',
             'revenue' => 89_200_000_000.00,
@@ -1194,7 +1126,6 @@ class InitialMarket
             'industry' => 'Building Products & Equipment',
             'systemic_importance' => 'base',
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.50,
             'capital_intensity' => 'light', // OEM heat-pump systems sold through certified independent installers
             'revenue' => 80_500_000_000.00,
             'addressable_share' => 0.22,
@@ -1209,7 +1140,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.10, // service income carries a downturn
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 86_100_000_000.00,
             'addressable_share' => 0.242,
             'public_float' => 0.88,
@@ -1224,7 +1154,6 @@ class InitialMarket
             'systemic_importance' => 'titan',
             'beta_tilt' => -0.15, // staples volumes hold in recessions
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 160_000_000_000.00,
             'addressable_share' => 0.148,
             'public_float' => 0.65,
@@ -1240,7 +1169,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // pricing power, little capital
             'moat' => 'wide',
             'payout' => 'low',
-            'fixed_cost_ratio' => 0.30,
             'revenue' => 36_000_000_000.00,
             'addressable_share' => 0.0822,
             'depreciation_rate' => 0.04,
@@ -1256,7 +1184,6 @@ class InitialMarket
             'beta_tilt' => 0.25, // leveraged buyouts whose exits need open credit
             'moat' => 'wide',
             'capex_ratio' => 0.04,
-            'fixed_cost_ratio' => 0.40,
             'operating_margin' => 0.45,
             'public_float' => 0.70,
             'floating_debt_ratio' => 0.40,
@@ -1273,7 +1200,6 @@ class InitialMarket
             'industry' => 'Farm & Heavy Construction Machinery',
             'systemic_importance' => 'base',
             'payout' => 'balanced',
-            'fixed_cost_ratio' => 0.60,
             // high-fixed-cost welding, heat-treatment and machining plants for surface earthmoving machinery
             'capital_intensity' => 'heavy',
             'revenue' => 42_500_000_000.00,
@@ -1290,7 +1216,6 @@ class InitialMarket
             'systemic_importance' => 'systemic',
             'beta_tilt' => -0.25, // backlog and substation replacement, not the cycle
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.50,
             'revenue' => 48_200_000_000.00,
             'addressable_share' => 0.0727,
         ],
@@ -1303,7 +1228,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => -0.10, // repair parts when capex is deferred
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.35,
             'revenue' => 39_600_000_000.00,
             'addressable_share' => 0.0571,
         ],
@@ -1317,7 +1241,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // orders follow defence budgets, not the District cycle
             'moat' => 'wide',
             'payout' => 'balanced',
-            'fixed_cost_ratio' => 0.60,
             'revenue' => 69_100_000_000.00,
             'addressable_share' => 0.268,
             'public_float' => 0.90,
@@ -1332,7 +1255,6 @@ class InitialMarket
             'beta_tilt' => -0.15, // less cyclical than the building trade
             'risk' => -1,
             'moat' => 'wide',
-            'fixed_cost_ratio' => 0.45,
             // decades of lockmaker roll-up acquisitions consolidated into Wren factories
             'capital_intensity' => 'heavy',
             'revenue' => 22_900_000_000.00,
@@ -1349,7 +1271,6 @@ class InitialMarket
             'beta_tilt' => -0.10, // parts demand runs while mines produce
             'risk' => -1,
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.45,
             'revenue' => 62_500_000_000.00,
             'addressable_share' => 0.261,
             'public_float' => 0.90,
@@ -1364,7 +1285,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'risk' => -1,
             'moat' => 'moderate',
-            'fixed_cost_ratio' => 0.60,
             'revenue' => 59_700_000_000.00,
             'addressable_share' => 0.261,
             'public_float' => 0.82,
@@ -1379,7 +1299,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => 0.10, // steel, timber and container traffic follows the factory cycle
             'payout' => 'income',
-            'fixed_cost_ratio' => 0.75,
             'revenue' => 23_500_000_000.00,
             'addressable_share' => 0.267,
             'public_float' => 0.70,
@@ -1394,9 +1313,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => 0.10, // a land bank bought on the housing cycle
             'moat' => 'narrow',
-            // Selling and overhead are about a tenth of costs; land and construction are the rest. At a 13% operating
-            // margin that leaves a home sales margin near 22%, D.R. Horton's 23% in FY2004.
-            'fixed_cost_ratio' => 0.10,
             'revenue' => 30_100_000_000.00,
             'addressable_share' => 0.167,
             'public_float' => 0.80,
@@ -1409,7 +1325,6 @@ class InitialMarket
             'industry' => 'Gold',
             'systemic_importance' => 'base',
             'moat' => 'narrow',
-            'fixed_cost_ratio' => 0.80,
             'revenue' => 13_100_000_000.00,
             'addressable_share' => 0.169,
         ],
@@ -1461,7 +1376,6 @@ class InitialMarket
             'risk' => 1,
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
-            'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.35,
             'public_float' => 0.92,
             'addressable_share' => 0.267,
@@ -1504,7 +1418,6 @@ class InitialMarket
             'beta_tilt' => 0.10, // device-led growth leans on discretionary upgrades
             'moat' => 'none',
             'payout' => 'low',
-            'fixed_cost_ratio' => 0.64, // devices, sold below cost, are a third of cash operating costs
             'revenue' => 23_000_000_000.00,
             'addressable_share' => 0.284,
             'public_float' => 0.45, // its mainland parent holds the rest
@@ -1517,7 +1430,6 @@ class InitialMarket
             'industry' => 'Utilities - Independent Power Producers',
             'systemic_importance' => 'base',
             'moat' => 'narrow',
-            'fixed_cost_ratio' => 0.35, // fuel and carbon for the gas fleet are most of the cash cost
             'revenue' => 10_200_000_000.00,
             'addressable_share' => 0.295,
             'public_float' => 0.95,
@@ -1533,7 +1445,6 @@ class InitialMarket
             'systemic_importance' => 'base',
             'beta_tilt' => -0.25, // orders follow world energy prices and long rates, the fleet runs whatever the cycle
             // engineering staff, licensing and the fuel plants; crews and materials follow the plants being built
-            'fixed_cost_ratio' => 0.50,
             'revenue' => 38_400_000_000.00,
             'addressable_share' => 0.267,
             'public_float' => 0.95,
@@ -1548,7 +1459,6 @@ class InitialMarket
             'beta_tilt' => 0.05, // throughput follows trade
             'moat' => 'narrow',
             // dock crews on shift, crane upkeep and the concession's fixed rent; the royalty and power scale with boxes
-            'fixed_cost_ratio' => 0.60,
             // container terminal operators earn 35-45% before interest (ICTSI, Hutchison Port Holdings Trust)
             'revenue' => 11_400_000_000.00,
             'addressable_share' => 0.36,
@@ -1562,7 +1472,6 @@ class InitialMarket
             'beta_tilt' => 0.10, // strategy bookings are the first budget a client cuts
             'moat' => 'very_wide',
             // salaried consultants and delivery centres; subcontractors, travel and bonuses scale with the work
-            'fixed_cost_ratio' => 0.45,
             // strategy and technology consultancies earn 13-16% before interest (Accenture, Capgemini, CGI)
             'revenue' => 57_800_000_000.00,
             'addressable_share' => 0.12,
@@ -1578,7 +1487,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // busiest when credit cracks
             'risk' => 1,
             'moat' => 'very_wide',
-            'fixed_cost_ratio' => 0.40,
             // restructuring, forensic and economic advisers earn 10-15% before interest (FTI Consulting, Huron)
             'revenue' => 5_340_000_000.00,
             'addressable_share' => 0.103,
@@ -1594,7 +1502,6 @@ class InitialMarket
             'beta_tilt' => -0.05, // the audit book holds through a slump; the advisory book does not
             'moat' => 'very_wide',
             // salaried audit and tax staff carried through the year; contractors and travel follow the work
-            'fixed_cost_ratio' => 0.50,
             // a listed multidisciplinary firm paying its partners market salaries earns 12-15% before interest
             'revenue' => 45_400_000_000.00,
             'addressable_share' => 0.12,

@@ -181,6 +181,12 @@ class ShadowBankBusinessModel extends CommercialBankBusinessModel
         return null;
     }
 
+    /** Shadow banks strike operating costs off revenue rather than earning assets, so fixed_cost_ratio is derived. */
+    public function derivesOpeningFixedCostRatio(): bool
+    {
+        return true;
+    }
+
     /**
      * Interest earned on the funded book as it has repriced (resolveInterestYield()), plus treasury income on the
      * excess cash. The book is struck on the live earning-asset ledger, not the term notes alone, so drawn revolver

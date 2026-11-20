@@ -46,3 +46,11 @@
   them. No vintage discount: the old 3.5-4.5% seeds were an opening windfall that rolled up to market within 10 years.
   Exceptions: the 8 deposit lenders keep both keys, because their books are built before they have a rating. The 9
   dealers and funds keep their floating share, because repo and prime funding is a business-model fact.
+- No seeded fixed-cost share on 92 rows (11-20). `IndustryFixedCosts` gives it by board industry, and `CostStructure`
+  moves it ±0.10 per step (only TICK rigid and SHRK flexible use one). Damodaran gross margins were rejected because
+  GAAP cost of goods holds fixed plant costs, and the model's input-cost mix misses resold goods.
+  - Kept seeded: deposit lenders, SAFE, DOVE, WELL and PELI, where the ratio is a loss/expense split or the medical
+    loss ratio.
+  - CASC stays near 0.025, because the refiner charges crude separately; above about 0.04 it double-counts.
+  - Open lore questions: the REIT spread (0.25-0.85, gross vs triple-net leases?), ACC 0.30 vs ROOK 0.75, PHIL, CROP,
+    LYRE and CLAW.

@@ -1870,4 +1870,10 @@ class InsuranceBusinessModel extends BaseFinancialBusinessModel
     {
         return $this->revertTrailingReturn($stock, $trailing, $realised, $costOfEquity, static::TTM_ROE_WEIGHT, $equity, $macroState);
     }
+
+    /** Insurers use fixed_cost_ratio to split losses from underwriting overhead and size float, so it stays seeded. */
+    public function derivesOpeningFixedCostRatio(): bool
+    {
+        return false;
+    }
 }

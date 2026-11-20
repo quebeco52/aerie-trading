@@ -226,4 +226,13 @@ class HealthInsurerBusinessModel extends StandardCorporateBusinessModel
             'unemployment_rate_ema',
         ];
     }
+
+    /**
+     * Health plans use fixed_cost_ratio to separate medical claims from administration and size payables, so it stays
+     * seeded.
+     */
+    public function derivesOpeningFixedCostRatio(): bool
+    {
+        return false;
+    }
 }

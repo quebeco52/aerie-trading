@@ -1659,6 +1659,12 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
         return false;
     }
 
+    /** Deposit lenders strike operating costs on earning assets, so fixed_cost_ratio stays seeded on the row. */
+    public function derivesOpeningFixedCostRatio(): bool
+    {
+        return false;
+    }
+
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
