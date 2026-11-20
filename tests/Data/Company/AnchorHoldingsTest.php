@@ -104,7 +104,7 @@ class AnchorHoldingsTest extends TestCase
 
         foreach (SeedRows::all() as $row) {
             $ticker = $row['ticker'];
-            $declared = (float) ($row['public_float'] ?? 0.90);
+            $declared = (float) ($row['public_float'] ?? SeedRows::DEFAULT_PUBLIC_FLOAT);
             $closelyHeld = AnchorHoldings::closelyHeldShare($ticker);
             $tradable = AnchorHoldings::tradableFloat($ticker, $declared);
 

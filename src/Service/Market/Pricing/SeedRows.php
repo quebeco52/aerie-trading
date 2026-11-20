@@ -42,8 +42,8 @@ final class SeedRows
      */
     public const RETIRED_KEYS = ['systemic_importance'];
 
-    /** Share of a listing that trades when no founder, mutual or state block holds the rest (85%, insiders aside). */
-    public const DEFAULT_PUBLIC_FLOAT = 0.85;
+    /** Share of a listing that trades when no founder, mutual or state block holds the rest (90%, insiders aside). */
+    public const DEFAULT_PUBLIC_FLOAT = 0.90;
 
     /** @var list<array<string, mixed>>|null The rows at the opening macro, in the seed's order. */
     private static ?array $opening = null;

@@ -24,7 +24,7 @@ class InitialMarket
             'moat' => 'wide', // ROE 18% at the opening, two steps past a money-centre bank's
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.40,
-            'public_float' => 0.50,
+            'public_float' => 0.50, // Founders' trusts still hold about half the bank
             'addressable_share' => 0.43,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.025,
@@ -41,7 +41,7 @@ class InitialMarket
             'moat' => 'wide',
             'capex_ratio' => 0.05,
             'operating_margin' => 0.40,
-            'public_float' => 0.50,
+            'public_float' => 0.50, // Founding partners still hold about half the shares
             'floating_debt_ratio' => 0.50,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
             'revenue' => 383_000_000_000.00,
@@ -57,7 +57,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'revenue' => 82_800_000_000.00,
             'addressable_share' => 0.293,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'OWLS',
@@ -69,7 +68,6 @@ class InitialMarket
             'moat' => 'wide',
             'revenue' => 61_400_000_000.00,
             'addressable_share' => 0.204,
-            'public_float' => 0.80,
             'depreciation_rate' => 0.03,
         ],
         [
@@ -82,7 +80,6 @@ class InitialMarket
             'capex_ratio' => 0.05,
             'payout' => 'low',
             'operating_margin' => 0.40,
-            'public_float' => 0.95,
             'addressable_share' => 0.333,
             'floating_debt_ratio' => 0.65,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
@@ -98,7 +95,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.15,
             'operating_margin' => 0.35,
-            'public_float' => 0.88,
             'addressable_share' => 0.267,
             'floating_debt_ratio' => 0.80,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
@@ -115,6 +111,7 @@ class InitialMarket
             'capex_ratio' => 0.10,
             'operating_margin' => 0.45,
             'addressable_share' => 0.28,
+            'public_float' => 0.85, // Partners still hold about 15% of the shares
             'floating_debt_ratio' => 0.85,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 25_500_000_000.00,
@@ -130,7 +127,6 @@ class InitialMarket
             'capex_ratio' => 0.10,
             'payout' => 'balanced',
             'fixed_cost_ratio' => 0.40,
-            'public_float' => 0.95,
             // It opens at 45% of its market, inside the share past which a lender's returns fall.
             'addressable_share' => 0.45,
             'floating_debt_ratio' => 0.35,
@@ -150,7 +146,6 @@ class InitialMarket
             'moat' => 'narrow', // ROE 10% at the opening: the second home lender's branch network
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.45,
-            'public_float' => 0.90,
             'addressable_share' => 0.35, // More headroom than RIVR and LAKE open with
             'floating_debt_ratio' => 0.15, // Covered bonds are fixed-rate
             'historical_fixed_rate' => 0.028,
@@ -172,7 +167,7 @@ class InitialMarket
             // decade (86-95% in benign years, 105-120% in heavy catastrophe years), pricing their cover near break-even
             // and earning mainly on the float they invest.
             'operating_margin' => 0.015,
-            'public_float' => 0.70,
+            'public_float' => 0.70, // The founding mutual kept about 30% of the shares at listing
             'addressable_share' => 0.431,
             // Its books are built on this character by its model (InsuranceBusinessModel::resolveOpeningBooks()).
             'revenue' => 590_000_000_000.00,
@@ -187,7 +182,6 @@ class InitialMarket
             'fixed_cost_ratio' => 0.35,
             // 95.5% combined ratio; European composites' P&C books run about 93-95%.
             'operating_margin' => 0.045,
-            'public_float' => 0.90,
             'addressable_share' => 0.34,
             // Its liabilities are not marked to the curve, so it elects to keep the bond mark out of its capital ratio.
             'aoci_filtered' => true,
@@ -205,7 +199,6 @@ class InitialMarket
             'cost_structure' => 'flexible', // analyst staff scales with new-issue ratings volume
             'revenue' => 8_670_000_000.00,
             'addressable_share' => 0.132,
-            'public_float' => 0.92,
         ],
         [
             'ticker' => 'BIRD',
@@ -215,7 +208,6 @@ class InitialMarket
             'moat' => 'narrow',
             'revenue' => 63_600_000_000.00,
             'addressable_share' => 0.281,
-            'public_float' => 0.99,
         ],
         [
             'ticker' => 'WATCH',
@@ -233,7 +225,6 @@ class InitialMarket
             'moat' => 'moderate',
             'revenue' => 48_800_000_000.00,
             'addressable_share' => 0.203,
-            'public_float' => 0.90,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -243,7 +234,6 @@ class InitialMarket
             'moat' => 'wide',
             'revenue' => 33_800_000_000.00,
             'addressable_share' => 0.232,
-            'public_float' => 0.75,
         ],
         [
             'ticker' => 'SHOR',
@@ -265,7 +255,6 @@ class InitialMarket
             'capital_intensity' => 'light',
             'revenue' => 52_300_000_000.00,
             'addressable_share' => 0.284,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'GRIP',
@@ -278,7 +267,7 @@ class InitialMarket
             'moat' => 'wide',
             'revenue' => 85_600_000_000.00,
             'addressable_share' => 0.293,
-            'public_float' => 0.95,
+            'public_float' => 0.95, // Founder sold out after listing; almost all shares trade freely
         ],
         [
             'ticker' => 'SKYL',
@@ -291,7 +280,6 @@ class InitialMarket
             // engineering, the factory and the launch pads; propellant, recovery and ground crews follow the launches
             'revenue' => 11_300_000_000.00,
             'addressable_share' => 0.3,
-            'public_float' => 0.95,
         ],
         [
             'ticker' => 'LOON',
@@ -299,7 +287,6 @@ class InitialMarket
             'industry' => 'Telecom Services',
             'revenue' => 68_200_000_000.00,
             'addressable_share' => 0.352,
-            'public_float' => 0.98,
             'depreciation_rate' => 0.068, // Verizon 2024: D&A over net plant plus spectrum licences
         ],
         [
@@ -309,7 +296,6 @@ class InitialMarket
             'industry' => 'Tobacco',
             'revenue' => 23_400_000_000.00,
             'addressable_share' => 0.284,
-            'public_float' => 0.95,
         ],
         [
             'ticker' => 'TRIV',
@@ -325,7 +311,6 @@ class InitialMarket
             'capital_intensity' => 'light',
             'revenue' => 59_000_000_000.00,
             'addressable_share' => 0.28,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'IBHI',
@@ -335,7 +320,7 @@ class InitialMarket
             'moat' => 'narrow',
             'revenue' => 233_000_000_000.00,
             'addressable_share' => 0.315,
-            'public_float' => 0.45,
+            'public_float' => 0.45, // Lakebird Bank and Black Swan Capital hold about 55% of the shares
         ],
         [
             'ticker' => 'TICK',
@@ -364,7 +349,6 @@ class InitialMarket
             'moat' => 'wide',
             'revenue' => 62_300_000_000.00,
             'addressable_share' => 0.276,
-            'public_float' => 0.95,
         ],
         [
             'ticker' => 'CASC',
@@ -375,7 +359,6 @@ class InitialMarket
             // over the refiner's own barrel revenue. Break-even near an $11.6 crack, as Valero ran in 2020.
             'revenue' => 569_000_000_000.00,
             'addressable_share' => 0.246,
-            'public_float' => 0.90,
             // The District's only refiner, its market the District's fuel and the mainland coast it ships to: opens at
             // about a quarter of it.
             // An export refinery, sized like Singapore's or Korea's: product sales open near 10% of GDP, against 2-3%
@@ -401,7 +384,6 @@ class InitialMarket
             'moat' => 'narrow',
             'revenue' => 24_700_000_000.00,
             'addressable_share' => 0.303,
-            'public_float' => 0.98,
         ],
         [
             'ticker' => 'CORM',
@@ -411,7 +393,6 @@ class InitialMarket
             'beta_tilt' => -0.25, // waste volumes barely move in a recession
             'revenue' => 24_800_000_000.00,
             'addressable_share' => 0.296,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'CRAN',
@@ -421,7 +402,6 @@ class InitialMarket
             'moat' => 'wide',
             'revenue' => 102_000_000_000.00,
             'addressable_share' => 0.283,
-            'public_float' => 0.92,
         ],
         [
             'ticker' => 'TALN',
@@ -448,7 +428,6 @@ class InitialMarket
             'moat' => 'narrow',
             'revenue' => 88_700_000_000.00,
             'addressable_share' => 0.27,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'TERN',
@@ -458,7 +437,6 @@ class InitialMarket
             // network carriers earn 8-10% before interest in a good year
             'revenue' => 80_200_000_000.00,
             'addressable_share' => 0.37,
-            'public_float' => 0.95,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -470,7 +448,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'revenue' => 45_200_000_000.00,
             'addressable_share' => 0.3,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'STRK',
@@ -481,7 +458,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.45,
-            'public_float' => 0.92,
             'addressable_share' => 0.28,
             'floating_debt_ratio' => 0.65,
             'historical_fixed_rate' => 0.050,
@@ -501,7 +477,6 @@ class InitialMarket
             'capital_intensity' => 'light',
             'revenue' => 38_100_000_000.00,
             'addressable_share' => 0.33,
-            'public_float' => 0.70,
         ],
         [
             'ticker' => 'CLAW',
@@ -513,7 +488,7 @@ class InitialMarket
             'moat' => 'very_wide',
             'revenue' => 2_260_000_000.00,
             'addressable_share' => 0.045,
-            'public_float' => 0.60,
+            'public_float' => 0.60, // Senior litigation partners hold about 40% of the firm
             'depreciation_rate' => 0.04,
         ],
         [
@@ -524,7 +499,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.08,
             'operating_margin' => 0.45,
-            'public_float' => 0.75,
             'addressable_share' => 0.10,
             'floating_debt_ratio' => 0.80,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
@@ -543,7 +517,7 @@ class InitialMarket
             'revenue' => 21_300_000_000.00,
             'addressable_share' => 0.295,
             'retained_share' => 0.64,
-            'public_float' => 0.15,
+            'public_float' => 0.15, // Lakebird Bank sponsored the trust and holds most of the units
         ],
         [
             'ticker' => 'LYRE',
@@ -574,7 +548,7 @@ class InitialMarket
             'moat' => 'moderate',
             'revenue' => 16_300_000_000.00,
             'addressable_share' => 0.13,
-            'public_float' => 0.75,
+            'public_float' => 0.75, // University endowment and corporate sponsors hold about a quarter
         ],
         [
             'ticker' => 'WEAV',
@@ -586,7 +560,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'revenue' => 111_000_000_000.00,
             'addressable_share' => 0.347,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'JDAW',
@@ -597,7 +570,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'revenue' => 51_700_000_000.00,
             'addressable_share' => 0.327,
-            'public_float' => 0.95,
         ],
         [
             'ticker' => 'CROP',
@@ -607,7 +579,6 @@ class InitialMarket
             'moat' => 'narrow',
             'revenue' => 105_000_000_000.00,
             'addressable_share' => 0.3,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'BRKW',
@@ -641,7 +612,7 @@ class InitialMarket
             // The subsidiaries' margin: their sales are the whole revenue line, and dividends and interest arrive
             // below it with no cost of goods.
             'operating_margin' => 0.35,
-            'public_float' => 0.75,
+            'public_float' => 0.75, // The Breakwater Foundation holds about a quarter of the shares
             'sam_ratio' => 1.62,
             'depreciation_rate' => 0.03,
             'corporate_treasury' => 135_000_000_000.00,
@@ -683,7 +654,6 @@ class InitialMarket
             'capital_intensity' => 'heavy',
             'revenue' => 31_100_000_000.00,
             'addressable_share' => 0.264,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'VULT',
@@ -694,7 +664,6 @@ class InitialMarket
             'moat' => 'wide',
             'capex_ratio' => 0.05,
             'operating_margin' => 0.40,
-            'public_float' => 0.80,
             'floating_debt_ratio' => 0.85,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
             'revenue' => 20_400_000_000.00,
@@ -712,7 +681,7 @@ class InitialMarket
             // 0.58 the fleet broke even on a 15% volume drop and any ordinary slowdown put it in the red.
             'revenue' => 280_000_000_000.00,
             'addressable_share' => 0.304,
-            'public_float' => 0.75,
+            'public_float' => 0.75, // Founder retains about a quarter of the shares
         ],
         [
             'ticker' => 'OSPR',
@@ -726,7 +695,6 @@ class InitialMarket
             'capital_intensity' => 'very_heavy',
             'revenue' => 40_300_000_000.00,
             'addressable_share' => 0.28,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'NCKR',
@@ -738,7 +706,6 @@ class InitialMarket
             // cash carriers earn 9-14% before interest (Brink's, Loomis, Prosegur Cash)
             'revenue' => 34_900_000_000.00,
             'addressable_share' => 0.0725,
-            'public_float' => 0.95,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -751,7 +718,6 @@ class InitialMarket
             // prison operators earn 15-20% before interest on owned estates (GEO, CoreCivic, Serco custodial)
             'revenue' => 16_900_000_000.00,
             'addressable_share' => 0.0525,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'NJAR',
@@ -805,7 +771,6 @@ class InitialMarket
             'moat' => 'wide',
             'revenue' => 58_300_000_000.00,
             'addressable_share' => 0.293,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'KSTL',
@@ -875,7 +840,7 @@ class InitialMarket
             // Premiums and fees nearly all go on benefits, reserves and running the book: a life insurer's profit is
             // the investment spread.
             'operating_margin' => 0.04,
-            'public_float' => 1.00,
+            'public_float' => 1.00, // Fully public after demutualisation; no anchor holder
             'addressable_share' => 0.24,
             // Reserves are paid out over decades, so the bonds behind them run longer than a composite's.
             'securities_duration' => 10.0,
@@ -892,8 +857,6 @@ class InitialMarket
             'moat' => 'wide',
             'revenue' => 11_600_000_000.00,
             'addressable_share' => 0.15,
-            // The partners who sold their firms to it keep part of the equity.
-            'public_float' => 0.92,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -905,7 +868,6 @@ class InitialMarket
             'payout' => 'low',
             'revenue' => 53_000_000_000.00,
             'addressable_share' => 0.258,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'IBIS',
@@ -923,7 +885,7 @@ class InitialMarket
             'moat' => 'wide',
             'revenue' => 43_100_000_000.00,
             'addressable_share' => 0.32,
-            'public_float' => 0.55,
+            'public_float' => 0.55, // Controlling luxury-house family holds about 45% of the group
         ],
         [
             'ticker' => 'LARK',
@@ -968,7 +930,6 @@ class InitialMarket
             // supermarket chains earn 3-4% before interest (Kroger, Tesco, Ahold Delhaize)
             'revenue' => 175_000_000_000.00,
             'addressable_share' => 0.353,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'KITE',
@@ -981,7 +942,6 @@ class InitialMarket
             'revenue' => 20_500_000_000.00,
             'addressable_share' => 0.358,
             'retained_share' => 0.44,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'SHER',
@@ -991,7 +951,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'revenue' => 59_000_000_000.00,
             'addressable_share' => 0.178,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'FULM',
@@ -1012,7 +971,6 @@ class InitialMarket
             'moat' => 'moderate',
             'revenue' => 124_000_000_000.00,
             'addressable_share' => 0.253,
-            'public_float' => 0.80,
         ],
         [
             'ticker' => 'ERNE',
@@ -1024,7 +982,6 @@ class InitialMarket
             'moat' => 'moderate',
             'revenue' => 62_800_000_000.00,
             'addressable_share' => 0.119,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'SNDR',
@@ -1037,7 +994,6 @@ class InitialMarket
             'capital_intensity' => 'heavy',
             'revenue' => 89_200_000_000.00,
             'addressable_share' => 0.247,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'NUTH',
@@ -1062,7 +1018,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'revenue' => 86_100_000_000.00,
             'addressable_share' => 0.242,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'RAVN',
@@ -1075,7 +1030,7 @@ class InitialMarket
             'moat' => 'moderate',
             'revenue' => 160_000_000_000.00,
             'addressable_share' => 0.148,
-            'public_float' => 0.65,
+            'public_float' => 0.65, // Founding Iron Quay merchant families hold about 35%
         ],
         [
             'ticker' => 'HARR',
@@ -1102,7 +1057,7 @@ class InitialMarket
             'moat' => 'wide',
             'capex_ratio' => 0.04,
             'operating_margin' => 0.45,
-            'public_float' => 0.70,
+            'public_float' => 0.70, // General partners retain about 30% of the equity
             'floating_debt_ratio' => 0.40,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
             'revenue' => 14_000_000_000.00,
@@ -1120,7 +1075,6 @@ class InitialMarket
             'capital_intensity' => 'heavy',
             'revenue' => 42_500_000_000.00,
             'addressable_share' => 0.0965,
-            'public_float' => 0.80,
         ],
         [
             'ticker' => 'BOBY',
@@ -1156,7 +1110,6 @@ class InitialMarket
             'payout' => 'balanced',
             'revenue' => 69_100_000_000.00,
             'addressable_share' => 0.268,
-            'public_float' => 0.90,
         ],
         [
             'ticker' => 'WREN',
@@ -1171,7 +1124,6 @@ class InitialMarket
             'capital_intensity' => 'heavy',
             'revenue' => 22_900_000_000.00,
             'addressable_share' => 0.27,
-            'public_float' => 0.88,
         ],
         [
             'ticker' => 'CHUF',
@@ -1184,7 +1136,6 @@ class InitialMarket
             'moat' => 'very_wide',
             'revenue' => 62_500_000_000.00,
             'addressable_share' => 0.261,
-            'public_float' => 0.90,
             'depreciation_rate' => 0.07,
         ],
         [
@@ -1197,7 +1148,6 @@ class InitialMarket
             'moat' => 'moderate',
             'revenue' => 59_700_000_000.00,
             'addressable_share' => 0.261,
-            'public_float' => 0.82,
             'depreciation_rate' => 0.07,
         ],
         [
@@ -1210,7 +1160,6 @@ class InitialMarket
             'payout' => 'income',
             'revenue' => 23_500_000_000.00,
             'addressable_share' => 0.267,
-            'public_float' => 0.70,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -1223,7 +1172,6 @@ class InitialMarket
             'moat' => 'narrow',
             'revenue' => 30_100_000_000.00,
             'addressable_share' => 0.167,
-            'public_float' => 0.80,
         ],
         [
             'ticker' => 'FNCH',
@@ -1248,7 +1196,6 @@ class InitialMarket
             'fixed_cost_ratio' => 0.112,
             'revenue' => 80_600_000_000.00,
             'addressable_share' => 0.153,
-            'public_float' => 0.90,
             // Operating cash plus the claims float: about seven weeks of claims owed, invested until paid.
         ],
         [
@@ -1263,7 +1210,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.60,
-            'public_float' => 0.90,
             'addressable_share' => 0.34,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.030,
@@ -1281,7 +1227,6 @@ class InitialMarket
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
             'operating_margin' => 0.35,
-            'public_float' => 0.92,
             'addressable_share' => 0.267,
             'floating_debt_ratio' => 0.80, // Inventory funded overnight in repo
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
@@ -1333,7 +1278,6 @@ class InitialMarket
             'moat' => 'narrow',
             'revenue' => 10_200_000_000.00,
             'addressable_share' => 0.295,
-            'public_float' => 0.95,
             'depreciation_rate' => 0.045,
             // about 1.8 times EBITDA: a one-sigma gas slump halves it and must leave it under the 4.0 covenant
         ],
@@ -1347,7 +1291,6 @@ class InitialMarket
             // engineering staff, licensing and the fuel plants; crews and materials follow the plants being built
             'revenue' => 38_400_000_000.00,
             'addressable_share' => 0.267,
-            'public_float' => 0.95,
         ],
         [
             'ticker' => 'KTWK',
@@ -1373,7 +1316,6 @@ class InitialMarket
             // strategy and technology consultancies earn 13-16% before interest (Accenture, Capgemini, CGI)
             'revenue' => 57_800_000_000.00,
             'addressable_share' => 0.12,
-            'public_float' => 0.90,
             'depreciation_rate' => 0.12,
         ],
         [
@@ -1387,7 +1329,7 @@ class InitialMarket
             // restructuring, forensic and economic advisers earn 10-15% before interest (FTI Consulting, Huron)
             'revenue' => 5_340_000_000.00,
             'addressable_share' => 0.103,
-            'public_float' => 0.70,
+            'public_float' => 0.70, // Advisory partners retain about 30% of the equity
             'depreciation_rate' => 0.08,
         ],
         [
@@ -1401,7 +1343,7 @@ class InitialMarket
             // a listed multidisciplinary firm paying its partners market salaries earns 12-15% before interest
             'revenue' => 45_400_000_000.00,
             'addressable_share' => 0.12,
-            'public_float' => 0.75,
+            'public_float' => 0.75, // Audit and consulting partners retain about a quarter of the firm
             'depreciation_rate' => 0.10,
         ],
     ];

@@ -38,8 +38,8 @@
   bigger step: JDAW became Online Marketplaces (revenue is commission, not merchandise). Financials and REITs keep a
   stated margin; it means something else there.
 - A row never states a default (11-20): `sector` comes from `Sectors::INDUSTRY_SECTORS` (OWLS and GDWT file elsewhere
-  and say so), `public_float` defaults to 85% (`SeedRows::DEFAULT_PUBLIC_FLOAT`), `beta_tilt` to 0.
-  `InitialMarketTest` refuses a row that restates one.
+  and say so), `public_float` defaults to 90% (`SeedRows::DEFAULT_PUBLIC_FLOAT`), `beta_tilt` to 0.
+  `InitialMarketTest` refuses a row that restates one; only lore-backed block holders or fully public listings state a float.
 - No seeded coupon or floating share (11-20). Inside the opening price loop each pass sets the fixed coupon to
   `yield5yEma` + the through-the-cycle spread at that pass's rating, and the floating share from
   `CreditRatingAgency::OPENING_FLOATING_DEBT_RATIO` (A 15% .. CCC 60%), then strikes opening earnings and dividend on

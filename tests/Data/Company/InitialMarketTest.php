@@ -354,5 +354,11 @@ class InitialMarketTest extends TestCase
                 $this->assertNotEquals(0.0, (float) $row['beta_tilt'], "{$ticker} states a zero beta tilt.");
             }
         }
+
+        $this->assertSame(0.90, SeedRows::DEFAULT_PUBLIC_FLOAT);
+        $this->assertSame(0.90, SeedRows::for('OSPR')['public_float']);
+        $this->assertSame(0.90, SeedRows::for('HUMM')['public_float']);
+        $this->assertSame(0.85, SeedRows::for('CORV')['public_float']);
+        $this->assertSame(0.95, SeedRows::for('GRIP')['public_float']);
     }
 }
