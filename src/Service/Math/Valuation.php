@@ -372,6 +372,18 @@ final class Valuation
     }
 
     /**
+     * Hamada (1972) leverage multiplier on an operating claim's risk: 1 + (1 - t) x D/E. Shared by levered beta and
+     * levered idiosyncratic volatility so both obey one capital-structure law.
+     *
+     * @param float $taxRate      The tax rate the interest is shielded at.
+     * @param float $debtToEquity Debt over the market value of equity.
+     */
+    public static function hamadaMultiplier(float $taxRate, float $debtToEquity): float
+    {
+        return 1.0 + ((1.0 - $taxRate) * $debtToEquity);
+    }
+
+    /**
      * Levers an asset beta to the equity beta of a firm with this capital structure (Hamada 1972, "The Effect of the
      * Firm's Capital Structure on the Systematic Risk of Common Stocks"): beta_E = beta_U x (1 + (1 - t) x D/E).
      *
@@ -382,7 +394,23 @@ final class Valuation
      */
     public static function calculateLeveredBeta(float $unleveredBeta, float $taxRate, float $debtToEquity): float
     {
-        return $unleveredBeta * (1.0 + ((1.0 - $taxRate) * $debtToEquity));
+        return $unleveredBeta * self::hamadaMultiplier($taxRate, $debtToEquity);
+    }
+
+    /**
+     * Value-weighted dilution of an operating risk multiplier when the equity also holds net cash at zero risk:
+     * multiplier x V / (V + C) (Damodaran's cash correction, run forward).
+     *
+     * @param float $operatingMultiplier The risk multiplier on the operating claim alone.
+     * @param float $operatingValue      What that operating claim is worth.
+     * @param float $cash                Net cash held beside it, at face.
+     */
+    public static function cashBlendedMultiplier(float $operatingMultiplier, float $operatingValue, float $cash): float
+    {
+        $operatingValue = max(0.0, $operatingValue);
+        $total = $operatingValue + max(0.0, $cash);
+
+        return $total > 0.0 ? $operatingMultiplier * $operatingValue / $total : $operatingMultiplier;
     }
 
     /**
@@ -396,10 +424,7 @@ final class Valuation
      */
     public static function cashBlendedBeta(float $operatingBeta, float $operatingValue, float $cash): float
     {
-        $operatingValue = max(0.0, $operatingValue);
-        $total = $operatingValue + max(0.0, $cash);
-
-        return $total > 0.0 ? $operatingBeta * $operatingValue / $total : $operatingBeta;
+        return self::cashBlendedMultiplier($operatingBeta, $operatingValue, $cash);
     }
 
     /**

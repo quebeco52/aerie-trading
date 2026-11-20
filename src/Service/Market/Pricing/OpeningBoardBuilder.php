@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Service\Market\Pricing;
 
 use App\Data\Company\AnchorHoldings;
+use App\Data\Company\BusinessRisk;
 use App\Data\Company\DividendTier;
+use App\Data\Company\EventRisk;
 use App\Data\Company\IndustryBetas;
 use App\Data\Company\IndustryPayoutPolicies;
+use App\Data\Company\IndustryRisks;
 use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
@@ -78,35 +81,32 @@ class OpeningBoardBuilder
      * has prices, so a sphere is handed back to be finished by openSpheres() once the whole board is open.
      *
      * @param array<string, mixed> $stockData The firm's seed row.
-     * @return array{stock: Stock, invested: float, assetAgeRatio: float}|null The sphere left to finish, or null.
+     * @return array{stock: Stock, invested: float, assetAgeRatio: float, businessRisk: BusinessRisk, eventRisk: EventRisk}|null The sphere left to finish, or null.
      */
     public function open(Stock $stock, array $stockData, MacroStateDTO $openingMacro): ?array
     {
         // A row that states the firm's character has its books built by its model first (SeedRows).
         $stockData = SeedRows::resolve($stockData, $openingMacro);
+        ['business' => $businessRisk, 'events' => $eventRisk] = IndustryRisks::forRow($stockData);
 
         // The whole seed row goes on before any engine reads the firm: its industry decides which model's physics
-        // price it, and its spread and legacy coupon decide what its debt costs.
+        // price it, and its spread and legacy coupon decide what its debt costs. Risk starts at the unlevered
+        // business step until strikeOpeningPrice() derives the levered equity vol and budgeted jump scale from
+        // DebtEngine's opening beta and leverage.
         $this->applyListing($stock, $stockData);
         $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
-        $stock->setVolatility((string) $stockData['volatility']);
-        $stock->setCurrentVolatility((string) $stockData['volatility']);
+        $provisionalVol = Decimal::format($businessRisk->vol(), 4);
+        $stock->setVolatility($provisionalVol);
+        $stock->setCurrentVolatility($provisionalVol);
         // The industry's beta, Hamada-levered by DebtEngine at the firm's own net debt, plus the lore's position in its
         // band.
         $stock->setBeta((string) IndustryBetas::seedBetaFor($stockData));
-        $stock->setJumpIntensity((string) $stockData['jump_intensity']);
-        $stock->setJumpVol((string) $stockData['jump_vol']);
+        $stock->setJumpIntensity(Decimal::format($eventRisk->intensity(), 2));
+        $stock->setJumpVol(Decimal::format(VarianceBudget::jumpScaleForVarianceShare($businessRisk->vol(), $eventRisk->intensity()), 4));
         $stock->setSystemicImportance($stockData['systemic_importance'] ?? 'none');
 
-        // How much of the float changes hands in a year: the structural input behind this name's
-        // depth, its spread, and how far a given order size moves it.
-        $stock->setTurnoverRatio(LiquidityEngine::structuralTurnoverRatio((float) $stockData['volatility']));
         $stock->setImpactVarianceEma(0.0);
         $stock->setAnnouncementVarianceEma(0.0);
-        // Opened at the structural variance rather than at zero. The index screens rank on this, and
-        // a market whose whole board reads as perfectly quiet on day one would seat its
-        // low-volatility index alphabetically and then spend a year unwinding it.
-        $stock->setRealizedVarianceEma((float) $stockData['volatility'] ** 2);
         $stock->setCorporateFlowBacklog(0.0);
 
         // Not the whole float: most holders do not lend, which is what makes a name hard to borrow
@@ -261,7 +261,13 @@ class OpeningBoardBuilder
                     $assetAgeRatio,
                 );
             } else {
-                $sphere = ['stock' => $stock, 'invested' => $investedCapital, 'assetAgeRatio' => $assetAgeRatio];
+                $sphere = [
+                    'stock' => $stock,
+                    'invested' => $investedCapital,
+                    'assetAgeRatio' => $assetAgeRatio,
+                    'businessRisk' => $businessRisk,
+                    'eventRisk' => $eventRisk,
+                ];
             }
         } else {
             // A balance-sheet business opens its loan book instead, with the allowance already at
@@ -274,7 +280,7 @@ class OpeningBoardBuilder
             );
         }
 
-        $this->strikeOpeningPrice($stock, $openingMacro);
+        $this->strikeOpeningPrice($stock, $openingMacro, $businessRisk, $eventRisk);
 
         return $sphere;
     }
@@ -283,28 +289,58 @@ class OpeningBoardBuilder
      * Strikes the price the firm opens at, on the inputs StockTracker prices it on at tick 1 — the same mapping and a
      * debt analysis of the finished balance sheet — or the market re-rates the instant it starts.
      *
-     * The price and the firm's asset volatility are solved together: the configured equity volatility belongs to this
-     * capital structure at this price, so the business risk it implies is calibrated on the price just struck, and the
-     * cost of debt that risk sets feeds back into the next price. Iterated until the two agree, as the Merton
-     * equity-value and asset-volatility pair is (Vassalou & Xing 2004). The firm is rated on each pass, since its
-     * spread prices off its rating: it opens rated as its balance sheet reads, not at a placeholder grade.
+     * The price, equity volatility and asset volatility are solved together: each pass derives the equity volatility
+     * from DebtEngine's levered beta and leverage multiplier and the firm's business-risk step, derives the jump scale
+     * that puts the variance budget's full jump share into own jumps, calibrates Merton asset volatility on the price
+     * just struck, and rates the firm until price, volatility and rating agree. Turnover ratio and realizedVarianceEma
+     * are set once the volatility has converged.
      */
-    private function strikeOpeningPrice(Stock $stock, MacroStateDTO $openingMacro): void
+    private function strikeOpeningPrice(Stock $stock, MacroStateDTO $openingMacro, BusinessRisk $businessRisk, EventRisk $eventRisk): void
     {
-        $previous = (float) $stock->getPrice();
+        $previousPrice = (float) $stock->getPrice();
+        $previousVol = (float) $stock->getVolatility();
+        $lambda = $eventRisk->intensity();
+        $stock->setJumpIntensity(Decimal::format($lambda, 2));
 
         for ($pass = 0; $pass < self::MAX_OPENING_PRICE_PASSES; $pass++) {
-            $pricingCtx = MarketPricingContext::forStock($stock, $openingMacro, $this->debtEngine->analyzeDebtHealth($stock, $openingMacro), $this->anchorStakes);
+            $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
+
+            $equityVol = VarianceBudget::equityVolatilityFromBusinessRisk(
+                $health->leveredBeta,
+                $health->equityLeverageMultiplier,
+                $businessRisk->vol(),
+            );
+            $storedVol = Decimal::format($equityVol, 4);
+            $stock->setVolatility($storedVol);
+            $stock->setCurrentVolatility($storedVol);
+
+            // Derive the jump scale on the stored volatility's idiosyncratic variance and floor to the 4-decimal
+            // column scale so calibratedJumpParameters() never rescales an opening row on rounding noise.
+            $idiosyncraticEquityVol = sqrt(VarianceBudget::longTermIdiosyncraticVariance((float) $storedVol, $health->leveredBeta));
+            $jumpScale = VarianceBudget::jumpScaleForVarianceShare($idiosyncraticEquityVol, $lambda);
+            $flooredScale = floor($jumpScale * 10000.0) / 10000.0;
+            $stock->setJumpVol(Decimal::format($flooredScale, 4));
+
+            $pricingCtx = MarketPricingContext::forStock($stock, $openingMacro, $health, $this->anchorStakes);
             $price = $this->marketEngine->strikeFairValue($pricingCtx)['perceived_fair_value'];
             $stock->setPrice((string) $price);
             $this->debtEngine->calibrateAssetVolatility($stock, $openingMacro->policyRateEma);
             $rerated = $this->debtEngine->seedCreditRating($stock, $openingMacro);
 
-            if (!$rerated && $previous > 0.0 && abs($price / $previous - 1.0) < self::OPENING_PRICE_TOLERANCE) {
-                return;
+            $volConverged = $previousVol > 0.0 && abs((float) $storedVol / $previousVol - 1.0) < self::OPENING_PRICE_TOLERANCE;
+            $priceConverged = $previousPrice > 0.0 && abs($price / $previousPrice - 1.0) < self::OPENING_PRICE_TOLERANCE;
+            if (!$rerated && $priceConverged && $volConverged) {
+                break;
             }
-            $previous = $price;
+            $previousPrice = $price;
+            $previousVol = (float) $storedVol;
         }
+
+        // How much of the float changes hands in a year and the opening variance EMA: read off the converged equity
+        // volatility so turnover and low-volatility index screens start on the risk the firm actually carries.
+        $convergedVol = (float) $stock->getVolatility();
+        $stock->setTurnoverRatio(LiquidityEngine::structuralTurnoverRatio($convergedVol));
+        $stock->setRealizedVarianceEma($convergedVol ** 2);
     }
 
     /**
@@ -312,7 +348,7 @@ class OpeningBoardBuilder
      * first moment the stakes can be valued at all, so a trust opens carrying what its holdings are worth and its
      * plant is carved out of a real portfolio instead of a guess at one.
      *
-     * @param list<array{stock: Stock, invested: float, assetAgeRatio: float}> $spheres
+     * @param list<array{stock: Stock, invested: float, assetAgeRatio: float, businessRisk: BusinessRisk, eventRisk: EventRisk}> $spheres
      * @param iterable<Stock> $board Every listed firm, the holdings among them.
      * @throws \DomainException When a sphere's portfolio leaves its subsidiaries too little of its capital.
      */
@@ -351,7 +387,7 @@ class OpeningBoardBuilder
             );
 
             // Struck again now its net asset value exists: the stakes marked, the subsidiaries carved out of them.
-            $this->strikeOpeningPrice($stock, $openingMacro);
+            $this->strikeOpeningPrice($stock, $openingMacro, $sphere['businessRisk'], $sphere['eventRisk']);
         }
     }
 

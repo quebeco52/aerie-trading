@@ -748,12 +748,14 @@ class DebtEngine
         // Standard CAPM breaks down during insolvency. Cap D/E to prevent runaway WACC.
         $effectiveDebtToEquity = min(self::MAX_BETA_DEBT_TO_EQUITY, $debtToEquity);
 
+        $operatingLeverage = $strategy->calculateLeveredBeta(1.0, $impliedTaxShieldRate, $effectiveDebtToEquity);
         $operatingBeta = $strategy->calculateLeveredBeta($baseBeta, $impliedTaxShieldRate, $effectiveDebtToEquity);
 
         // Net cash beside the business is a second asset in the equity, at a beta of zero, so the share's beta is the
         // business's weighted by value (Damodaran's cash-corrected beta): the beta the price loads the market on. The
         // costs of equity stay on the business's beta: they discount the business, cash is valued at face beside it,
         // and a hoard must not lower the hurdle the next plant has to clear.
+        $equityLeverageMultiplier = Valuation::cashBlendedMultiplier($operatingLeverage, $businessValue, $netCash);
         $leveredBeta = Valuation::cashBlendedBeta($operatingBeta, $businessValue, $netCash);
 
         // Cost of Equity (CAPM) on the riskless rate matched to the duration of the cash flows being valued (Damodaran
@@ -897,6 +899,7 @@ class DebtEngine
             $this->hasPrimaryMarketAccess($stock, $debtMetrics, $interestCoverage),
             $valuationCostOfEquity,
             $valuationWacc,
+            $equityLeverageMultiplier,
         );
     }
 

@@ -6,6 +6,7 @@ namespace App\Tests\Service\Market\Pricing;
 
 use App\Data\Company\AnchorHoldings;
 use App\Data\Company\DividendTier;
+use App\Data\Company\IndustryRisks;
 use App\Data\Company\PayoutPolicy;
 use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
@@ -14,9 +15,11 @@ use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Market\Pricing\SeedRows;
+use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
@@ -230,5 +233,83 @@ class OpeningBoardBuilderTest extends TestCase
         }
 
         $this->assertGreaterThanOrEqual(5, $checked);
+    }
+
+    /**
+     * Two otherwise identical operating firms in the same industry open with the more levered one strictly more
+     * volatile: leverage scales both systematic and idiosyncratic risk through DebtEngine's Hamada multiplier.
+     */
+    public function testLeveredFirmOpensMoreVolatileThanUnleveredPeerInSameIndustry(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $baseRow = SeedRows::for('WING');
+
+        $unleveredRow = $baseRow;
+        $unleveredRow['wholesale_debt'] = 0.0;
+        $unleveredRow['total_equity'] = (float) $baseRow['total_equity'] + (float) $baseRow['wholesale_debt'];
+
+        $leveredRow = $baseRow;
+        $leveredRow['wholesale_debt'] = ((float) $baseRow['total_equity'] + (float) $baseRow['wholesale_debt']) * 0.50;
+        $leveredRow['total_equity'] = ((float) $baseRow['total_equity'] + (float) $baseRow['wholesale_debt']) * 0.50;
+
+        $unlevered = (new Stock())->setTicker('UNLV');
+        $levered = (new Stock())->setTicker('LEVR');
+        $this->builder->open($unlevered, $unleveredRow, $openingMacro);
+        $this->builder->open($levered, $leveredRow, $openingMacro);
+
+        $this->assertGreaterThan((float) $unlevered->getVolatility(), (float) $levered->getVolatility());
+        $this->assertGreaterThan((float) $unlevered->getJumpVol(), (float) $levered->getJumpVol());
+    }
+
+    /**
+     * Every opened firm satisfies the risk-ladder invariants: no firm opens on the 20% idiosyncratic floor,
+     * calibratedJumpParameters() never rescales any opening row, Merton's calibrated asset volatility round-trips
+     * within 15% of sqrt((beta_A x MACRO_VOL_BASE_ANCHOR)^2 + sigma_idio,A^2) for every non-financial, and turnover
+     * and realizedVarianceEma match the converged opening volatility.
+     */
+    public function testOpeningRiskRoundTripsCleanlyWithNoFloorOrJumpRescaling(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $board = $this->openBoard($openingMacro);
+        $rowsByTicker = [];
+        foreach (SeedRows::all() as $row) {
+            $rowsByTicker[$row['ticker']] = $row;
+        }
+
+        foreach ($board as $ticker => $stock) {
+            $row = $rowsByTicker[$ticker];
+            $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
+            $vol = (float) $stock->getVolatility();
+            $lambda = (float) $stock->getJumpIntensity();
+            $jumpVol = (float) $stock->getJumpVol();
+
+            // 1. Equity leverage multiplier obeys the same law as levered beta.
+            $assetBeta = (float) $stock->getBeta();
+            $this->assertEqualsWithDelta($health->leveredBeta, $assetBeta * $health->equityLeverageMultiplier, 1e-9, "{$ticker}: L disagrees with leveredBeta / beta.");
+
+            // 2. No firm opens on the 20% idiosyncratic variance floor.
+            $sysVar = (($health->leveredBeta * MacroConstants::MACRO_VOL_BASE_ANCHOR) ** 2)
+                + VarianceBudget::systemicJumpMoments($health->leveredBeta)['variance'];
+            $rawIdioVar = ($vol * $vol) - $sysVar;
+            $this->assertGreaterThanOrEqual(0.20 * $vol * $vol, $rawIdioVar, "{$ticker} opened on the 20% idiosyncratic floor.");
+
+            // 3. calibratedJumpParameters() never rescales an opening row.
+            $calibrated = VarianceBudget::calibratedJumpParameters($vol, $health->leveredBeta, $lambda, $jumpVol);
+            $this->assertEqualsWithDelta($jumpVol, $calibrated['scale'], 1e-12, "{$ticker}'s opening jump_vol was rescaled by VarianceBudget.");
+
+            // 4. Merton sigma_V round-trips within 15% of unlevered asset risk for every non-financial.
+            if (!Sectors::strategyFor($stock->getIndustry())->isFinancial()) {
+                $stepVol = IndustryRisks::businessForRow($row)->vol();
+                $unleveredVol = sqrt((($assetBeta * MacroConstants::MACRO_VOL_BASE_ANCHOR) ** 2) + ($stepVol * $stepVol));
+                $assetVol = $stock->getAssetVolatility();
+                $this->assertNotNull($assetVol, "{$ticker} has no calibrated asset volatility.");
+                $this->assertEqualsWithDelta(1.0, $assetVol / $unleveredVol, 0.15, sprintf('%s Merton sigma_V %.4f vs unlevered %.4f.', $ticker, $assetVol, $unleveredVol));
+            }
+
+            // 5. Post-convergence vol, turnover and realized variance EMA agree.
+            $this->assertSame($stock->getVolatility(), $stock->getCurrentVolatility(), "{$ticker} currentVolatility disagrees with volatility.");
+            $this->assertEqualsWithDelta(LiquidityEngine::structuralTurnoverRatio($vol), (float) $stock->getTurnoverRatio(), 1e-12, "{$ticker} turnover ratio stale.");
+            $this->assertEqualsWithDelta($vol ** 2, (float) $stock->getRealizedVarianceEma(), 1e-12, "{$ticker} realizedVarianceEma stale.");
+        }
     }
 }

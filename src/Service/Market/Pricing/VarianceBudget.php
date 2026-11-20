@@ -43,7 +43,7 @@ final readonly class VarianceBudget
      * Ceiling on the share of a name's long-run IDIOSYNCRATIC variance its OWN jump process may supply; the jump
      * component of single-stock return variance is a minority of the total (Huang & Tauchen 2005).
      */
-    private const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
+    public const MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE = 0.25;
     /**
      * Floor on the share of a name's long-run idiosyncratic variance left to its diffusion once its own jumps, order
      * flow and announcements are paid for (20%): a name keeps some day-to-day news between its scheduled ones.
@@ -391,6 +391,64 @@ final readonly class VarianceBudget
     }
 
     /**
+     * Untruncated second moment of a unit-scale single-name Kou jump: 2 x (pUp + pDown x ratio^2), shared by the
+     * opening jump-scale derivation and the runtime variance-budget calibration.
+     */
+    public static function kouRawSecondMomentPerUnit(): float
+    {
+        return OptionPricing::calculateKouJumpMoment(
+            2,
+            self::SVJJ_P_UP,
+            1.0,
+            1.0 / self::JUMP_DOWNSIDE_SCALE_RATIO,
+        );
+    }
+
+    /**
+     * Long-run equity volatility implied by a firm's systematic loading and its operating business risk, levered by
+     * the same multiplier DebtEngine levers beta with (1.0 for a financial):
+     * sigma_E^2 = (beta_L x MACRO_VOL_BASE_ANCHOR)^2 + systemicJumpVariance(beta_L) + (L x sigma_idio,A)^2.
+     *
+     * @param float $leveredBeta              The equity's levered market beta (DebtHealthDTO::$leveredBeta).
+     * @param float $leverageMultiplier       The Hamada + cash-blend multiplier L (1.0 for a financial).
+     * @param float $businessIdiosyncraticVol Annual idiosyncratic volatility of the operating assets (equity for a
+     *                                        financial).
+     */
+    public static function equityVolatilityFromBusinessRisk(
+        float $leveredBeta,
+        float $leverageMultiplier,
+        float $businessIdiosyncraticVol,
+    ): float {
+        $idiosyncraticEquityVol = max(0.0, $leverageMultiplier) * max(0.0, $businessIdiosyncraticVol);
+        $systematicVar = (($leveredBeta * MacroConstants::MACRO_VOL_BASE_ANCHOR) ** 2)
+            + self::systemicJumpMoments($leveredBeta)['variance'];
+
+        return sqrt($systematicVar + ($idiosyncraticEquityVol * $idiosyncraticEquityVol));
+    }
+
+    /**
+     * Kou jump scale that puts the requested share of equity idiosyncratic variance into own jumps at arrival rate
+     * lambda: scale = sqrt(share x sigma_idio,E^2 / (lambda x m2)), where m2 is the unit-scale Kou raw second moment.
+     *
+     * @param float $idiosyncraticEquityVol Annual equity idiosyncratic volatility (L x sigma_idio,A).
+     * @param float $lambda                 Jump arrival rate, per year.
+     * @param float $varianceShare          Share of idiosyncratic variance carried by own jumps (at most 0.25).
+     */
+    public static function jumpScaleForVarianceShare(
+        float $idiosyncraticEquityVol,
+        float $lambda,
+        float $varianceShare = self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE,
+    ): float {
+        if ($lambda <= 0.0 || $idiosyncraticEquityVol <= 0.0 || $varianceShare <= 0.0) {
+            return self::MIN_JUMP_SCALE;
+        }
+
+        $budget = $idiosyncraticEquityVol * $idiosyncraticEquityVol * min($varianceShare, self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE);
+
+        return max(self::MIN_JUMP_SCALE, sqrt($budget / ($lambda * self::kouRawSecondMomentPerUnit())));
+    }
+
+    /**
      * The Kou jump rates a name actually gaps at, after its jump is held to its variance budget.
      *
      * The jump scale is held to the share of the name's variance a jump process is entitled to, so the jump is an
@@ -420,12 +478,7 @@ final readonly class VarianceBudget
             // Untruncated second moment of the Kou jump, 2 * scale^2 * (pUp + pDown * ratio^2), which is
             // monotone in the scale and therefore invertible for the budget. Truncation only removes mass,
             // so solving on it and deducting the truncated figure at the budget can never over-reclaim.
-            $rawSecondMomentPerUnit = OptionPricing::calculateKouJumpMoment(
-                2,
-                self::SVJJ_P_UP,
-                1.0,
-                1.0 / self::JUMP_DOWNSIDE_SCALE_RATIO,
-            );
+            $rawSecondMomentPerUnit = self::kouRawSecondMomentPerUnit();
             $budget = self::longTermIdiosyncraticVariance($longTermVolatility, $beta)
                 * self::MAX_IDIOSYNCRATIC_JUMP_VARIANCE_SHARE;
             $configured = $lambda * $rawSecondMomentPerUnit * $jumpScale * $jumpScale;

@@ -70,9 +70,11 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $stock->setIndustry($row['industry']);
         $stock->setSharesOutstanding((string) $row['shares_outstanding']);
         $stock->setPrice('50.00');
-        $stock->setVolatility((string) $row['volatility']);
-        $stock->setCurrentVolatility((string) $row['volatility']);
-        $stock->setBeta((string) IndustryBetas::seedBetaFor($row));
+        $beta = IndustryBetas::seedBetaFor($row);
+        $vol = \App\Service\Market\Pricing\VarianceBudget::equityVolatilityFromBusinessRisk($beta, 1.0, \App\Data\Company\IndustryRisks::businessForRow($row)->vol());
+        $stock->setVolatility((string) $vol);
+        $stock->setCurrentVolatility((string) $vol);
+        $stock->setBeta((string) $beta);
         $stock->setOperatingMargin((string) $row['operating_margin']);
         $stock->setTotalEquity(\App\Service\Math\Decimal::of($row['total_equity']));
         $stock->setWholesaleDebt((string) $row['wholesale_debt']);

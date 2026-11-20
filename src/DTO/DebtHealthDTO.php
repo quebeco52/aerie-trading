@@ -54,6 +54,11 @@ class DebtHealthDTO
         public readonly bool $hasMarketAccess = true,
         ?float $valuationCostOfEquity = null,
         ?float $valuationWacc = null,
+        /**
+         * Equity leverage multiplier DebtEngine levers operating risk with: Hamada (1 + (1 - t) x D/E) blended with
+         * net cash V / (V + C), or 1.0 for a financial institution. Identical to leveredBeta / assetBeta.
+         */
+        public readonly float $equityLeverageMultiplier = 1.0,
     ) {
         $this->valuationCostOfEquity = $valuationCostOfEquity ?? $costOfEquity;
         $this->valuationWacc = $valuationWacc ?? $wacc;

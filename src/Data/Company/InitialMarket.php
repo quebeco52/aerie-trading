@@ -9,7 +9,8 @@ namespace App\Data\Company;
  * of hand-set books, and its business model's resolveOpeningBooks() builds the balance sheet, return and market share
  * that character implies (only spheres like BRKW still state their books directly). Read the resolved books through
  * App\Service\Market\Pricing\SeedRows. A `moat` names the firm's step on the ladder (App\Data\Company\Moat) where it
- * is not its industry's (IndustryMoats).
+ * is not its industry's (IndustryMoats); `risk` and `events` shift the firm's opening business-risk and event-risk
+ * steps by ±1 around its industry's (IndustryRisks).
  */
 class InitialMarket
 {
@@ -22,10 +23,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Banks - Diversified',
             'systemic_importance' => 'titan',
-            'volatility' => 0.13,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.10,
             'moat' => 'wide', // ROE 18% at the opening, two steps past a money-centre bank's
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.40,
@@ -45,10 +43,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Hedge Fund',
             'systemic_importance' => 'titan',
-            'volatility' => 0.26,
             'beta_tilt' => 0.25, // leveraged long/short books
-            'jump_intensity' => 1.25,
-            'jump_vol' => 0.13,
             'moat' => 'wide',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.45,
@@ -69,10 +64,7 @@ class InitialMarket
             'sector' => 'Information Technology',
             'industry' => 'Internet Content & Information',
             'systemic_importance' => 'titan',
-            'volatility' => 0.20,
             'beta_tilt' => -0.25, // steadier cloud contracts, less volatile than smaller software names
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.10,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.85,
             'operating_margin' => 0.40,
@@ -90,10 +82,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Conglomerates',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.12,
             'beta_tilt' => -0.25, // a contrarian holder that buys when prices fall
-            'jump_intensity' => 0.20,
-            'jump_vol' => 0.08,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.35,
             'operating_margin' => 0.27, // Rail, manufacturing, utility and consumer businesses, no float in the line
@@ -111,10 +100,8 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Investment Banking',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.35,
             'beta_tilt' => 0.25, // among the most cyclical deal franchises
-            'jump_intensity' => 1.25,
-            'jump_vol' => 0.14,
+            'risk' => 1,
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
             'payout' => 'low',
@@ -135,10 +122,8 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Investment Banking',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.20,
             'beta_tilt' => -0.25, // a delta-neutral market maker that earns on volatility
-            'jump_intensity' => 1.25,
-            'jump_vol' => 0.12,
+            'risk' => -1,
             'moat' => 'moderate',
             'capex_ratio' => 0.15,
             'fixed_cost_ratio' => 0.60,
@@ -158,10 +143,8 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Investment Banking',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.14,
             'beta_tilt' => -0.25, // restructuring fees run against the cycle
-            'jump_intensity' => 1.25,
-            'jump_vol' => 0.11,
+            'risk' => -1,
             'moat' => 'moderate',
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.55,
@@ -181,10 +164,8 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Banks - Regional',
             'systemic_importance' => 'none',
-            'volatility' => 0.28,
             'beta_tilt' => 0.25, // one region, smaller borrowers, commercial property
-            'jump_intensity' => 0.90,
-            'jump_vol' => 0.11,
+            'risk' => 1,
             'moat' => 'moderate', // ROE 13.6% at the opening: SME lending regional rivals do not reach
             'capex_ratio' => 0.10,
             'payout' => 'balanced',
@@ -209,10 +190,7 @@ class InitialMarket
             'industry' => 'Banks - Regional',
             // The District's second home lender: a domestic systemically important bank
             'systemic_importance' => 'systemic',
-            'volatility' => 0.20,
             'beta_tilt' => 0.15, // long fixed-rate mortgages on short deposits
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.10,
             'moat' => 'narrow', // ROE 10% at the opening: the second home lender's branch network
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.45,
@@ -233,10 +211,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Insurance - Reinsurance',
             'systemic_importance' => 'titan',
-            'volatility' => 0.22, // a reinsurer, ~23% realized vol
             'beta_tilt' => -0.25, // losses follow catastrophes, not the business cycle
-            'jump_intensity' => 0.15,
-            'jump_vol' => 0.06,
             'moat' => 'wide',
             'capex_ratio' => 0.02,
             'fixed_cost_ratio' => 0.20,
@@ -260,10 +235,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Insurance - Diversified',
             'systemic_importance' => 'base',
-            'volatility' => 0.22, // a diversified insurer, ~22% realized vol
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.08,
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.35,
             // 95.5% combined ratio; European composites' P&C books run about 93-95%.
@@ -287,10 +259,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Financial Data & Ratings',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.25, // a ratings house, ~26% realized vol
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.08,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.55,
@@ -308,10 +277,7 @@ class InitialMarket
             'industry' => 'Utilities - Regulated Electric',
             'systemic_importance' => 'base',
             // a regulated electric utility: 15.0% (Damodaran, Utility (General), US, January 2026)
-            'volatility' => 0.15,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.30,
-            'jump_vol' => 0.06,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.80,
             'operating_margin' => 0.20,
@@ -328,10 +294,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Security & Protection Services',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.20,
             'beta_tilt' => -0.25, // multi-year retainers held through recessions
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.09,
+            'risk' => -1,
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.17,
             'revenue' => 27_100_000_000.00,
@@ -347,10 +311,7 @@ class InitialMarket
             'sector' => 'Materials',
             'industry' => 'Steel',
             'systemic_importance' => 'base',
-            'volatility' => 0.32,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 1.00,
-            'jump_vol' => 0.12,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.18,
@@ -368,10 +329,7 @@ class InitialMarket
             'sector' => 'Information Technology',
             'industry' => 'Computer Hardware',
             'systemic_importance' => 'none',
-            'volatility' => 0.40,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 1.25,
-            'jump_vol' => 0.13,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.30,
@@ -388,10 +346,7 @@ class InitialMarket
             'sector' => 'Real Estate',
             'industry' => 'REIT - Residential',
             'systemic_importance' => 'none',
-            'volatility' => 0.24,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.10,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.25,
             'operating_margin' => 0.55,
@@ -409,10 +364,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Specialty Industrial Machinery',
             'systemic_importance' => 'none',
-            'volatility' => 0.26,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.90,
-            'jump_vol' => 0.11,
             'moat' => 'very_wide',
             'payout' => 'low',
             'fixed_cost_ratio' => 0.60,
@@ -432,10 +384,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Aerospace & Defense',
             'systemic_importance' => 'none',
-            'volatility' => 0.15,
             'beta_tilt' => -0.25, // orders follow mainland and allied budgets, not the District cycle
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.10,
+            'events' => -1,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.65,
             'operating_margin' => 0.14,
@@ -454,10 +404,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Space Systems',
             'systemic_importance' => 'none',
-            'volatility' => 0.45,
             'beta_tilt' => 0.25, // a growth stock: its value is mostly years away, so it moves with risk appetite
-            'jump_intensity' => 1.00,
-            'jump_vol' => 0.15,
             'moat' => 'narrow',
             // engineering, the factory and the launch pads; propellant, recovery and ground crews follow the launches
             'fixed_cost_ratio' => 0.45,
@@ -475,10 +422,7 @@ class InitialMarket
             'sector' => 'Communication Services',
             'industry' => 'Telecom Services',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.14,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.09,
             'fixed_cost_ratio' => 0.75, // Verizon 2024: device cost is 25% of operating costs
             'operating_margin' => 0.21, // Verizon 2024 10-K: 21.3%
             'revenue' => 68_200_000_000.00,
@@ -496,10 +440,7 @@ class InitialMarket
             'sector' => 'Consumer Staples',
             'industry' => 'Tobacco',
             'systemic_importance' => 'none',
-            'volatility' => 0.15,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.09,
             'fixed_cost_ratio' => 0.25,
             'operating_margin' => 0.42,
             'revenue' => 23_400_000_000.00,
@@ -517,10 +458,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Conglomerates',
             'systemic_importance' => 'none',
-            'volatility' => 0.12,
             'beta_tilt' => -0.24, // no division large enough to move the group
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.09,
+            'risk' => -1,
             'moat' => 'moderate',
             'payout' => 'income',
             'fixed_cost_ratio' => 0.40,
@@ -538,10 +477,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Engineering & Construction',
             'systemic_importance' => 'titan',
-            'volatility' => 0.35,
             'beta_tilt' => 0.25, // heavy fixed costs on a thin margin
-            'jump_intensity' => 0.90,
-            'jump_vol' => 0.13,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.09,
@@ -566,10 +502,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Financial Data & Ratings',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.25,
             'beta_tilt' => 0.25, // priced with technology stocks though subscriptions hold
-            'jump_intensity' => 1.00,
-            'jump_vol' => 0.11,
             'moat' => 'very_wide',
             'payout' => 'low',
             'fixed_cost_ratio' => 0.85,
@@ -587,10 +520,7 @@ class InitialMarket
             'sector' => 'Energy',
             'industry' => 'Oil & Gas E&P',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.35,
             'beta_tilt' => 0.10, // deepwater cost base, partly hedged
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.13,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.75,
             'operating_margin' => 0.32,
@@ -607,10 +537,7 @@ class InitialMarket
             'sector' => 'Energy',
             'industry' => 'Oil & Gas Refining & Marketing',
             'systemic_importance' => 'base',
-            'volatility' => 0.15,
             'beta_tilt' => 0.25, // crack-spread earnings swing from losses to records
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.11,
             'fixed_cost_ratio' => 0.025,
             // A merchant refiner at a $22 crack: Valero's margin (-$0.41 + 0.598 x crack) less its ~$6.5/bbl of costs,
             // over the refiner's own barrel revenue. Break-even near an $11.6 crack, as Valero ran in 2020.
@@ -634,10 +561,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Resorts & Casinos',
             'systemic_importance' => 'none',
-            'volatility' => 0.22,
             'beta_tilt' => -0.15, // fixed lease income steadies the casino book
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.11,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.70,
             'operating_margin' => 0.25,
@@ -656,10 +580,7 @@ class InitialMarket
             'sector' => 'Utilities',
             'industry' => 'Utilities - Regulated Water',
             'systemic_importance' => 'base',
-            'volatility' => 0.10,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.10,
-            'jump_vol' => 0.06,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.80,
             'operating_margin' => 0.20,
@@ -677,10 +598,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Waste Management',
             'systemic_importance' => 'none',
-            'volatility' => 0.10,
             'beta_tilt' => -0.25, // waste volumes barely move in a recession
-            'jump_intensity' => 0.20,
-            'jump_vol' => 0.07,
             'fixed_cost_ratio' => 0.50,
             'operating_margin' => 0.18,
             'revenue' => 24_800_000_000.00,
@@ -696,10 +614,7 @@ class InitialMarket
             'sector' => 'Health Care',
             'industry' => 'Medical Care Facilities',
             'systemic_importance' => 'base',
-            'volatility' => 0.12,
             'beta_tilt' => -0.10, // volumes follow health programmes, not the cycle
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.08,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.65,
             'operating_margin' => 0.12,
@@ -716,10 +631,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Credit Services',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.28,
             'beta_tilt' => 0.25, // unsecured consumer credit, strongly cyclical
-            'jump_intensity' => 1.00,
-            'jump_vol' => 0.12,
             'moat' => 'very_wide',
             'capex_ratio' => 0.15,
             'payout' => 'low',
@@ -740,10 +652,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Integrated Freight & Logistics',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.22,
             'beta_tilt' => 0.15, // surge-priced volumes on a fixed network
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.09,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.11,
@@ -760,10 +669,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Airlines',
             'systemic_importance' => 'none',
-            'volatility' => 0.35,
             'beta_tilt' => 0.15, // business travel and full planes turn with the cycle
-            'jump_intensity' => 0.80,
-            'jump_vol' => 0.12,
             // aircraft ownership, maintenance bases and salaried staff; fuel, crews and fees follow the flying
             'fixed_cost_ratio' => 0.30,
             // network carriers earn 8-10% before interest in a good year
@@ -784,10 +690,7 @@ class InitialMarket
             'sector' => 'Consumer Staples',
             'industry' => 'Packaged Foods',
             'systemic_importance' => 'none',
-            'volatility' => 0.16,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.08,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.25,
             'operating_margin' => 0.22,
@@ -804,10 +707,8 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Credit Services',
             'systemic_importance' => 'none',
-            'volatility' => 0.36,
             'beta_tilt' => 0.25, // unsecured lending, sharp on labour data
-            'jump_intensity' => 1.00,
-            'jump_vol' => 0.13,
+            'risk' => 1,
             'moat' => 'very_wide',
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.45,
@@ -827,10 +728,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Restaurants',
             'systemic_importance' => 'none',
-            'volatility' => 0.16,
             'beta_tilt' => -0.15, // steadier than most restaurants
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.09,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.50,
             'operating_margin' => 0.18,
@@ -848,10 +746,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Legal Services',
             'systemic_importance' => 'none',
-            'volatility' => 0.18,
             'beta_tilt' => -0.15, // retainer income holds through the cycle
-            'jump_intensity' => 1.00,
-            'jump_vol' => 0.10,
+            'events' => 1,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.25,
             'operating_margin' => 0.30,
@@ -869,10 +765,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Brokerages',
             'systemic_importance' => 'none',
-            'volatility' => 0.32,
             'beta_tilt' => 0.20, // retail trading and margin balances rise and fall with the market
-            'jump_intensity' => 0.80,
-            'jump_vol' => 0.10,
             'moat' => 'moderate',
             'capex_ratio' => 0.08,
             'fixed_cost_ratio' => 0.70,
@@ -894,10 +787,7 @@ class InitialMarket
             'sector' => 'Real Estate',
             'industry' => 'REIT - Office',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.10,
             'beta_tilt' => -0.10, // rent paid from public budgets
-            'jump_intensity' => 0.20,
-            'jump_vol' => 0.07,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.85,
             'operating_margin' => 0.55,
@@ -915,10 +805,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Advertising Agencies',
             'systemic_importance' => 'none',
-            'volatility' => 0.22,
             'beta_tilt' => -0.25, // retainers and crisis work steady a recession
-            'jump_intensity' => 0.90,
-            'jump_vol' => 0.10,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.25,
             'operating_margin' => 0.24,
@@ -935,10 +822,7 @@ class InitialMarket
             'sector' => 'Communication Services',
             'industry' => 'Broadcasting',
             'systemic_importance' => 'base',
-            'volatility' => 0.24,
             'beta_tilt' => 0.10, // the airtime half sells at the going ad rate
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.09,
             'moat' => 'moderate',
             // sports rights, newsrooms and the stations are paid for whatever the airtime sells for
             'fixed_cost_ratio' => 0.55,
@@ -958,10 +842,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Education & Training Services',
             'systemic_importance' => 'base',
-            'volatility' => 0.14,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.30,
-            'jump_vol' => 0.08,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.65,
             'operating_margin' => 0.18,
@@ -980,10 +861,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Internet Retail',
             'systemic_importance' => 'base',
-            'volatility' => 0.30,
             'beta_tilt' => 0.25, // thin margin on fixed fulfilment costs
-            'jump_intensity' => 0.75,
-            'jump_vol' => 0.12,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.70,
             'operating_margin' => 0.09,
@@ -1001,10 +879,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Internet Retail',
             'systemic_importance' => 'base',
-            'volatility' => 0.32,
             'beta_tilt' => 0.10, // pure commission on discretionary sales, no fixed fulfilment base
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.12,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.20,
@@ -1021,10 +896,7 @@ class InitialMarket
             'sector' => 'Consumer Staples',
             'industry' => 'Farm Products',
             'systemic_importance' => 'base',
-            'volatility' => 0.16,
             'beta_tilt' => -0.15, // volumes hold in a downturn
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.08,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.06,
@@ -1057,10 +929,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Investment Companies',
             'systemic_importance' => 'titan',
-            'volatility' => 0.18,
             'beta_tilt' => 0.06, // follows the District economy through its holdings
-            'jump_intensity' => 0.30,
-            'jump_vol' => 0.08,
             // The consolidated subsidiaries' own return on the capital they run, which is all the revenue line sells
             // on: berths, rights of way, concessions and toolmakers held to about their cost of capital (~8.7% at
             // the opening rates), which the board sets them. The stakes earn their dividends below the line and their
@@ -1094,10 +963,7 @@ class InitialMarket
             'sector' => 'Real Estate',
             'industry' => 'REIT - Healthcare Facilities',
             'systemic_importance' => 'none',
-            'volatility' => 0.12,
             'beta_tilt' => -0.10, // ageing-population rents trade like a long bond
-            'jump_intensity' => 0.10,
-            'jump_vol' => 0.10,
             'fixed_cost_ratio' => 0.75,
             'operating_margin' => 0.55,
             'revenue' => 8_490_000_000.00,
@@ -1123,10 +989,8 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Restaurants',
             'systemic_importance' => 'none',
-            'volatility' => 0.14,
             'beta_tilt' => -0.25, // diners trade down to it in a recession
-            'jump_intensity' => 0.05,
-            'jump_vol' => 0.09,
+            'events' => -1,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.32,
@@ -1144,10 +1008,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Distressed Debt',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.24,
             'beta_tilt' => -0.25, // deploys into distress, but is still long credit
-            'jump_intensity' => 1.25,
-            'jump_vol' => 0.13,
             'moat' => 'wide',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.35,
@@ -1168,10 +1029,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Auto Manufacturers',
             'systemic_importance' => 'base',
-            'volatility' => 0.35,
             'beta_tilt' => -0.15, // luxury buyers ride out an ordinary slowdown
-            'jump_intensity' => 1.40,
-            'jump_vol' => 0.11,
             'payout' => 'retain',
             // An OEM's plant, tooling and contracted line labour are roughly two fifths of its cost base; at
             // 0.58 the fleet broke even on a 15% volume drop and any ordinary slowdown put it in the red.
@@ -1190,10 +1048,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Security & Protection Services',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.28,
             'beta_tilt' => -0.25, // deployments rise with tension abroad
-            'jump_intensity' => 1.10,
-            'jump_vol' => 0.11,
+            'risk' => 1,
             'moat' => 'moderate',
             'payout' => 'income',
             'fixed_cost_ratio' => 0.40,
@@ -1211,10 +1067,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Security & Protection Services',
             'systemic_importance' => 'base',
-            'volatility' => 0.24,
             'beta_tilt' => -0.10, // notes are drawn in a bank scare as well as spent in a boom
-            'jump_intensity' => 0.70,
-            'jump_vol' => 0.09,
             'moat' => 'narrow',
             // depots, vaults and the armoured fleet; crews follow the rounds
             'fixed_cost_ratio' => 0.40,
@@ -1234,10 +1087,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Correctional Services',
             'systemic_importance' => 'base',
-            'volatility' => 0.22,
             'beta_tilt' => -0.25, // the District pays for every place whatever the economy does
-            'jump_intensity' => 0.80,
-            'jump_vol' => 0.12,
             'moat' => 'narrow',
             // owned prisons and the minimum staffing each must keep, full or not
             'fixed_cost_ratio' => 0.55,
@@ -1256,10 +1106,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Security & Protection Services',
             'systemic_importance' => 'base',
-            'volatility' => 0.26,
             'beta_tilt' => -0.15, // fraud and crisis work arrives when markets break
-            'jump_intensity' => 1.00,
-            'jump_vol' => 0.10,
+            'risk' => 1,
             // investigators and analysts are kept on whether the cases come or not
             'fixed_cost_ratio' => 0.50,
             // risk and investigations firms earn 15-20% before interest (Kroll, Control Risks, FTI forensic)
@@ -1277,14 +1125,11 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Asset Management',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.24,
             // Defensive, not inverse. A short book marks up in a selloff, but the fee base underneath it is
             // still assets under management: it swells through a bull run and shrinks on redemptions after
             // one. Its performance fees are idiosyncratic campaign wins with no link to the cycle at all.
             // At -0.50 the price claimed a hedge the earnings never delivered; 0.20 is what they support.
             'beta_tilt' => -0.15, // short books offset part of a market that sets its assets
-            'jump_intensity' => 1.25,
-            'jump_vol' => 0.11,
             'moat' => 'wide',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.30,
@@ -1305,10 +1150,7 @@ class InitialMarket
             'sector' => 'Materials',
             'industry' => 'Copper',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.40,
             'beta_tilt' => 0.10, // heavy capital spending against a metal price
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.11,
             'fixed_cost_ratio' => 0.80,
             // A low-cost major: copper majors earn 25-35% at mid-cycle on ~0.5x asset turnover, which is what
             // carries them through a metals slump that sinks the high-cost producers.
@@ -1330,10 +1172,7 @@ class InitialMarket
             'sector' => 'Information Technology',
             'industry' => 'Semiconductors',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.35,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 1.25,
-            'jump_vol' => 0.14,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.70,
             'operating_margin' => 0.50,
@@ -1350,10 +1189,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Railroads',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.12,
             'beta_tilt' => -0.25, // half its revenue is commuter subscriptions
-            'jump_intensity' => 0.15,
-            'jump_vol' => 0.08,
+            'risk' => -1,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.80,
             'operating_margin' => 0.45,
@@ -1370,10 +1207,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Mortgage Finance',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.30,
             'beta_tilt' => 0.25, // wholesale-funded, falls steeply in credit crises
-            'jump_intensity' => 1.50,
-            'jump_vol' => 0.13,
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.50,
@@ -1395,10 +1229,8 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Financial Clearinghouses',
             'systemic_importance' => 'titan',
-            'volatility' => 0.12,
             'beta_tilt' => -0.25, // clearing volume rises in sell-offs
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.10,
+            'events' => -1,
             'moat' => 'very_wide',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.30,
@@ -1419,10 +1251,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Securities & Commodity Exchanges',
             'systemic_importance' => 'titan',
-            'volatility' => 0.24,
             'beta_tilt' => 0.05, // turnover rises in a sell-off as the value it is charged on falls
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.08,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.75,
             'operating_margin' => 0.60,
@@ -1443,10 +1272,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Insurance - Life',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.26, // a life insurer: long bonds, equity fees and guarantees, ~26% realized vol
             'beta_tilt' => 0.10, // savings fees ride the market and a rally in bonds squeezes the guarantees
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.08,
             'moat' => 'narrow',
             'capex_ratio' => 0.03,
             'fixed_cost_ratio' => 0.30,
@@ -1471,10 +1297,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Insurance Brokers',
             'systemic_importance' => 'none',
-            'volatility' => 0.20, // a broker: renewals in every economy, ~20% realized vol
             'beta_tilt' => -0.15, // commissions follow the insurance cycle, not the business cycle
-            'jump_intensity' => 0.30,
-            'jump_vol' => 0.06,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.25,
@@ -1493,10 +1316,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Marine Shipping',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.38,
             'beta_tilt' => 0.25, // spot freight on a fixed fleet
-            'jump_intensity' => 0.70,
-            'jump_vol' => 0.11,
             'moat' => 'moderate',
             'payout' => 'low',
             'fixed_cost_ratio' => 0.65,
@@ -1514,10 +1334,7 @@ class InitialMarket
             'sector' => 'Health Care',
             'industry' => 'Drug Manufacturers - General',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.28,
             'beta_tilt' => -0.15, // prescription demand ignores the cycle
-            'jump_intensity' => 0.80,
-            'jump_vol' => 0.13,
             'fixed_cost_ratio' => 0.70,
             'operating_margin' => 0.35,
             'revenue' => 63_300_000_000.00,
@@ -1534,10 +1351,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Luxury Goods',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.18,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.10,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.50,
             'operating_margin' => 0.38,
@@ -1556,10 +1370,7 @@ class InitialMarket
             'sector' => 'Consumer Staples',
             'industry' => 'Household & Personal Products',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.12,
             'beta_tilt' => -0.10, // among the least volatile on the exchange
-            'jump_intensity' => 0.30,
-            'jump_vol' => 0.08,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.24,
@@ -1576,13 +1387,10 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Tools & Accessories',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.18,
             // A tollbooth that "completely bypasses the traditional boom-and-bust cycles of standard
             // manufacturing" cannot carry a cyclical beta. At 1.10 the CAPM charged it a cyclical cost of
             // equity and priced its 37% return on equity below the tools sector multiple.
             'beta_tilt' => -0.15, // falls by less than most equipment makers
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.09,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.35,
@@ -1600,10 +1408,7 @@ class InitialMarket
             'sector' => 'Consumer Staples',
             'industry' => 'Beverages - Wineries & Distilleries',
             'systemic_importance' => 'none',
-            'volatility' => 0.16,
             'beta_tilt' => -0.10, // demand barely moves with the cycle
-            'jump_intensity' => 0.30,
-            'jump_vol' => 0.09,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.22,
@@ -1620,10 +1425,7 @@ class InitialMarket
             'sector' => 'Consumer Staples',
             'industry' => 'Grocery Stores',
             'systemic_importance' => 'base',
-            'volatility' => 0.18,
             'beta_tilt' => -0.25, // food is bought whatever the economy does
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.06,
             'moat' => 'moderate',
             // store rents, depots and head office; suppliers, fuel and store payroll follow the baskets sold
             'fixed_cost_ratio' => 0.10,
@@ -1644,10 +1446,7 @@ class InitialMarket
             'sector' => 'Real Estate',
             'industry' => 'REIT - Industrial',
             'systemic_importance' => 'base',
-            'volatility' => 0.14,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.25,
-            'jump_vol' => 0.08,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.30,
             'operating_margin' => 0.52,
@@ -1665,10 +1464,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Apparel Manufacturing',
             'systemic_importance' => 'base',
-            'volatility' => 0.18,
             'beta_tilt' => -0.10, // trade-down softens a downturn
-            'jump_intensity' => 0.45,
-            'jump_vol' => 0.09,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.22,
@@ -1685,10 +1481,7 @@ class InitialMarket
             'sector' => 'Materials',
             'industry' => 'Chemicals',
             'systemic_importance' => 'base',
-            'volatility' => 0.26,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.12,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.20,
@@ -1707,10 +1500,8 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Auto Manufacturers',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.22,
             'beta_tilt' => -0.25, // fleet replacement, parts and subscriptions
-            'jump_intensity' => 0.65,
-            'jump_vol' => 0.09,
+            'risk' => -1,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.40,
             'operating_margin' => 0.12,
@@ -1729,10 +1520,7 @@ class InitialMarket
             'sector' => 'Information Technology',
             'industry' => 'Communication Equipment',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.20,
             'beta_tilt' => -0.10, // royalties steady the equipment cycle
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.09,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.35, // Ericsson 2022: cost of sales 65% of operating costs
             'operating_margin' => 0.12, // Ericsson EBIT margin 13.7% (2021), 9.9% (2022)
@@ -1751,10 +1539,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Specialty Industrial Machinery',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.22,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.09,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.55,
             'operating_margin' => 0.20,
@@ -1774,10 +1559,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Building Products & Equipment',
             'systemic_importance' => 'base',
-            'volatility' => 0.24,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.09,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.50,
             'operating_margin' => 0.14,
@@ -1797,10 +1579,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Specialty Industrial Machinery',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.21,
             'beta_tilt' => -0.10, // service income carries a downturn
-            'jump_intensity' => 0.55,
-            'jump_vol' => 0.08,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.22,
@@ -1820,10 +1599,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Merchant Houses',
             'systemic_importance' => 'titan',
-            'volatility' => 0.14,
             'beta_tilt' => -0.15, // staples volumes hold in recessions
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.08,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.13,
@@ -1843,10 +1619,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Conglomerates',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.13,
             'beta_tilt' => -0.10, // pricing power, little capital
-            'jump_intensity' => 0.25,
-            'jump_vol' => 0.07,
             'moat' => 'wide',
             'payout' => 'low',
             'fixed_cost_ratio' => 0.30,
@@ -1868,10 +1641,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Private Equity',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.24,
             'beta_tilt' => 0.25, // leveraged buyouts whose exits need open credit
-            'jump_intensity' => 0.90,
-            'jump_vol' => 0.12,
             'moat' => 'wide',
             'capex_ratio' => 0.04,
             'fixed_cost_ratio' => 0.40,
@@ -1893,10 +1663,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Farm & Heavy Construction Machinery',
             'systemic_importance' => 'base',
-            'volatility' => 0.18,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.09,
             'payout' => 'balanced',
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.18,
@@ -1916,10 +1683,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Electrical Equipment & Parts',
             'systemic_importance' => 'systemic',
-            'volatility' => 0.15,
             'beta_tilt' => -0.25, // backlog and substation replacement, not the cycle
-            'jump_intensity' => 0.35,
-            'jump_vol' => 0.08,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.50,
             'operating_margin' => 0.17,
@@ -1938,10 +1702,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Industrial Distribution',
             'systemic_importance' => 'base',
-            'volatility' => 0.13,
             'beta_tilt' => -0.10, // repair parts when capex is deferred
-            'jump_intensity' => 0.20,
-            'jump_vol' => 0.06,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.35,
             'operating_margin' => 0.14,
@@ -1960,10 +1721,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Aerospace & Defense',
             'systemic_importance' => 'base',
-            'volatility' => 0.17,
             'beta_tilt' => -0.25, // orders follow defence budgets, not the District cycle
-            'jump_intensity' => 0.85,
-            'jump_vol' => 0.11,
             'moat' => 'wide',
             'payout' => 'balanced',
             'fixed_cost_ratio' => 0.60,
@@ -1983,10 +1741,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Building Products & Equipment',
             'systemic_importance' => 'base',
-            'volatility' => 0.16,
             'beta_tilt' => -0.15, // less cyclical than the building trade
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.08,
+            'risk' => -1,
             'moat' => 'wide',
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.19,
@@ -2005,10 +1761,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Farm & Heavy Construction Machinery',
             'systemic_importance' => 'base',
-            'volatility' => 0.20,
             'beta_tilt' => -0.10, // parts demand runs while mines produce
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.09,
+            'risk' => -1,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.45,
             'operating_margin' => 0.21,
@@ -2028,10 +1782,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Marine Shipping',
             'systemic_importance' => 'base',
-            'volatility' => 0.26,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.55,
-            'jump_vol' => 0.10,
+            'risk' => -1,
             'moat' => 'moderate',
             'fixed_cost_ratio' => 0.60,
             'operating_margin' => 0.24,
@@ -2051,10 +1803,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Railroads',
             'systemic_importance' => 'base',
-            'volatility' => 0.22,
             'beta_tilt' => 0.10, // steel, timber and container traffic follows the factory cycle
-            'jump_intensity' => 0.35,
-            'jump_vol' => 0.09,
             'payout' => 'income',
             'fixed_cost_ratio' => 0.75,
             'operating_margin' => 0.40,
@@ -2074,10 +1823,7 @@ class InitialMarket
             'sector' => 'Consumer Discretionary',
             'industry' => 'Residential Construction',
             'systemic_importance' => 'base',
-            'volatility' => 0.35,
             'beta_tilt' => 0.10, // a land bank bought on the housing cycle
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.10,
             'moat' => 'narrow',
             // Selling and overhead are about a tenth of costs; land and construction are the rest. At a 13% operating
             // margin that leaves a home sales margin near 22%, D.R. Horton's 23% in FY2004.
@@ -2098,10 +1844,7 @@ class InitialMarket
             'sector' => 'Materials',
             'industry' => 'Gold',
             'systemic_importance' => 'base',
-            'volatility' => 0.38,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.11,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.80,
             'operating_margin' => 0.28,
@@ -2120,10 +1863,7 @@ class InitialMarket
             'sector' => 'Health Care',
             'industry' => 'Healthcare Plans',
             'systemic_importance' => 'base',
-            'volatility' => 0.25,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.10,
             'moat' => 'wide',
             // Claims are 82.5% of premium, UnitedHealth's 2019 medical care ratio: the engine strikes the split on cash
             // costs net of depreciation (1.6% of revenue on its acquired systems), and administration takes 10% and
@@ -2146,10 +1886,7 @@ class InitialMarket
             'industry' => 'Custody Banks',
             // Custodian of the Sovereign Reserve Fund and of most assets on Glasswater Row
             'systemic_importance' => 'systemic',
-            'volatility' => 0.24,
             'beta_tilt' => 0.25, // its fees are struck on market values
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.10,
             // Its moat is its industry's (narrow): ROE 12% at the opening, as State Street's 11% earned at 2019's
             // low rates and the District's deposit franchise add to it
             'capex_ratio' => 0.10,
@@ -2171,10 +1908,8 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Investment Banking',
             'systemic_importance' => 'systemic', // Lead primary dealer in Exchequer debt and the repo market
-            'volatility' => 0.32,
             'beta_tilt' => 0.00,
-            'jump_intensity' => 1.00,
-            'jump_vol' => 0.14,
+            'risk' => 1,
             'moat' => 'moderate',
             'capex_ratio' => 0.05,
             'fixed_cost_ratio' => 0.45,
@@ -2195,10 +1930,7 @@ class InitialMarket
             'sector' => 'Financials',
             'industry' => 'Private Banks',
             'systemic_importance' => 'base',
-            'volatility' => 0.28,
             'beta_tilt' => 0.25, // its fees are struck on market values
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.12,
             // ROE 19% at the opening. Julius Baer earned 12% in 2019 with Swiss franc rates negative; at the
             // District's rates its fees and deposit franchise earn more with its loans priced at about the market rate
             'moat' => 'wide',
@@ -2226,10 +1958,7 @@ class InitialMarket
             'industry' => 'Telecom Services',
             'systemic_importance' => 'base',
             // above Loon Call's 14%: a challenger's sign-ups swing more, and this sets their noise too
-            'volatility' => 0.18,
             'beta_tilt' => 0.10, // device-led growth leans on discretionary upgrades
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.10,
             'moat' => 'none',
             'payout' => 'low',
             'fixed_cost_ratio' => 0.64, // devices, sold below cost, are a third of cash operating costs
@@ -2249,10 +1978,7 @@ class InitialMarket
             'sector' => 'Utilities',
             'industry' => 'Utilities - Independent Power Producers',
             'systemic_importance' => 'base',
-            'volatility' => 0.30, // Vistra and NRG 2017-2019, merchant generators
             'beta_tilt' => 0.00,
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.12,
             'moat' => 'narrow',
             'fixed_cost_ratio' => 0.35, // fuel and carbon for the gas fleet are most of the cash cost
             'operating_margin' => 0.28, // half the fleet is hydro and tidal plant with no fuel bill
@@ -2273,10 +1999,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Nuclear Power Equipment',
             'systemic_importance' => 'base',
-            'volatility' => 0.20,
             'beta_tilt' => -0.25, // orders follow world energy prices and long rates, the fleet runs whatever the cycle
-            'jump_intensity' => 0.50,
-            'jump_vol' => 0.10,
             // engineering staff, licensing and the fuel plants; crews and materials follow the plants being built
             'fixed_cost_ratio' => 0.50,
             'operating_margin' => 0.13,
@@ -2295,10 +2018,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Marine Ports & Services',
             'systemic_importance' => 'base',
-            'volatility' => 0.20,
             'beta_tilt' => 0.05, // throughput follows trade
-            'jump_intensity' => 0.35,
-            'jump_vol' => 0.08,
             'moat' => 'narrow',
             // dock crews on shift, crane upkeep and the concession's fixed rent; the royalty and power scale with boxes
             'fixed_cost_ratio' => 0.60,
@@ -2317,10 +2037,7 @@ class InitialMarket
             'sector' => 'Information Technology',
             'industry' => 'Consulting Services',
             'systemic_importance' => 'none',
-            'volatility' => 0.20,
             'beta_tilt' => 0.10, // strategy bookings are the first budget a client cuts
-            'jump_intensity' => 0.40,
-            'jump_vol' => 0.08,
             'moat' => 'very_wide',
             // salaried consultants and delivery centres; subcontractors, travel and bonuses scale with the work
             'fixed_cost_ratio' => 0.45,
@@ -2341,10 +2058,8 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Consulting Services',
             'systemic_importance' => 'none',
-            'volatility' => 0.24,
             'beta_tilt' => -0.25, // busiest when credit cracks
-            'jump_intensity' => 0.60,
-            'jump_vol' => 0.09,
+            'risk' => 1,
             'moat' => 'very_wide',
             'fixed_cost_ratio' => 0.40,
             // restructuring, forensic and economic advisers earn 10-15% before interest (FTI Consulting, Huron)
@@ -2364,10 +2079,7 @@ class InitialMarket
             'sector' => 'Industrials',
             'industry' => 'Consulting Services',
             'systemic_importance' => 'none',
-            'volatility' => 0.17,
             'beta_tilt' => -0.05, // the audit book holds through a slump; the advisory book does not
-            'jump_intensity' => 0.30,
-            'jump_vol' => 0.08,
             'moat' => 'very_wide',
             // salaried audit and tax staff carried through the year; contractors and travel follow the work
             'fixed_cost_ratio' => 0.50,

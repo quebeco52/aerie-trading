@@ -141,15 +141,13 @@ class InitialMarketTest extends TestCase
 
         // Core Financial Bounds
         $this->assertGreaterThan(0, $stock['shares_outstanding'], "Shares outstanding must be positive for {$ticker}");
-        $this->assertGreaterThan(0.0, $stock['volatility'], "Volatility must be positive for {$ticker}");
-        $this->assertLessThan(2.0, $stock['volatility'], "Volatility unreasonably high for {$ticker}");
+        foreach (\App\Data\Company\IndustryRisks::DERIVED_KEYS as $derivedKey) {
+            $this->assertArrayNotHasKey($derivedKey, $stock, "{$ticker}: {$derivedKey} is derived at opening from IndustryRisks and leverage");
+        }
 
         $this->assertArrayNotHasKey('beta', $stock, "{$ticker}: lore sets a position in the industry's band, not a beta");
         $this->assertArrayHasKey('beta_tilt', $stock, "Missing beta_tilt for {$ticker}");
         $this->assertLessThanOrEqual(IndustryBetas::LORE_BAND, abs($stock['beta_tilt']), "{$ticker}: beta_tilt outside the industry band");
-
-        $this->assertGreaterThanOrEqual(0.0, $stock['jump_intensity'], "Jump intensity negative for {$ticker}");
-        $this->assertGreaterThanOrEqual(0.0, $stock['jump_vol'], "Jump volatility negative for {$ticker}");
 
         $this->assertGreaterThanOrEqual(0.0, $stock['capex_ratio'] ?? 0.0, "CapEx ratio negative for {$ticker}");
 

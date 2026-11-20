@@ -77,7 +77,7 @@ wins; tell the user so the line can be fixed. Status and open work do not belong
 
 ## Seed data and opening books
 
-- A seed row states character (revenue, margin, moat, addressable share, leverage policy, payout, growth, vol); each
+- A seed row states character (revenue, margin, moat, addressable share, leverage policy, payout, growth, risk); each
   business model builds its opening books as its own steady state (`resolveOpeningBooks()`, entry `SeedRows::resolve`).
   Size is set by revenue, not equity. Opening market value comes from the valuation engine, so check the opening cap.
 - Moat is a 5-step ladder (`Moat`: 0/3/6/10/15pp over the cost of capital) with per-industry defaults
@@ -94,8 +94,11 @@ wins; tell the user so the line can be fixed. Status and open work do not belong
 - REIT books are at historic cost; property return comes from a higher REIT asset beta (0.68), not a separate premium.
 - Insurers match reserves with held-to-maturity bonds (life near 1). WELL's reserve-to-premium ratio is 6.0, not
   ACLI's 9.9 (at 9.9 the runoff floor bound and fed back).
-- `jump_vol` is already rescaled by the variance budget, and `credit_spread` is read (TreasuryEngine's junk baseline);
-  neither seed field is dead.
+- Price risk is two ladders per industry (`IndustryRisks`): `BusinessRisk` (operating idiosyncratic vol, √2 steps
+  0.08-0.31; equity for a financial) and `EventRisk` (own-jump arrivals 0.3-1.25/yr, jumps always carry 25% of own
+  variance); a lore override moves one step. Opening equity vol and jump size are derived in the opening price loop,
+  levered by the beta's Hamada multiplier. Damodaran's industry std devs are small-cap and were rejected as a source.
+- `credit_spread` is read (TreasuryEngine's junk baseline); the seed field is not dead.
 
 ## Macro and policy
 

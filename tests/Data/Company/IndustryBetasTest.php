@@ -83,19 +83,16 @@ final class IndustryBetasTest extends TestCase
         $this->assertEqualsWithDelta($anchor, IndustryBetas::seedBetaFor(['industry' => 'Utilities - Regulated Electric']), 1e-12, 'A row without a tilt sits on its anchor.');
     }
 
-    /** The band is 1.96 standard errors of a 60-month regression beta at the board's median volatility. */
+    /** The band is 1.96 standard errors of a 60-month regression beta at the reference median volatility. */
     public function testTheBandIsARegressionBetasConfidenceInterval(): void
     {
-        $volatilities = array_column(InitialMarket::STOCKS, 'volatility');
-        sort($volatilities);
-        $median = $volatilities[intdiv(count($volatilities), 2)];
+        $median = IndustryBetas::LORE_BAND_REFERENCE_VOLATILITY;
         $usAverageBeta = 0.91;
         $market = MacroConstants::MACRO_VOL_BASE_ANCHOR;
 
         $residual = sqrt(($median ** 2) - (($usAverageBeta * $market) ** 2));
         $standardError = $residual / ($market * sqrt(60.0));
 
-        $this->assertEqualsWithDelta(0.22, $median, 1e-12, 'The band is derived at a 0.22 median volatility.');
         $this->assertEqualsWithDelta(1.96 * $standardError, IndustryBetas::LORE_BAND, 0.005);
     }
 
