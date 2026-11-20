@@ -14,14 +14,18 @@ use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Market\Pricing\SeedRows;
 use App\Service\Market\Pricing\VarianceBudget;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\Decimal;
+use App\Service\Math\FixedIncome;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
@@ -222,7 +226,7 @@ class OpeningBoardBuilderTest extends TestCase
 
             $taxRate = $strategy->getEffectiveTaxRate($openingMacro->corporateTaxRate);
             $depreciationAddBack = $strategy->reportsFundsFromOperations()
-                ? $strategy->getPlantCapital($stock, $stock->getInvestedCapital()) * \App\Service\Corporate\Earnings\FixedAssetLedger::depreciationRateFor($stock)
+                ? $strategy->getPlantCapital($stock, $stock->getInvestedCapital()) * FixedAssetLedger::depreciationRateFor($stock)
                 : 0.0;
             $preInterest = ((float) $stock->getTotalRevenue() * (float) $stock->getOperatingMargin() + $depreciationAddBack + $strategy->calculateInterestIncome($stock, $openingMacro)) * (1.0 - $taxRate);
             $leastInterest = $debt * (float) $stock->getCreditSpread() * (1.0 - $taxRate);
@@ -442,5 +446,207 @@ class OpeningBoardBuilderTest extends TestCase
         }
 
         $this->assertGreaterThanOrEqual(3, count($seenRatings), 'Opening ratings must span multiple classes.');
+    }
+
+    /**
+     * In-scope firms derive opening coupon and floating share from their converged opening rating inside
+     * strikeOpeningPrice(), strike opening net income on those same debt charges, and converge below the pass ceiling.
+     */
+    public function testEveryInScopeFirmOpensWithDerivedCouponFloatingShareNetIncomeAndFastConvergence(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $ratedDebtEngine = new DebtEngine($this->math, CorporateMetrics::getInstance(), new CreditRatingAgency());
+        $builder = new OpeningBoardBuilder($this->math, $ratedDebtEngine, $this->marketEngine, $this->ledger);
+
+        $expectedFloatingTable = [
+            'AAA' => 0.10,
+            'AA' => 0.10,
+            'A' => 0.15,
+            'BBB' => 0.20,
+            'BB' => 0.35,
+            'B' => 0.50,
+            'CCC' => 0.60,
+            'D' => 0.60,
+        ];
+        $classCurveLgd = 1.0 - CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
+        $cycle = $openingMacro->macroCreditSpreadTrend / $openingMacro->macroCreditSpreadEma;
+
+        $board = [];
+        $spheres = [];
+        $couponDerivedCount = 0;
+        $floatingDerivedCount = 0;
+        $nonFinancialCount = 0;
+
+        foreach (SeedRows::all() as $stockData) {
+            $stock = (new Stock())->setTicker($stockData['ticker']);
+            $sphere = $builder->open($stock, $stockData, $openingMacro);
+            $this->assertLessThan(
+                OpeningBoardBuilder::MAX_OPENING_PRICE_PASSES,
+                $builder->getLastOpeningPricePasses(),
+                "{$stockData['ticker']} reached MAX_OPENING_PRICE_PASSES during open().",
+            );
+            if ($sphere !== null) {
+                $spheres[] = $sphere;
+            }
+            $board[$stockData['ticker']] = $stock;
+        }
+        $builder->openSpheres($spheres, $board, $openingMacro);
+        $this->assertLessThan(
+            OpeningBoardBuilder::MAX_OPENING_PRICE_PASSES,
+            $builder->getLastOpeningPricePasses(),
+            'Sphere reached MAX_OPENING_PRICE_PASSES during openSpheres().',
+        );
+
+        foreach ($board as $ticker => $stock) {
+            $strategy = Sectors::strategyFor($stock->getIndustry());
+            $rating = $stock->getCreditRating();
+            $lgd = $strategy->getLossGivenDefault();
+
+            $ttcSpread = CreditRisk::calculateRecoveryAdjustedSpread(
+                CreditRisk::calculateRatingClassSpread(
+                    $rating,
+                    $openingMacro->macroCreditSpreadEma * $cycle,
+                    $openingMacro->highYieldCreditSpreadEma * $cycle,
+                ),
+                $lgd,
+                $classCurveLgd,
+            );
+            $expectedCoupon = $openingMacro->yield5yEma + $ttcSpread;
+
+            if ($strategy->derivesOpeningCoupon()) {
+                $couponDerivedCount++;
+                $this->assertEqualsWithDelta(
+                    $expectedCoupon,
+                    (float) $stock->getHistoricalFixedRate(),
+                    1e-9,
+                    "{$ticker} ({$rating}) derived fixed coupon mismatch.",
+                );
+            }
+
+            if ($strategy->derivesOpeningFloatingShare()) {
+                $floatingDerivedCount++;
+                $this->assertEqualsWithDelta(
+                    $expectedFloatingTable[$rating],
+                    (float) $stock->getFloatingDebtRatio(),
+                    1e-9,
+                    "{$ticker} ({$rating}) derived floating share mismatch.",
+                );
+            }
+
+            if (!$strategy->isFinancial()) {
+                $nonFinancialCount++;
+                $spotSpread = CreditRisk::calculateRecoveryAdjustedSpread(
+                    CreditRisk::calculateRatingClassSpread(
+                        $rating,
+                        $openingMacro->macroCreditSpreadEma,
+                        $openingMacro->highYieldCreditSpreadEma,
+                    ),
+                    $lgd,
+                    $classCurveLgd,
+                );
+                $floatingRate = $openingMacro->floatingReferenceRate() + $spotSpread;
+                $interestExpense = FixedIncome::fixedFloatingInterest(
+                    (float) $stock->getTotalDebt(),
+                    (float) $stock->getFloatingDebtRatio(),
+                    (float) $stock->getHistoricalFixedRate(),
+                    $floatingRate,
+                );
+                $ebit = (float) $stock->getTotalRevenue() * (float) $stock->getOperatingMargin();
+                $interestIncome = $strategy->calculateInterestIncome($stock, $openingMacro);
+                $effectiveTaxRate = $strategy->getEffectiveTaxRate($openingMacro->corporateTaxRate);
+                $expectedNi = max(0.0, ($ebit - $interestExpense + $interestIncome) * (1.0 - $effectiveTaxRate));
+                if ($strategy->reportsFundsFromOperations()) {
+                    $expectedNi += $strategy->getPlantCapital($stock, $stock->getInvestedCapital()) * FixedAssetLedger::depreciationRateFor($stock);
+                }
+
+                // Stock::setEarningsPerShare() overwrites totalNetIncome from the 2-decimal rounded EPS.
+                $shares = max(1.0, (float) $stock->getSharesOutstanding());
+                $expectedStoredNi = round($expectedNi / $shares, 2) * $shares;
+
+                $this->assertEqualsWithDelta(
+                    $expectedStoredNi,
+                    (float) $stock->getTotalNetIncome(),
+                    1.0,
+                    "{$ticker} ({$rating}) opening net income must reflect converged debt charges.",
+                );
+            }
+        }
+
+        $this->assertSame(95, $couponDerivedCount);
+        $this->assertSame(86, $floatingDerivedCount);
+        $this->assertSame(82, $nonFinancialCount);
+    }
+
+    /**
+     * Direction: two otherwise identical firms separated by a credit grade open with the lower-rated one paying the
+     * higher fixed coupon and carrying at least as high a floating-rate share.
+     */
+    public function testLowerRatedTwinOpensWithHigherCouponAndFloatingShare(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $ratedDebtEngine = new DebtEngine($this->math, CorporateMetrics::getInstance(), new CreditRatingAgency());
+        $builder = new OpeningBoardBuilder($this->math, $ratedDebtEngine, $this->marketEngine, $this->ledger);
+
+        $baseRow = SeedRows::for('WING');
+        $leveragedRow = $baseRow;
+        $leveragedRow['wholesale_debt'] = $baseRow['wholesale_debt'] * 3.0;
+
+        $higher = (new Stock())->setTicker('WING');
+        $lower = (new Stock())->setTicker('WING');
+        $builder->open($higher, $baseRow, $openingMacro);
+        $builder->open($lower, $leveragedRow, $openingMacro);
+
+        $this->assertLessThan(
+            CreditRatingAgency::rank($higher->getCreditRating()),
+            CreditRatingAgency::rank($lower->getCreditRating()),
+            'Heavier leverage twin must land on a lower credit rating.',
+        );
+        $this->assertGreaterThan(
+            (float) $higher->getHistoricalFixedRate(),
+            (float) $lower->getHistoricalFixedRate(),
+            'Lower-rated twin must open with a strictly higher fixed coupon.',
+        );
+        $this->assertGreaterThanOrEqual(
+            (float) $higher->getFloatingDebtRatio(),
+            (float) $lower->getFloatingDebtRatio(),
+            'Lower-rated twin must open with at least as high a floating debt share.',
+        );
+    }
+
+    /**
+     * A firm whose rating transitions off entity default BBB during strikeOpeningPrice() opens with the converged
+     * rating's coupon and floating share rather than BBB's.
+     */
+    public function testFirmWhoseRatingMovesDuringOpeningLoopOpensAtConvergedDebtTerms(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $ratedDebtEngine = new DebtEngine($this->math, CorporateMetrics::getInstance(), new CreditRatingAgency());
+        $builder = new OpeningBoardBuilder($this->math, $ratedDebtEngine, $this->marketEngine, $this->ledger);
+
+        foreach (['HUMM' => 'A', 'LOON' => 'BB'] as $ticker => $expectedRating) {
+            $stock = (new Stock())->setTicker($ticker);
+            $builder->open($stock, SeedRows::for($ticker), $openingMacro);
+
+            $this->assertSame($expectedRating, $stock->getCreditRating(), "{$ticker} must transition off default BBB.");
+            $this->assertSame(
+                CreditRatingAgency::openingFloatingDebtRatio($expectedRating),
+                (float) $stock->getFloatingDebtRatio(),
+                "{$ticker} floating share must reflect converged rating {$expectedRating}, not BBB.",
+            );
+
+            $lgd = Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
+            $expectedCoupon = DebtEngine::openingFixedCoupon($stock, $openingMacro, $lgd);
+            $this->assertEqualsWithDelta(
+                $expectedCoupon,
+                (float) $stock->getHistoricalFixedRate(),
+                1e-9,
+                "{$ticker} coupon must reflect converged rating {$expectedRating}, not BBB.",
+            );
+            $this->assertNotEqualsWithDelta(
+                CreditRatingAgency::openingFloatingDebtRatio('BBB'),
+                (float) $stock->getFloatingDebtRatio(),
+                1e-6,
+            );
+        }
     }
 }

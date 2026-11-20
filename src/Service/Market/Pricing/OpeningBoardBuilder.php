@@ -15,6 +15,7 @@ use App\Data\Company\ManagementProfile;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Sectors;
 use App\Data\Company\StockInfo;
+use App\DTO\DebtHealthDTO;
 use App\DTO\MacroStateDTO;
 use App\DTO\MarketPricingContext;
 use App\Entity\Stock;
@@ -24,11 +25,13 @@ use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Earnings\FixedAssetLedger;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
 use App\Service\Corporate\ManagementSuccessionEngine;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Math\Decimal;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
+use App\Service\Model\BusinessModelInterface;
 
 /**
  * Opens listed companies on their seed rows (App\Data\Company\InitialMarket): the balance sheet, the ledgers the first
@@ -54,12 +57,19 @@ class OpeningBoardBuilder
     /** @var array<string, float>|null Each seed payer's quantile in the board's distribution of opening records. */
     private static ?array $recordQuantiles = null;
 
+    private int $lastOpeningPricePasses = 0;
+
     public function __construct(
         private readonly MathUtility $mathUtility,
         private readonly DebtEngine $debtEngine,
         private readonly MarketEngine $marketEngine,
         private readonly AnchorStakeLedger $anchorStakes,
     ) {}
+
+    public function getLastOpeningPricePasses(): int
+    {
+        return $this->lastOpeningPricePasses;
+    }
 
     /**
      * The listing itself, which a reseed refreshes even on a firm it does not reopen.
@@ -81,7 +91,7 @@ class OpeningBoardBuilder
      * has prices, so a sphere is handed back to be finished by openSpheres() once the whole board is open.
      *
      * @param array<string, mixed> $stockData The firm's seed row.
-     * @return array{stock: Stock, invested: float, assetAgeRatio: float, businessRisk: BusinessRisk, eventRisk: EventRisk}|null The sphere left to finish, or null.
+     * @return array{stock: Stock, invested: float, assetAgeRatio: float, businessRisk: BusinessRisk, eventRisk: EventRisk, dividendStreak: int|null}|null The sphere left to finish, or null.
      */
     public function open(Stock $stock, array $stockData, MacroStateDTO $openingMacro): ?array
     {
@@ -90,9 +100,9 @@ class OpeningBoardBuilder
         ['business' => $businessRisk, 'events' => $eventRisk] = IndustryRisks::forRow($stockData);
 
         // The whole seed row goes on before any engine reads the firm: its industry decides which model's physics
-        // price it, and its rating and legacy coupon decide what its debt costs. Risk starts at the unlevered
-        // business step until strikeOpeningPrice() derives the levered equity vol and budgeted jump scale from
-        // DebtEngine's opening beta and leverage.
+        // price it, and its rating sets its derived coupon and floating mix inside strikeOpeningPrice(). Risk starts at
+        // the unlevered business step until strikeOpeningPrice() derives the levered equity vol and budgeted jump
+        // scale from DebtEngine's opening beta and leverage.
         $this->applyListing($stock, $stockData);
         $stock->setSharesOutstanding((string) $stockData['shares_outstanding']);
         $provisionalVol = Decimal::format($businessRisk->vol(), 4);
@@ -116,6 +126,7 @@ class OpeningBoardBuilder
 
         $businessModel = Sectors::businessModelFor($stockData['industry'] ?? null);
         $isFinancial = Sectors::isFinancial($businessModel);
+        $strategy = Sectors::getBusinessModelStrategy($businessModel);
 
         if ($isFinancial) {
             $roe = $stockData['baseline_roe'] ?? $stockData['baseline_roic'] ?? 0.10;
@@ -138,12 +149,14 @@ class OpeningBoardBuilder
         $payoutPolicy = IndustryPayoutPolicies::forRow($stockData);
         $stock->setBasePayoutPolicy($payoutPolicy);
         $stock->setPayoutPolicy($payoutPolicy);
-        $stock->setDividendSpeed((string) Sectors::strategyFor($stockData['industry'] ?? null)->getDividendAdjustmentSpeed());
+        $stock->setDividendSpeed((string) $strategy->getDividendAdjustmentSpeed());
         $stock->setFixedCostRatio((float) $stockData['fixed_cost_ratio']);
         $stock->setDepreciationRate((string) $stockData['depreciation_rate']);
 
         $stock->setCorporateTreasury((string) $stockData['corporate_treasury']);
-        $stock->setFloatingDebtRatio((string) $stockData['floating_debt_ratio']);
+        if (!$strategy->derivesOpeningFloatingShare()) {
+            $stock->setFloatingDebtRatio((string) $stockData['floating_debt_ratio']);
+        }
         $stock->setOperatingMargin((string) $stockData['operating_margin']);
         // Shares an anchor sphere holds are not tradable, so the float is the declared one less
         // whatever AnchorHoldings locks away. Derived so a stake and a float cannot drift apart.
@@ -155,7 +168,9 @@ class OpeningBoardBuilder
         $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
         $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
         $stock->setRetainedEarnings(Decimal::of($stockData['retained_earnings'] ?? 0.0));
-        $stock->setHistoricalFixedRate((string) $stockData['historical_fixed_rate']);
+        if (!$strategy->derivesOpeningCoupon()) {
+            $stock->setHistoricalFixedRate((string) $stockData['historical_fixed_rate']);
+        }
         // Provisional, at book, until the market strikes the opening price below: the debt analysis sizes the
         // equity it weighs against the firm's own book rather than the entity's placeholder.
         $stock->setPrice($stock->getBookValuePerShare());
@@ -165,7 +180,6 @@ class OpeningBoardBuilder
         $stock->setManagementIntensity(ManagementProfile::drawIntensity($this->mathUtility));
 
         $margin = $stockData['operating_margin'];
-        $strategy = Sectors::getBusinessModelStrategy($businessModel);
 
         // Query the exact structural metrics the engine uses to prevent massive gravity explosions on tick 1
         $targetMetrics = $strategy->getTargetMetrics($stock, $openingMacro, $this->mathUtility);
@@ -177,8 +191,6 @@ class OpeningBoardBuilder
             : 0.0;
 
         $stock->setTotalRevenue((string) $revenue);
-
-        $debtHealth = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro, $revenue, $margin);
 
         // Rate risk needs a cross-section or every lender lives and dies together. The seed names a
         // duration where a firm's book is distinctive; the rest take their model's. The AOCI
@@ -197,43 +209,7 @@ class OpeningBoardBuilder
             < self::AOCI_FILTER_SIZE_THRESHOLD
         )));
 
-        if ($isFinancial) {
-            $netIncome = ((float) ($stockData['total_equity'] ?? 0.0)) * (float) $stock->getBaselineRoe();
-        } else {
-            $ebit = $revenue * $margin;
-            $interestExpense = $debtHealth->rawMetrics->interestExpense;
-            $interestIncome = $strategy->calculateInterestIncome($stock, $openingMacro);
-            $ebt = $ebit - $interestExpense + $interestIncome;
-            $netIncome = max(0.0, $ebt * (1.0 - $effectiveTaxRate));
-            // A trust reports funds from operations (net income with book depreciation added back), so it opens on
-            // the same figure its first report files and its dividend policy pays from.
-            if ($strategy->reportsFundsFromOperations()) {
-                $netIncome += $strategy->getPlantCapital($stock, $investedCapital) * $bookDepRate;
-            }
-        }
-
-        $shares = $stockData['shares_outstanding'];
-        $annualEps = $shares > 0 ? ($netIncome / $shares) : 0.0;
-        $stock->setTotalNetIncome((string) $netIncome);
-        $stock->setEarningsPerShare((string) round($annualEps, 2));
-
-        // A payer opens on a record of increases: the one its row names, or one from the board's long-run distribution
-        // at its rank by payout, so the roll opens at the size it keeps rather than filling from empty.
-        $isPayer = $annualEps > 0.0 && $stock->getPolicyPayoutRatio() > 0.0;
-        $openingStreak = $isPayer ? DividendTier::openingStreak(self::openingRecordQuantile($stock->getTicker())) : 0;
-        $stock->setDividendStreakYears((int) ($stockData['dividend_streak'] ?? $openingStreak));
-
-        // A board that has been paying opens where its policy has already brought it (Lintner 1956): closing part of
-        // the gap each year while earnings grow with the economy, it runs a steady step below its target payout, so its
-        // first annual review has a raise to make. A trust's legal minimum is left to its first report: it is struck on
-        // taxable income, and the opening estimate of earnings does not separate the depreciation a trust adds back.
-        $annualSpeed = Valuation::lintnerAnnualSpeed((float) $stock->getDividendSpeed() * $stock->getDividendTier()->smoothing());
-        $trendGrowth = MacroConstants::TREND_REAL_GROWTH + max(0.0, $openingMacro->inflationEma);
-        $startingDividend = max(0.0, $annualEps / 4.0) * $stock->getPolicyPayoutRatio() * Valuation::lintnerSteadyDividendShare($annualSpeed, $trendGrowth);
-        $stock->setLastDividend((string) $startingDividend);
-        // The opening dividend is the bar the first year's must clear to extend the firm's record.
-        $stock->setEarningsMomentumZ([CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND => round($startingDividend, 4)] + ($stock->getEarningsMomentumZ() ?? []));
-
+        $seededDividendStreak = isset($stockData['dividend_streak']) ? (int) $stockData['dividend_streak'] : null;
         $sphere = null;
 
         // Open the fixed-asset ledger so the very first earnings report depreciates a real plant
@@ -266,6 +242,7 @@ class OpeningBoardBuilder
                     'assetAgeRatio' => $assetAgeRatio,
                     'businessRisk' => $businessRisk,
                     'eventRisk' => $eventRisk,
+                    'dividendStreak' => $seededDividendStreak,
                 ];
             }
         } else {
@@ -279,7 +256,7 @@ class OpeningBoardBuilder
             );
         }
 
-        $this->strikeOpeningPrice($stock, $openingMacro, $businessRisk, $eventRisk);
+        $this->strikeOpeningPrice($stock, $openingMacro, $businessRisk, $eventRisk, $seededDividendStreak);
 
         return $sphere;
     }
@@ -288,14 +265,16 @@ class OpeningBoardBuilder
      * Strikes the price the firm opens at, on the inputs StockTracker prices it on at tick 1 — the same mapping and a
      * debt analysis of the finished balance sheet — or the market re-rates the instant it starts.
      *
-     * The price, equity volatility and asset volatility are solved together: each pass derives the equity volatility
-     * from DebtEngine's levered beta and leverage multiplier and the firm's business-risk step, derives the jump scale
-     * that puts the variance budget's full jump share into own jumps, calibrates Merton asset volatility on the price
-     * just struck, and rates the firm until price, volatility and rating agree. Turnover ratio and realizedVarianceEma
-     * are set once the volatility has converged.
+     * Debt terms, earnings, price, equity volatility and asset volatility are solved together: each pass sets any
+     * derived fixed coupon and floating share from the firm's current rating, runs DebtEngine on those terms, strikes
+     * opening net income, EPS and the Lintner opening dividend, derives equity volatility and jump scale, calibrates
+     * Merton asset volatility on the price just struck, and rates the firm until price, volatility and rating agree.
+     * Turnover ratio, realizedVarianceEma and creditSpread are set once the loop has converged.
      */
-    private function strikeOpeningPrice(Stock $stock, MacroStateDTO $openingMacro, BusinessRisk $businessRisk, EventRisk $eventRisk): void
+    private function strikeOpeningPrice(Stock $stock, MacroStateDTO $openingMacro, BusinessRisk $businessRisk, EventRisk $eventRisk, ?int $seededDividendStreak = null): void
     {
+        $strategy = Sectors::strategyFor($stock->getIndustry());
+        $lossGivenDefault = $strategy->getLossGivenDefault();
         $previousPrice = (float) $stock->getPrice();
         $previousVol = (float) $stock->getVolatility();
         $lambda = $eventRisk->intensity();
@@ -303,7 +282,15 @@ class OpeningBoardBuilder
         $stock->setJumpIntensity(Decimal::format($lambda, 2));
 
         for ($pass = 0; $pass < self::MAX_OPENING_PRICE_PASSES; $pass++) {
+            $this->lastOpeningPricePasses = $pass + 1;
+            if ($strategy->derivesOpeningFloatingShare()) {
+                $stock->setFloatingDebtRatio((string) CreditRatingAgency::openingFloatingDebtRatio($stock->getCreditRating()));
+            }
+            if ($strategy->derivesOpeningCoupon()) {
+                $stock->setHistoricalFixedRate((string) DebtEngine::openingFixedCoupon($stock, $openingMacro, $lossGivenDefault));
+            }
             $health = $this->debtEngine->analyzeDebtHealth($stock, $openingMacro);
+            $this->strikeOpeningEarnings($stock, $openingMacro, $strategy, $health, $seededDividendStreak);
 
             $equityVol = VarianceBudget::equityVolatilityFromBusinessRisk(
                 $health->leveredBeta,
@@ -345,7 +332,6 @@ class OpeningBoardBuilder
 
         // Record the opening through-the-cycle spread at the converged rating (for pages and admin, not an engine
         // input).
-        $lossGivenDefault = Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
         $stock->setCreditSpread(Decimal::format(
             DebtEngine::throughTheCycleCreditSpread($stock, $openingMacro, $lossGivenDefault),
             4,
@@ -353,11 +339,55 @@ class OpeningBoardBuilder
     }
 
     /**
+     * Opening net income, EPS, dividend record and Lintner starting dividend on the pass's converged debt charges.
+     */
+    private function strikeOpeningEarnings(Stock $stock, MacroStateDTO $openingMacro, BusinessModelInterface $strategy, DebtHealthDTO $health, ?int $seededDividendStreak): void
+    {
+        if ($strategy->isFinancial()) {
+            $netIncome = (float) $stock->getTotalEquity() * (float) $stock->getBaselineRoe();
+        } else {
+            $revenue = (float) $stock->getTotalRevenue();
+            $margin = (float) $stock->getOperatingMargin();
+            $ebit = $revenue * $margin;
+            $interestExpense = $health->rawMetrics->interestExpense;
+            $interestIncome = $strategy->calculateInterestIncome($stock, $openingMacro);
+            $effectiveTaxRate = $strategy->getEffectiveTaxRate($openingMacro->corporateTaxRate);
+            $netIncome = max(0.0, ($ebit - $interestExpense + $interestIncome) * (1.0 - $effectiveTaxRate));
+            // A trust reports funds from operations (net income with book depreciation added back), so it opens on
+            // the same figure its first report files and its dividend policy pays from.
+            if ($strategy->reportsFundsFromOperations()) {
+                $netIncome += $strategy->getPlantCapital($stock, $stock->getInvestedCapital()) * FixedAssetLedger::depreciationRateFor($stock);
+            }
+        }
+
+        $shares = (float) $stock->getSharesOutstanding();
+        $annualEps = $shares > 0.0 ? ($netIncome / $shares) : 0.0;
+        $stock->setTotalNetIncome((string) $netIncome);
+        $stock->setEarningsPerShare((string) round($annualEps, 2));
+
+        // A payer opens on a record of increases: the one its row names, or one from the board's long-run distribution
+        // at its rank by payout, so the roll opens at the size it keeps rather than filling from empty.
+        $isPayer = $annualEps > 0.0 && $stock->getPolicyPayoutRatio() > 0.0;
+        $openingStreak = $isPayer ? DividendTier::openingStreak(self::openingRecordQuantile($stock->getTicker())) : 0;
+        $stock->setDividendStreakYears($seededDividendStreak ?? $openingStreak);
+
+        // A board that has been paying opens where its policy has already brought it (Lintner 1956): closing part of
+        // the gap each year while earnings grow with the economy, it runs a steady step below its target payout, so its
+        // first annual review has a raise to make.
+        $annualSpeed = Valuation::lintnerAnnualSpeed((float) $stock->getDividendSpeed() * $stock->getDividendTier()->smoothing());
+        $trendGrowth = MacroConstants::TREND_REAL_GROWTH + max(0.0, $openingMacro->inflationEma);
+        $startingDividend = max(0.0, $annualEps / 4.0) * $stock->getPolicyPayoutRatio() * Valuation::lintnerSteadyDividendShare($annualSpeed, $trendGrowth);
+        $stock->setLastDividend((string) $startingDividend);
+        // The opening dividend is the bar the first year's must clear to extend the firm's record.
+        $stock->setEarningsMomentumZ([CapitalAllocationEngine::STATE_YEAR_END_DIVIDEND => round($startingDividend, 4)] + ($stock->getEarningsMomentumZ() ?? []));
+    }
+
+    /**
      * Finishes the spheres open() handed back. Their holdings are marked against the priced board, which is the
      * first moment the stakes can be valued at all, so a trust opens carrying what its holdings are worth and its
      * plant is carved out of a real portfolio instead of a guess at one.
      *
-     * @param list<array{stock: Stock, invested: float, assetAgeRatio: float, businessRisk: BusinessRisk, eventRisk: EventRisk}> $spheres
+     * @param list<array{stock: Stock, invested: float, assetAgeRatio: float, businessRisk: BusinessRisk, eventRisk: EventRisk, dividendStreak: int|null}> $spheres
      * @param iterable<Stock> $board Every listed firm, the holdings among them.
      * @throws \DomainException When a sphere's portfolio leaves its subsidiaries too little of its capital.
      */
@@ -396,7 +426,7 @@ class OpeningBoardBuilder
             );
 
             // Struck again now its net asset value exists: the stakes marked, the subsidiaries carved out of them.
-            $this->strikeOpeningPrice($stock, $openingMacro, $sphere['businessRisk'], $sphere['eventRisk']);
+            $this->strikeOpeningPrice($stock, $openingMacro, $sphere['businessRisk'], $sphere['eventRisk'], $sphere['dividendStreak']);
         }
     }
 

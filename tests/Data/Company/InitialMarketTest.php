@@ -158,8 +158,10 @@ class InitialMarketTest extends TestCase
 
         $this->assertGreaterThan(0.0, $stock['sam_ratio'], "SAM ratio non-positive for {$ticker}");
 
-        $this->assertGreaterThanOrEqual(0.0, $stock['floating_debt_ratio'], "Floating debt ratio negative for {$ticker}");
-        $this->assertLessThanOrEqual(1.0, $stock['floating_debt_ratio'], "Floating debt ratio exceeds 1.0 for {$ticker}");
+        if (isset($stock['floating_debt_ratio'])) {
+            $this->assertGreaterThanOrEqual(0.0, $stock['floating_debt_ratio'], "Floating debt ratio negative for {$ticker}");
+            $this->assertLessThanOrEqual(1.0, $stock['floating_debt_ratio'], "Floating debt ratio exceeds 1.0 for {$ticker}");
+        }
 
         foreach (SeedRows::DERIVED_KEYS as $derivedKey) {
             $this->assertArrayNotHasKey($derivedKey, $stock, "{$ticker}: {$derivedKey} is derived at opening from rating and LGD");
@@ -207,8 +209,19 @@ class InitialMarketTest extends TestCase
             $this->assertArrayNotHasKey('target_payout_ratio', $row, "{$ticker} states a payout ratio; it names a dividend policy step.");
             $this->assertArrayNotHasKey('dividendSpeed', $row, "{$ticker} states a dividend speed; its business model sets it.");
             $this->assertArrayNotHasKey('credit_spread', $row, "{$ticker} states credit_spread; it is derived from the opening rating and LGD.");
+            $strategy = Sectors::strategyFor($industry);
             $isLender = Sectors::isFinancial(Sectors::businessModelFor($industry));
             $this->assertSame($isLender, isset($row['capex_ratio']), $isLender ? "{$ticker} is a lender with no reinvestment rate." : "{$ticker} states a reinvestment rate its capital budget never reads.");
+            $this->assertSame(
+                !$strategy->derivesOpeningCoupon(),
+                array_key_exists('historical_fixed_rate', $row),
+                "{$ticker} historical_fixed_rate presence must match whether its model derives it at opening.",
+            );
+            $this->assertSame(
+                !$strategy->derivesOpeningFloatingShare(),
+                array_key_exists('floating_debt_ratio', $row),
+                "{$ticker} floating_debt_ratio presence must match whether its model derives it at opening.",
+            );
         }
     }
 
@@ -265,8 +278,8 @@ class InitialMarketTest extends TestCase
         $this->assertGreaterThan(0, $lenders);
     }
 
-    /** SeedRows refuses any seed row that still states credit_spread instead of deriving it at opening. */
-    public function testSeedRowsRefusesCreditSpreadKey(): void
+    /** SeedRows refuses any seed row that states credit_spread, or states derived debt terms on an in-scope firm. */
+    public function testSeedRowsRefusesCreditSpreadAndDerivedDebtTermKeys(): void
     {
         $byTicker = array_column(InitialMarket::STOCKS, null, 'ticker');
         foreach (['WING', 'LAKE', 'BRKW'] as $ticker) {
@@ -277,6 +290,31 @@ class InitialMarketTest extends TestCase
                 $this->addToAssertionCount(1);
             }
         }
+
+        foreach (['WING', 'SHOR', 'BRKW', 'SAFE', 'ACC', 'FINC', 'SWAN'] as $ticker) {
+            try {
+                SeedRows::resolve($byTicker[$ticker] + ['historical_fixed_rate' => 0.0450]);
+                $this->fail("SeedRows::resolve() should refuse 'historical_fixed_rate' on {$ticker}.");
+            } catch (\DomainException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        foreach (['WING', 'SHOR', 'BRKW', 'SAFE', 'ACC'] as $ticker) {
+            try {
+                SeedRows::resolve($byTicker[$ticker] + ['floating_debt_ratio' => 0.20]);
+                $this->fail("SeedRows::resolve() should refuse 'floating_debt_ratio' on {$ticker}.");
+            } catch (\DomainException) {
+                $this->addToAssertionCount(1);
+            }
+        }
+
+        // Lenders keep both keys; brokers and asset managers keep floating_debt_ratio.
+        foreach (['LAKE', 'FINC', 'SWAN'] as $ticker) {
+            $resolved = SeedRows::resolve($byTicker[$ticker]);
+            $this->assertArrayHasKey('floating_debt_ratio', $resolved, $ticker);
+        }
+        $this->assertArrayHasKey('historical_fixed_rate', SeedRows::resolve($byTicker['LAKE']));
     }
 
     /**

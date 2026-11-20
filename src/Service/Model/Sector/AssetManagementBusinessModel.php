@@ -605,6 +605,14 @@ class AssetManagementBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
+     * Funds and alternative asset managers fund in prime-brokerage and warehouse lines rather than the corporate table.
+     */
+    public function derivesOpeningFloatingShare(): bool
+    {
+        return false;
+    }
+
+    /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
      *

@@ -354,6 +354,17 @@ class DebtEngine
     }
 
     /**
+     * Fixed coupon a firm opens on at its credit rating: the five-year sovereign yield plus its through-the-cycle
+     * credit spread, the same rolled fixed leg chargedWholesaleRate() prices.
+     *
+     * @param float $lossGivenDefault The issuer's loss given default, its business model's.
+     */
+    public static function openingFixedCoupon(Stock $stock, MacroStateDTO $macroState, float $lossGivenDefault): float
+    {
+        return $macroState->yield5yEma + self::throughTheCycleCreditSpread($stock, $macroState, $lossGivenDefault);
+    }
+
+    /**
      * The rate priceDebt() charges the firm's wholesale book at a macro state, its spread through the cycle: the
      * floating part at the reference rate plus the spread, the fixed part at the coupon the notes carry or, rolled, at
      * the coupon they would refinance at (the five-year plus the spread). For a reader that strikes its pricing on the
@@ -365,7 +376,7 @@ class DebtEngine
     {
         $floatingRatio = (float) $stock->getFloatingDebtRatio();
         $creditSpread = self::throughTheCycleCreditSpread($stock, $macroState, $lossGivenDefault);
-        $fixedRate = $rolled ? $macroState->yield5yEma + $creditSpread : (float) $stock->getHistoricalFixedRate();
+        $fixedRate = $rolled ? self::openingFixedCoupon($stock, $macroState, $lossGivenDefault) : (float) $stock->getHistoricalFixedRate();
 
         return ($floatingRatio * ($macroState->floatingReferenceRate() + $creditSpread)) + ((1.0 - $floatingRatio) * $fixedRate);
     }

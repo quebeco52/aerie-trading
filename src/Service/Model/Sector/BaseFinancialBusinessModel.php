@@ -228,12 +228,16 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
             ->setIndustry($seedRow['industry'] ?? null)
             ->setManagementStyle(ManagementStyle::tryFromNullable($seedRow['management_style'] ?? null))
             ->setSystemicImportance($seedRow['systemic_importance'] ?? 'none')
-            ->setFloatingDebtRatio((string) $seedRow['floating_debt_ratio'])
-            ->setHistoricalFixedRate((string) $seedRow['historical_fixed_rate'])
             ->setFixedCostRatio((float) ($seedRow['fixed_cost_ratio'] ?? 0.0))
             ->setBaselineRoe((string) $baselineRoe)
             ->setRoeTtm((string) $baselineRoe);
 
+        if (isset($seedRow['floating_debt_ratio'])) {
+            $stock->setFloatingDebtRatio((string) $seedRow['floating_debt_ratio']);
+        }
+        if (isset($seedRow['historical_fixed_rate'])) {
+            $stock->setHistoricalFixedRate((string) $seedRow['historical_fixed_rate']);
+        }
         if (isset($seedRow['operating_margin'])) {
             $stock->setOperatingMargin((string) $seedRow['operating_margin']);
         }

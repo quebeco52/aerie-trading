@@ -464,6 +464,7 @@ class InvestmentBankBusinessModelTest extends TestCase
             }
             $bank = (new Stock())->setTicker($row['ticker']);
             $builder->open($bank, $row, $opening);
+            $bank->setHistoricalFixedRate('0.0250');
             $bank->setEarningsMomentumZ([InvestmentBankBusinessModel::STATE_OPERATING_YIELD => (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $bank, $math)]);
 
             $target = $this->model->getTargetMetrics($bank, $opening, $math);
@@ -484,7 +485,7 @@ class InvestmentBankBusinessModelTest extends TestCase
             }
         }
 
-        $this->assertGreaterThan(0, $lendsAllOnCheapNotes, 'fixture guard: a seeded bank lends all its borrowing on notes well under the market');
+        $this->assertGreaterThan(0, $lendsAllOnCheapNotes, 'fixture guard: an investment bank lends all its borrowing on notes well under the market');
     }
 
     private function dealer(): Stock

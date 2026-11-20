@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Tests\Financial;
 
 use App\Data\Company\IndustryBetas;
+use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Repository\TradeOrderRepository;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\FailureSweep;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\MathUtility;
 use App\Service\News\MarketEventPublisher;
@@ -80,9 +82,14 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $stock->setWholesaleDebt((string) $row['wholesale_debt']);
         $stock->setCustomerDeposits((string) $row['customer_deposits']);
         $stock->setRetainedEarnings(\App\Service\Math\Decimal::of($row['retained_earnings']));
+        $macro = new MacroStateDTO();
         $stock->setCorporateTreasury((string) $row['corporate_treasury']);
-        $stock->setFloatingDebtRatio((string) $row['floating_debt_ratio']);
-        $stock->setHistoricalFixedRate((string) $row['historical_fixed_rate']);
+        $stock->setFloatingDebtRatio((string) ($row['floating_debt_ratio'] ?? CreditRatingAgency::openingFloatingDebtRatio($stock->getCreditRating())));
+        $stock->setHistoricalFixedRate((string) ($row['historical_fixed_rate'] ?? DebtEngine::openingFixedCoupon(
+            $stock,
+            $macro,
+            Sectors::strategyFor($row['industry'])->getLossGivenDefault(),
+        )));
         $stock->setDepreciationRate((string) $row['depreciation_rate']);
         $stock->setSamRatio((string) $row['sam_ratio']);
 

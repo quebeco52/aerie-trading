@@ -40,12 +40,6 @@ class FeeEarnerSeedTest extends TestCase
      */
     private const SURPLUS_CASH_TOLERANCE = 0.02;
 
-    /**
-     * The fee manager whose notes pay far enough under the market that it opens past the tolerance: it earns its
-     * coupon gap (about 2pp) until they roll.
-     */
-    private const CHEAP_NOTES_MANAGER = 'SWAN';
-
     private DebtEngine $debtEngine;
     private OpeningBoardBuilder $builder;
     private MathUtility $math;
@@ -75,9 +69,8 @@ class FeeEarnerSeedTest extends TestCase
     }
 
     /**
-     * It books its structural return at the opening macro plus its coupon gap: its operating yield is struck on the
-     * coupon its notes would refinance at, so notes paying off the market move its interest until they roll. A fee
-     * manager's cheap notes earn it the saving; a broker's margin book, priced on its funding, gives some of it back.
+     * It books its structural return at the opening macro: both the derived opening coupon and the operating yield are
+     * struck on the refinancing rate, so every broker and fee manager opens on target.
      *
      * @param array<string, mixed> $row
      */
@@ -91,11 +84,6 @@ class FeeEarnerSeedTest extends TestCase
         $booked = $this->openingReturn($stock, $strategy, $opening);
 
         $this->assertEqualsWithDelta($structural + $couponGap, $booked, 1e-6, sprintf('%s books %.2f%% against %.2f%% plus a %.2fpp coupon gap.', $row['ticker'], 100 * $booked, 100 * $structural, 100 * $couponGap));
-        if ($row['ticker'] === self::CHEAP_NOTES_MANAGER) {
-            $this->assertGreaterThan(self::OPENING_RETURN_TOLERANCE, $couponGap, 'Its notes pay well under the market.');
-
-            return;
-        }
         $this->assertEqualsWithDelta($structural, $booked, self::OPENING_RETURN_TOLERANCE, sprintf('%s opens %.2fpp off its structural return.', $row['ticker'], 100 * ($booked - $structural)));
     }
 

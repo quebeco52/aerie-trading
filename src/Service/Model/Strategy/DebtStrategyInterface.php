@@ -72,4 +72,8 @@ interface DebtStrategyInterface
     public function getDividendCrisisIcr(): float;
     public function getBuybackMinIcr(): float;
     public function shouldForceDeleveragingOnJunkOrHoarding(): bool;
+    /** Whether OpeningBoardBuilder derives the opening fixed coupon from the firm's converged rating. */
+    public function derivesOpeningCoupon(): bool;
+    /** Whether OpeningBoardBuilder derives the opening floating debt share from the firm's converged rating. */
+    public function derivesOpeningFloatingShare(): bool;
 }

@@ -40,3 +40,9 @@
 - A row never states a default (11-20): `sector` comes from `Sectors::INDUSTRY_SECTORS` (OWLS and GDWT file elsewhere
   and say so), `public_float` defaults to 85% (`SeedRows::DEFAULT_PUBLIC_FLOAT`), `beta_tilt` to 0.
   `InitialMarketTest` refuses a row that restates one.
+- No seeded coupon or floating share (11-20). Inside the opening price loop each pass sets the fixed coupon to
+  `yield5yEma` + the through-the-cycle spread at that pass's rating, and the floating share from
+  `CreditRatingAgency::OPENING_FLOATING_DEBT_RATIO` (A 15% .. CCC 60%), then strikes opening earnings and dividend on
+  them. No vintage discount: the old 3.5-4.5% seeds were an opening windfall that rolled up to market within 10 years.
+  Exceptions: the 8 deposit lenders keep both keys, because their books are built before they have a rating. The 9
+  dealers and funds keep their floating share, because repo and prime funding is a business-model fact.

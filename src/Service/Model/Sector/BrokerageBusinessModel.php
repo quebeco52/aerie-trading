@@ -469,6 +469,12 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         return true;
     }
 
+    /** Brokerages and dealers fund inventory in repo rather than at a rating class's corporate bond/loan split. */
+    public function derivesOpeningFloatingShare(): bool
+    {
+        return false;
+    }
+
     /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.

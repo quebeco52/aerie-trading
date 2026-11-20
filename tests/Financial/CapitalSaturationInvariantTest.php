@@ -10,7 +10,9 @@ use App\Data\Company\Sectors;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
+use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\EarningsEngine;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\MathUtility;
 use App\Tests\Support\CorporateEngineFactory;
@@ -113,14 +115,19 @@ final class CapitalSaturationInvariantTest extends TestCase
         $stock->setFixedCostRatio((float) $row['fixed_cost_ratio']);
         $stock->setOperatingMargin((string) $row['operating_margin']);
         $stock->setDepreciationRate((string) $row['depreciation_rate']);
+        $macro = new MacroStateDTO();
         $stock->setCorporateTreasury((string) $row['corporate_treasury']);
-        $stock->setFloatingDebtRatio((string) $row['floating_debt_ratio']);
+        $stock->setFloatingDebtRatio((string) ($row['floating_debt_ratio'] ?? CreditRatingAgency::openingFloatingDebtRatio($stock->getCreditRating())));
         $stock->setTotalEquity(\App\Service\Math\Decimal::of($row['total_equity']));
         $stock->setWholesaleDebt((string) $row['wholesale_debt']);
         $stock->setCustomerDeposits((string) $row['customer_deposits']);
         $stock->setRetainedEarnings(\App\Service\Math\Decimal::of($row['retained_earnings']));
         $stock->setSamRatio((string) $row['sam_ratio']);
-        $stock->setHistoricalFixedRate((string) $row['historical_fixed_rate']);
+        $stock->setHistoricalFixedRate((string) ($row['historical_fixed_rate'] ?? DebtEngine::openingFixedCoupon(
+            $stock,
+            $macro,
+            Sectors::strategyFor($row['industry'])->getLossGivenDefault(),
+        )));
         $stock->setPrice('100.00');
 
         return $stock;

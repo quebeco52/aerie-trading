@@ -482,10 +482,16 @@ class BrokerageBusinessModelTest extends TestCase
     private function openFinch(array $overrides): Stock
     {
         $seed = \App\Service\Market\Pricing\SeedRows::for('FINC');
+        $overrideCoupon = $overrides['historical_fixed_rate'] ?? null;
+        unset($overrides['historical_fixed_rate']);
+
         $this->opening = \App\Tests\Support\OpeningCreditAtTrend::macro();
         $builder = new OpeningBoardBuilder($this->mathUtility, new DebtEngine($this->mathUtility, CorporateMetrics::getInstance()), new MarketEngine($this->mathUtility), new AnchorStakeLedger());
         $stock = (new Stock())->setTicker('FINC');
         $builder->open($stock, $overrides + $seed, $this->opening);
+        if ($overrideCoupon !== null) {
+            $stock->setHistoricalFixedRate((string) $overrideCoupon);
+        }
         $stock->setEarningsMomentumZ([BrokerageBusinessModel::STATE_OPERATING_YIELD => (new \ReflectionMethod($this->model, 'resolveOperatingYield'))->invoke($this->model, $stock, $this->mathUtility)]);
 
         return $stock;

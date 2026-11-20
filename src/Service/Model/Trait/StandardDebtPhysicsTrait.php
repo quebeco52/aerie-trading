@@ -200,4 +200,14 @@ trait StandardDebtPhysicsTrait
     {
         return true;
     }
+
+    public function derivesOpeningCoupon(): bool
+    {
+        return true;
+    }
+
+    public function derivesOpeningFloatingShare(): bool
+    {
+        return true;
+    }
 }

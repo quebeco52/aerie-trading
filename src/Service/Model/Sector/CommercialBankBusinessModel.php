@@ -1646,6 +1646,20 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
     }
 
     /**
+     * Lenders build their opening books before a rating exists, so both the legacy coupon and the securities-hedging
+     * floating share remain seeded.
+     */
+    public function derivesOpeningCoupon(): bool
+    {
+        return false;
+    }
+
+    public function derivesOpeningFloatingShare(): bool
+    {
+        return false;
+    }
+
+    /**
      * MacroStateDTO fields (snake_case) this model's operating physics genuinely reads in
      * calculateSectorPhysics()/getMacroPhysics() — see OperatingStrategyInterface for the full rule.
      *

@@ -55,7 +55,14 @@ final class SeedRows
             return $row;
         }
 
+        $strategy = Sectors::strategyFor($row['industry'] ?? null);
         $derived = array_intersect(self::DERIVED_KEYS, array_keys($row));
+        if ($strategy->derivesOpeningCoupon() && array_key_exists('historical_fixed_rate', $row)) {
+            $derived[] = 'historical_fixed_rate';
+        }
+        if ($strategy->derivesOpeningFloatingShare() && array_key_exists('floating_debt_ratio', $row)) {
+            $derived[] = 'floating_debt_ratio';
+        }
         if ($derived !== []) {
             throw new \DomainException(sprintf(
                 '%s states %s, which is derived at opening rather than seeded.',

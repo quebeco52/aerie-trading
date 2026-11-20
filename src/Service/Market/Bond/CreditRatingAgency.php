@@ -109,6 +109,27 @@ class CreditRatingAgency
     ];
 
     /**
+     * Opening floating-rate share of debt by rating class: investment-grade issuers fund in fixed bonds, speculative
+     * grade in floating bank and leveraged loans (Fed, ECB and Bank of England corporate debt splits).
+     */
+    public const OPENING_FLOATING_DEBT_RATIO = [
+        'AAA' => 0.10,
+        'AA'  => 0.10,
+        'A'   => 0.15,
+        'BBB' => 0.20,
+        'BB'  => 0.35,
+        'B'   => 0.50,
+        'CCC' => 0.60,
+        'D'   => 0.60,
+    ];
+
+    /** Opening floating-rate share for a rating class; an unrecognised rating reads as BBB. */
+    public static function openingFloatingDebtRatio(string $rating): float
+    {
+        return self::OPENING_FLOATING_DEBT_RATIO[$rating] ?? self::OPENING_FLOATING_DEBT_RATIO['BBB'];
+    }
+
+    /**
      * The rating's place on the scale, D (0) to AAA (7); one the scale does not hold reads as BBB, the grade a firm
      * opens on.
      */
