@@ -6,9 +6,9 @@ namespace App\Service\Math;
 
 /**
  * Credit risk: Vasicek loss and systematic factor, collateral LGD and recovery, Merton asset-value solves, tranche
- * spreads, the rating-class spread curve and an issuer's multiple of it, leverage limits, default-rate and
- * lending-standards curves, distress multipliers, and the crisis and recession probabilities (Schularick-Taylor,
- * Estrella-Mishkin). Pure functions of their arguments.
+ * spreads, the rating-class spread curve, leverage limits, default-rate and lending-standards curves, distress
+ * multipliers, and the crisis and recession probabilities (Schularick-Taylor, Estrella-Mishkin). Pure functions of
+ * their arguments.
  */
 final class CreditRisk
 {
@@ -733,39 +733,6 @@ final class CreditRisk
         $nonDefault = min(max(0.0, $nonDefaultSpread), max(0.0, $classSpread));
 
         return $nonDefault + (max(0.0, $classSpread) - $nonDefault) * max(0.0, $lossGivenDefault) / $referenceLossGivenDefault;
-    }
-
-    /**
-     * An issuer's own spread as a multiple of its rating class: a seeded through-the-cycle spread split into the class
-     * it sits nearest on the class curve (in log distance, the scale DTS moves spreads on) and the multiple of that
-     * class it trades at. The class part is discarded, since the firm's measured rating replaces it; the multiple is
-     * the firm's own premium, carried to whatever class it is rated into.
-     *
-     * The curve it is read against is restated at the issuer's own recovery, so a seeded spread that is tight because
-     * the debt is secured is not counted again as a premium.
-     *
-     * @param float $seededSpread             Through-the-cycle spread the firm was seeded at.
-     * @param float $igReference              IG index level the seeded spreads are quoted against.
-     * @param float $hyReference              HY index level the seeded spreads are quoted against.
-     * @param float $lossGivenDefault         The issuer's loss given default.
-     * @param float $referenceLossGivenDefault The loss given default the class curve is quoted at.
-     * @return float Multiple of the class spread; 1.0 for a firm seeded with no spread.
-     */
-    public static function calculateIssuerSpreadMultiple(float $seededSpread, float $igReference, float $hyReference, float $lossGivenDefault = 1.0, float $referenceLossGivenDefault = 1.0): float
-    {
-        if ($seededSpread <= 0.0 || $igReference <= 0.0 || $hyReference <= 0.0) {
-            return 1.0;
-        }
-
-        $nearest = null;
-        foreach (array_keys(self::IG_CLASS_SPREAD_MULTIPLES + self::HY_CLASS_SPREAD_MULTIPLES) as $rating) {
-            $classSpread = self::calculateRecoveryAdjustedSpread(self::calculateRatingClassSpread($rating, $igReference, $hyReference), $lossGivenDefault, $referenceLossGivenDefault);
-            if ($nearest === null || abs(log($seededSpread / $classSpread)) < abs(log($seededSpread / $nearest))) {
-                $nearest = $classSpread;
-            }
-        }
-
-        return $seededSpread / $nearest;
     }
 
     /**

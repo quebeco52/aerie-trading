@@ -10,7 +10,13 @@ deterministic and the whole board takes ~9 s.
       var/harness/settle/SettleHarnessTest.php            # OUT=var/harness/settle/runs/settle.jsonl
     python3 var/harness/settle/settle.py var/harness/settle/runs/settle.jsonl [more runs] [--csv out.csv]
 
-Env: `YEARS` (10), `TPY` (360), `SEED` (1), `TICKERS` (comma list), `OUT`.
+Paired against a commit: `BASE_TREE=<git archive, vendor symlinked> TAG=x_ bin/harness-batch var/harness/settle/run.sh 1
+head new` (arm `head` on the tree through `var/harness/bootstrap.php`), then
+`python3 var/harness/settle/credit_compare.py runs/x_head.jsonl runs/x_new.jsonl [TICKERS]`.
+
+Env: `RATINGS=1` gives the DebtEngine a CreditRatingAgency (opening rating seated as app:market-seed does, reviewed on
+each report); without it every firm stays at the entity default BBB. Rows carry `ni`, `int` (annual, health reading),
+`spread`, `spread_ttc`, `rating`. `YEARS` (10), `TPY` (360), `SEED` (1), `TICKERS` (comma list), `OUT`.
 - `MACRO=frozen` (default): the opening DTO, with potential and nominal GDP, the deflator and the CPI grown at trend.
   `MACRO=path`: the macro engine's own noiseless path. It runs a little hot (gap +0.5-0.8%, policy rate 3.4% -> 4.5%
   in two years), which lifts bank margins and every P/E (ops 19.6 -> 25.8 by year 10, against 20.1 frozen).
@@ -118,3 +124,10 @@ plus `calculateLiabilityBackingCash()`), and SWAN/VULT/CROW/TIER (`AssetManageme
 open on cost of equity + moat (`item2_after.jsonl` vs `item2_before.jsonl` at 7635c06d; all 90 other firms bit-identical).
 Opening equity held within 0.4% of lore size on every firm. Flagged 8 -> 7 of 103 (VULT `ret` flag gone: 23.0 -> 19.1 ->
 16.9 becomes 16.5 -> 15.0 -> 15.5; zero flags on any insurer or fee financial).
+
+## Credit spread from rating class (11-20, HEAD 9d7d4cf4 vs working tree, `RATINGS=1`, frozen, 10y)
+`cs_r_head.jsonl` vs `cs_r_new.jsonl`, `credit_spread_rated.out` (unrated: `credit_spread.out`). Opening ratings
+identical (A 58, BBB 37, BB 8; none move at q0 or q40). Spreads collapse onto the class: new arm A 109bp, BBB 162, BB
+202-262 (HEAD 31-183bp by seed multiple). Only EGRT moves q0 NI >10% (14.84 -> 17.60bn, +18.6%; the moat step: ROE
+12.2 -> 15.2%, equity 121.7 -> 115.9bn); LAKE spread 31 -> 109bp moves its interest 0.1% (deposit funded). Board median
+interest/debt 4.51 -> 4.53% (q0), 5.13 -> 5.06% (q40).

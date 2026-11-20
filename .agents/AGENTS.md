@@ -15,8 +15,17 @@ US, Singapore, Switzerland and Sweden share the principles and differ in everyth
   no justification; a violated principle always does.
 - "Realistic" means a real economy with Aerie's institutions could behave this way. It does not mean "matches the US".
 
-Past decisions, rejected approaches, intended oddities and measurement traps are in `.agents/NOTES.md`. Read the
-section for your area before proposing a change there.
+Past decisions, rejected approaches, intended oddities and measurement traps live in `.agents/notes/` — read only the
+file for your area before proposing a change: `working.md` (user/code structure), `lore.md` (world & firms),
+`seed-and-books.md` (opening books), `macro-politics.md`, `corporate-segments.md`, `market-and-measurement.md`.
+
+## Context budget
+- Never read in full a file over ~150 lines (engines, sector models, tests, evidence files): `grep -n` for the method
+  or section, then read only that line range.
+- Run `git diff --stat` before any diff, then diff only the hunk you need.
+- Batch independent reads and greps into one turn; make probe/analysis scripts print only the final table (no JSONL
+  rows or logs beyond `tail -3`).
+- Background runs notify on exit; never poll with `sleep`, `ls`, `tail` or `ps`.
 
 ## Names
 Firm and fund names come from birds (Corvid, Egret), bird words (Talon, Aerie, Skein), water bodies (Lake, Benthos,
@@ -92,24 +101,15 @@ spend them where the answer is emergent.
 All PHP processes on the machine share 12 slots through `bin/php-slot`, at most 8 per session.
 
 ## Research
-Research is for borrowing a mechanism or a plausible range. Look across several economies, not
-one.
-- About 20 web calls and one agent per question. Put this budget in any research
-  prompt you delegate.
-- Paywalled or unreadable source: take the abstract or a citing paper's figure. Don't hunt mirrors, scrape Scholar or
-  render PDF pages to images.
-- If three attempts don't move the answer, or the budget runs out, stop and report what you have.
+Borrow a mechanism or plausible range across several economies, not one. Budget: ~20 web calls and one agent per
+question (include this in delegated prompts). On paywalled sources, use the abstract or a citing figure — no mirrors,
+Scholar scraping or PDF-to-image rendering. Stop and report after three stalled attempts or when budget runs out.
 
 ## Constants
-Financial parameters and thresholds are class constants, or go in `FinancialConstants.php` if shared; the macro
-economy's shared ones go in `MacroConstants.php`, and `MacroConstantOwnershipTest` keeps one-reader dials with their
-reader. No bare numeric literals in model code except mathematical ones (2, 12 months).
-- Group related constants under a `// --- Section Name ---` comment.
-- Each has a `/** */` docblock saying what it is and the magnitude it gives, on one line when it fits.
-
-    // --- NIM (Net Interest Margin) Squeeze ---
-    /** Break-even NIM floor (~50bps). Steep curve = profit; flat or inverted curve = squeeze. */
-    public const NIM_BASE_SPREAD_BUFFER = 0.005;
+Financial parameters and thresholds are class constants, or in `FinancialConstants.php` (shared) / `MacroConstants.php`
+(shared macro; `MacroConstantOwnershipTest` keeps one-reader dials with their reader). No bare numeric literals in model
+code except mathematical ones (2, 12 months). Group under `// --- Section Name ---` with a `/** */` docblock stating
+what it is and the magnitude it gives (one line when it fits).
 
 ## Comments
 Say what a term does in one to three lines. Measurements, sweeps and rejected alternatives go in the commit message,
@@ -138,11 +138,9 @@ when a change needs one, and when it needs a reseed (seed data, opening balances
 Only user commits. When a change is ready to commit, end the report with a commit message of at most 75 characters.
 
 ## Pages
-Player pages are the District's own sites: no model names, citations, coefficients or file paths in templates.
-Sentence-case labels, mono type only for figures, institution names from `App\Data\District\Institutions`. Format figures
-with `|signed_class`, `|pct`, `|money` and `source_line()`, not by hand. Read `.agents/FRONTEND.md` before any template,
-page script or company profile change; `tests/Twig/TemplateStyleTest.php` enforces it, and `bin/render-pages`
-screenshots the result.
+Player pages are the District's own sites (no model names, citations, coefficients or file paths). Read
+`.agents/FRONTEND.md` before any template, page script or company profile change; `tests/Twig/TemplateStyleTest.php`
+enforces it, and `bin/render-pages` screenshots the result.
 
 ## Reporting
 Report once tests, PHPStan and the numbers are in. Offer long checks (mutation runs, long sweeps) rather than running

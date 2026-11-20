@@ -11,6 +11,7 @@ use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Math\MathUtility;
@@ -22,7 +23,7 @@ use PHPUnit\Framework\TestCase;
  * Every seeded lender's franchise opens with its loans priced over the market, not under it. The loan spread is what
  * the lender's return target leaves over the yield its book earns at market rates; a negative one means the lore's
  * anchors disagree (a return target below what the deposit franchise already earns, or a book priced at the wrong
- * tenor), and its loans would be lent below cost.
+ * tenor), and its loans would be lent below cost. The lender is rated, so the test guards the rating it opens at.
  */
 #[Group('unit')]
 final class LenderOpeningFranchiseTest extends TestCase
@@ -31,12 +32,12 @@ final class LenderOpeningFranchiseTest extends TestCase
     {
         mt_srand(20261020);
         $math = new MathUtility();
-        $builder = new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance()), new MarketEngine($math), new AnchorStakeLedger());
+        $builder = new OpeningBoardBuilder($math, new DebtEngine($math, CorporateMetrics::getInstance(), new CreditRatingAgency()), new MarketEngine($math), new AnchorStakeLedger());
         $opening = new MacroStateDTO();
         $lenders = 0;
 
         foreach (InitialMarket::STOCKS as $row) {
-            $model = Sectors::getBusinessModelStrategy(Sectors::businessModelFor($row['industry'] ?? null));
+            $model = Sectors::getBusinessModelStrategy(Sectors::businessModelFor((string) $row['industry']));
             if (!$model instanceof CommercialBankBusinessModel) {
                 continue;
             }

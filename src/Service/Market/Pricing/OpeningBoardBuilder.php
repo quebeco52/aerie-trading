@@ -90,7 +90,7 @@ class OpeningBoardBuilder
         ['business' => $businessRisk, 'events' => $eventRisk] = IndustryRisks::forRow($stockData);
 
         // The whole seed row goes on before any engine reads the firm: its industry decides which model's physics
-        // price it, and its spread and legacy coupon decide what its debt costs. Risk starts at the unlevered
+        // price it, and its rating and legacy coupon decide what its debt costs. Risk starts at the unlevered
         // business step until strikeOpeningPrice() derives the levered equity vol and budgeted jump scale from
         // DebtEngine's opening beta and leverage.
         $this->applyListing($stock, $stockData);
@@ -155,7 +155,6 @@ class OpeningBoardBuilder
         $stock->setWholesaleDebt((string) ($stockData['wholesale_debt'] ?? 0.00));
         $stock->setCustomerDeposits((string) ($stockData['customer_deposits'] ?? 0.00));
         $stock->setRetainedEarnings(Decimal::of($stockData['retained_earnings'] ?? 0.0));
-        $stock->setCreditSpread((string) $stockData['credit_spread']);
         $stock->setHistoricalFixedRate((string) $stockData['historical_fixed_rate']);
         // Provisional, at book, until the market strikes the opening price below: the debt analysis sizes the
         // equity it weighs against the firm's own book rather than the entity's placeholder.
@@ -343,6 +342,14 @@ class OpeningBoardBuilder
         $convergedVol = (float) $stock->getVolatility();
         $stock->setTurnoverRatio(LiquidityEngine::structuralTurnoverRatio($convergedVol));
         $stock->setRealizedVarianceEma($convergedVol ** 2);
+
+        // Record the opening through-the-cycle spread at the converged rating (for pages and admin, not an engine
+        // input).
+        $lossGivenDefault = Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
+        $stock->setCreditSpread(Decimal::format(
+            DebtEngine::throughTheCycleCreditSpread($stock, $openingMacro, $lossGivenDefault),
+            4,
+        ));
     }
 
     /**

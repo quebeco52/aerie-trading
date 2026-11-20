@@ -53,7 +53,9 @@ final class SettleHarnessTest extends TestCase
         mt_srand($seed);
         $openMath = new MathUtility();
         $metrics = CorporateMetrics::getInstance();
-        $debtEngine = new DebtEngine($openMath, $metrics);
+        // RATINGS=1: the agency seats the opening rating (as app:market-seed does) and reviews it on each report.
+        $agency = getenv('RATINGS') ? new \App\Service\Market\Bond\CreditRatingAgency() : null;
+        $debtEngine = new DebtEngine($openMath, $metrics, $agency);
         $marketEngine = new MarketEngine($openMath);
         $anchorStakes = new AnchorStakeLedger();
         $builder = new OpeningBoardBuilder($openMath, $debtEngine, $marketEngine, $anchorStakes);
@@ -119,7 +121,7 @@ final class SettleHarnessTest extends TestCase
         $store = new InMemoryIndustryShareStore();
         // BoardRun's salt, so keyed draws (an entry's outcome) replay.
         $store->writeOutlooks(['salt' => 1000 + $seed, 'quarter' => -1, 'industries' => []]);
-        $firmDebt = new DebtEngine($math, $metrics);
+        $firmDebt = new DebtEngine($math, $metrics, $agency);
         $engine = self::earningsEngine($math, debtEngine: $firmDebt, industryShareLedger: new IndustryShareLedger($store));
 
         $fh = fopen($out, 'w');
@@ -229,6 +231,11 @@ final class SettleHarnessTest extends TestCase
             'pe' => $netIncome > 0.0 ? (float) $s->getPrice() * $shares / $netIncome : null,
             'shares' => $shares,
             'payout' => $netIncome > 0.0 ? (float) $s->getLastDividend() * 4.0 * $shares / $netIncome : null,
+            'ni' => $netIncome,
+            'int' => $health->rawMetrics->interestExpense,
+            'spread' => $health->rawMetrics->dynamicSpread,
+            'spread_ttc' => $health->rawMetrics->baselineSpread,
+            'rating' => $s->getCreditRating(),
             'bankrupt' => $s->isBankrupt(),
         ];
     }

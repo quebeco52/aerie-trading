@@ -80,14 +80,8 @@ quantities, seeds × years) for the caller to give to `harness-runner`. For live
 
 ## Context budget
 
-Every tool call re-reads your whole context, so the number of calls multiplies everything else. Past runs of this
-agent took ~75 calls at ~170k tokens each; harness-runner, which keeps these rules, takes ~38 at ~107k.
-- Never `cat` or Read in full a file over ~150 lines (sector models, engines, tests, memory notes, evidence files).
-  `grep -n` for the method or section, then `sed -n` or Read with offset and limit for that range.
-- `git diff --stat` comes before any diff, and then diff only the hunk you need.
-- Batch independent reads and greps into one call.
-- Make probe scripts print only the final table. Never print a JSONL row or a log beyond `tail -3`.
-- A background run notifies you when it exits. Do not poll it with `sleep`, `ls`, `tail` or `ps`.
+Follow `AGENTS.md`'s Context budget strictly — every tool call re-reads your whole context (past runs without these
+rules hit ~75 calls at ~170k tokens vs ~38 at ~107k).
 
 ## Recommendations
 

@@ -215,7 +215,6 @@ class RevenueDrainSimulationTest extends TestCase
         $stock->setDepreciationRate((string) ($data['depreciation_rate'] ?? 0.05));
         $stock->setFloatingDebtRatio((string) ($data['floating_debt_ratio'] ?? 0.30));
         $stock->setHistoricalFixedRate((string) ($data['historical_fixed_rate'] ?? 0.05));
-        $stock->setCreditSpread((string) ($data['credit_spread'] ?? 0.01));
 
         return $stock;
     }

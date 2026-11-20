@@ -32,6 +32,18 @@ Run paired seeds (pass `HEALTH=1` so `icr` is recorded; delete stale `runs/<arm>
     wait
     python3 var/harness/risk-ladder/analyse.py rv-head rv-new
 
+Or with the batch runner (`run.sh <arm> <seed>`: arm `head` on `BASE_TREE`, any other on the working tree; truncates
+its own output; `TAG` prefixes the run names):
+
+    BASE_TREE=<archive> TAG=cs- bin/harness-batch var/harness/risk-ladder/run.sh 1-4 head new \
+      && python3 var/harness/risk-ladder/analyse.py cs-head cs-new \
+      && python3 var/harness/risk-ladder/credit.py cs-head cs-new LAKE SAFE TERN
+
+`credit.py` gives the credit gates paired: rating shares, defaults, reorganisations, `icr < 1` and payment-default
+quarters, junk firm-quarters (`junk`/`dsp`/`bsp` per report row: TreasuryEngine's dynamic > through-the-cycle + 11bp,
+read on trailing health at report time), newsworthy forced-deleveraging sweeps (`sweeps`, counted from the
+"aggressively deleverage" event line; sub-newsworthy sweeps are missed), median interest/debt by rating, named firms.
+
 ## Runs
 
 ### 2026-11-20 — Re-lever volatility every tick (`HEAD 1e1f442c` vs working tree, 8 seeds × 20y, `HEALTH=1`)
@@ -57,3 +69,17 @@ Arms `rv-head` (`BASE=1e1f442c`) vs `rv-new`, seeds 1–8 (`TPY=360`, `YEARS=20`
 - **Ceilings & scorecard**: `2.0 ± 0.7` firm-years/run with mean `sigma_LR > 0.6` (`4.5 ± 0.9` peak `> 0.6`,
   peak `sigma_LR = 0.738`, peak spot `cvol = 1.077`), **0 firms reaching `MAX_VOLATILITY` (1.50)**; nothing newly
   out on the board scorecard.
+
+### 2026-11-20 — Credit spread from rating class, no per-firm seed multiple (`HEAD 9d7d4cf4` vs working tree, 4 seeds × 20y, `HEALTH=1`)
+
+Arms `cs-head` (`BASE_TREE` = `git archive 9d7d4cf4`) vs `cs-new`, seeds 1–4, `TPY=360`; outputs
+`credit_spread.out` (credit.py) and `credit_spread_scorecard.out` (analyse.py). Paired diff (se), t:
+- Ratings % firm-quarters: A `61.1 → 59.5` (`-1.55 (1.14)`, t -1.4), BBB `28.0 → 29.8` (t +1.7), BB `8.9 → 8.6`,
+  B `1.9 → 2.0`, CCC `0.11 → 0.17` (t +0.8).
+- Defaulters `0.75 → 0.75`; deaths `0 → 0`; reorganisations `1.25 → 1.00` (t -0.2); `icr < 1` quarters
+  `119.5 → 121.5` (`+2.0 (10.6)`); payment-default quarters `2.5 → 2.5`.
+- Junk firm-quarters `3317 → 3365` (`+48 (17)`, t +2.9, +1.4%; ~40% of firm-quarters pass the junk test in both arms);
+  newsworthy forced sweeps `4.25 → 3.00` (t -0.9).
+- Median interest/debt by rating: A `4.54 → 4.53`, BBB `5.19 → 5.21`, BB `5.68 → 5.65`, B `7.52 → 7.43` (all < 0.1pp).
+- Scorecard: nothing newly out (largest firm revenue/GDP back in, 0.16 → 0.15); board cap/GDP at open `3.54 → 3.48`
+  (t -3.6). Firm paths do not pair across arms: named-firm rows in `credit_spread.out` are anecdotes.

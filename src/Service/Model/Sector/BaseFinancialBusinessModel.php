@@ -230,7 +230,6 @@ abstract class BaseFinancialBusinessModel extends AbstractBusinessModel
             ->setSystemicImportance($seedRow['systemic_importance'] ?? 'none')
             ->setFloatingDebtRatio((string) $seedRow['floating_debt_ratio'])
             ->setHistoricalFixedRate((string) $seedRow['historical_fixed_rate'])
-            ->setCreditSpread((string) $seedRow['credit_spread'])
             ->setFixedCostRatio((float) ($seedRow['fixed_cost_ratio'] ?? 0.0))
             ->setBaselineRoe((string) $baselineRoe)
             ->setRoeTtm((string) $baselineRoe);

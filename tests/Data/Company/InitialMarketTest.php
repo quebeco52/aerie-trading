@@ -162,7 +162,9 @@ class InitialMarketTest extends TestCase
         $this->assertGreaterThanOrEqual(0.0, $stock['floating_debt_ratio'], "Floating debt ratio negative for {$ticker}");
         $this->assertLessThanOrEqual(1.0, $stock['floating_debt_ratio'], "Floating debt ratio exceeds 1.0 for {$ticker}");
 
-        $this->assertGreaterThanOrEqual(0.0, $stock['credit_spread'], "Credit spread negative for {$ticker}");
+        foreach (SeedRows::DERIVED_KEYS as $derivedKey) {
+            $this->assertArrayNotHasKey($derivedKey, $stock, "{$ticker}: {$derivedKey} is derived at opening from rating and LGD");
+        }
 
         // Balance sheet non-negatives
         $this->assertGreaterThanOrEqual(0.0, $stock['corporate_treasury'], "Corporate treasury negative for {$ticker}");
@@ -205,6 +207,7 @@ class InitialMarketTest extends TestCase
             }
             $this->assertArrayNotHasKey('target_payout_ratio', $row, "{$ticker} states a payout ratio; it names a dividend policy step.");
             $this->assertArrayNotHasKey('dividendSpeed', $row, "{$ticker} states a dividend speed; its business model sets it.");
+            $this->assertArrayNotHasKey('credit_spread', $row, "{$ticker} states credit_spread; it is derived from the opening rating and LGD.");
             $isLender = Sectors::isFinancial(Sectors::businessModelFor($industry));
             $this->assertSame($isLender, isset($row['capex_ratio']), $isLender ? "{$ticker} is a lender with no reinvestment rate." : "{$ticker} states a reinvestment rate its capital budget never reads.");
         }
@@ -261,5 +264,19 @@ class InitialMarketTest extends TestCase
             $this->assertLessThanOrEqual($target + 1e-9, $debtToEquity, $row['ticker']);
         }
         $this->assertGreaterThan(0, $lenders);
+    }
+
+    /** SeedRows refuses any seed row that still states credit_spread instead of deriving it at opening. */
+    public function testSeedRowsRefusesCreditSpreadKey(): void
+    {
+        $byTicker = array_column(InitialMarket::STOCKS, null, 'ticker');
+        foreach (['WING', 'LAKE', 'BRKW'] as $ticker) {
+            try {
+                SeedRows::resolve($byTicker[$ticker] + ['credit_spread' => 0.0150]);
+                $this->fail("SeedRows::resolve() should refuse 'credit_spread' on {$ticker}.");
+            } catch (\DomainException) {
+                $this->addToAssertionCount(1);
+            }
+        }
     }
 }

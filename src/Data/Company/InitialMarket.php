@@ -31,7 +31,6 @@ class InitialMarket
             'addressable_share' => 0.43,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.025,
-            'credit_spread' => 0.0015,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
             'revenue' => 754_000_000_000.00,
             'wholesale_funding_share' => 0.018,
@@ -51,7 +50,6 @@ class InitialMarket
             'public_float' => 0.50,
             'floating_debt_ratio' => 0.50,
             'historical_fixed_rate' => 0.030,
-            'credit_spread' => 0.0035,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
             'revenue' => 383_000_000_000.00,
             'retained_share' => 0.25,
@@ -73,7 +71,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0040,
         ],
         [
             'ticker' => 'OWLS',
@@ -91,7 +88,6 @@ class InitialMarket
             'public_float' => 0.80,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.030,
-            'credit_spread' => 0.0050,
             'depreciation_rate' => 0.03,
         ],
         [
@@ -111,7 +107,6 @@ class InitialMarket
             'addressable_share' => 0.333,
             'floating_debt_ratio' => 0.65,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0150,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 42_800_000_000.00,
             'retained_share' => 0.30,
@@ -132,7 +127,6 @@ class InitialMarket
             'addressable_share' => 0.267,
             'floating_debt_ratio' => 0.80,
             'historical_fixed_rate' => 0.060,
-            'credit_spread' => 0.0200,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 30_200_000_000.00,
             'retained_share' => 0.225,
@@ -153,7 +147,6 @@ class InitialMarket
             'addressable_share' => 0.28,
             'floating_debt_ratio' => 0.85,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0150,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 25_500_000_000.00,
             'retained_share' => 0.26,
@@ -175,7 +168,6 @@ class InitialMarket
             'addressable_share' => 0.45,
             'floating_debt_ratio' => 0.35,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0200,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
             'revenue' => 86_000_000_000.00,
             'wholesale_funding_share' => 0.012,
@@ -198,7 +190,6 @@ class InitialMarket
             'addressable_share' => 0.35, // More headroom than RIVR and LAKE open with
             'floating_debt_ratio' => 0.15, // Covered bonds are fixed-rate
             'historical_fixed_rate' => 0.028,
-            'credit_spread' => 0.0060, // Covered bonds secured on the mortgage pool price near AA
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
             'revenue' => 137_000_000_000.00,
             'wholesale_funding_share' => 0.13, // Covered bonds
@@ -223,7 +214,6 @@ class InitialMarket
             'addressable_share' => 0.431,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.025,
-            'credit_spread' => 0.0030,
             // Its books are built on this character by its model (InsuranceBusinessModel::resolveOpeningBooks()).
             'revenue' => 590_000_000_000.00,
             'retained_share' => 0.20,
@@ -244,7 +234,6 @@ class InitialMarket
             'addressable_share' => 0.34,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.030,
-            'credit_spread' => 0.0080,
             // Its liabilities are not marked to the curve, so it elects to keep the bond mark out of its capital ratio.
             'aoci_filtered' => true,
             // Its books are built on this character by its model (InsuranceBusinessModel::resolveOpeningBooks()).
@@ -268,7 +257,6 @@ class InitialMarket
             'public_float' => 0.92,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0050,
         ],
         [
             'ticker' => 'BIRD',
@@ -286,7 +274,6 @@ class InitialMarket
             'public_float' => 0.99,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0080,
         ],
         [
             'ticker' => 'WATCH',
@@ -303,7 +290,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0120,
         ],
         [
             'ticker' => 'WING',
@@ -320,7 +306,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0200,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -338,7 +323,6 @@ class InitialMarket
             'public_float' => 0.75,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0180,
         ],
         [
             'ticker' => 'SHOR',
@@ -356,7 +340,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0250,
         ],
         [
             'ticker' => 'RIVE',
@@ -374,7 +357,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0120,
         ],
         [
             'ticker' => 'GRIP',
@@ -394,7 +376,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0070,
         ],
         [
             'ticker' => 'SKYL',
@@ -414,7 +395,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.055,
-            'credit_spread' => 0.0250,
         ],
         [
             'ticker' => 'LOON',
@@ -430,7 +410,6 @@ class InitialMarket
             'public_float' => 0.98,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0050,
             'depreciation_rate' => 0.068, // Verizon 2024: D&A over net plant plus spectrum licences
         ],
         [
@@ -448,7 +427,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0090,
         ],
         [
             'ticker' => 'TRIV',
@@ -469,7 +447,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0090,
         ],
         [
             'ticker' => 'IBHI',
@@ -486,7 +463,6 @@ class InitialMarket
             'public_float' => 0.45,
             'floating_debt_ratio' => 0.35,
             'historical_fixed_rate' => 0.055,
-            'credit_spread' => 0.0200,
         ],
         [
             'ticker' => 'TICK',
@@ -512,7 +488,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0060,
         ],
         [
             'ticker' => 'SINK',
@@ -529,7 +504,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.060,
-            'credit_spread' => 0.0280,
         ],
         [
             'ticker' => 'CASC',
@@ -549,7 +523,6 @@ class InitialMarket
             // about a quarter of it.
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.055,
-            'credit_spread' => 0.0120,
             // An export refinery, sized like Singapore's or Korea's: product sales open near 10% of GDP, against 2-3%
             // for a refiner serving only its home market.
         ],
@@ -570,7 +543,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.055,
-            'credit_spread' => 0.0250,
         ],
         [
             'ticker' => 'WADE',
@@ -589,7 +561,6 @@ class InitialMarket
             'public_float' => 0.98,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0060,
         ],
         [
             'ticker' => 'CORM',
@@ -606,7 +577,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0090,
         ],
         [
             'ticker' => 'CRAN',
@@ -623,7 +593,6 @@ class InitialMarket
             'public_float' => 0.92,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0090,
         ],
         [
             'ticker' => 'TALN',
@@ -640,7 +609,6 @@ class InitialMarket
             'addressable_share' => 0.30,
             'floating_debt_ratio' => 0.60,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0170,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
             'revenue' => 66_800_000_000.00,
             'wholesale_funding_share' => 0.25,
@@ -661,7 +629,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0110,
         ],
         [
             'ticker' => 'TERN',
@@ -679,7 +646,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0200,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -699,7 +665,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.45,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0080,
         ],
         [
             'ticker' => 'STRK',
@@ -716,7 +681,6 @@ class InitialMarket
             'addressable_share' => 0.28,
             'floating_debt_ratio' => 0.65,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0250,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
             'revenue' => 44_400_000_000.00,
             'wholesale_funding_share' => 0.050,
@@ -737,7 +701,6 @@ class InitialMarket
             'public_float' => 0.70,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0090,
         ],
         [
             'ticker' => 'CLAW',
@@ -756,7 +719,6 @@ class InitialMarket
             'public_float' => 0.60,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0080,
             'depreciation_rate' => 0.04,
         ],
         [
@@ -774,7 +736,6 @@ class InitialMarket
             'addressable_share' => 0.10,
             'floating_debt_ratio' => 0.80,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0120,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 2_160_000_000.00,
             'retained_share' => 0.40,
@@ -797,7 +758,6 @@ class InitialMarket
             'public_float' => 0.15,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.020,
-            'credit_spread' => 0.0040,
         ],
         [
             'ticker' => 'LYRE',
@@ -814,7 +774,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0140,
         ],
         [
             'ticker' => 'BELL',
@@ -834,7 +793,6 @@ class InitialMarket
             'public_float' => 0.60,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0110,
         ],
         [
             'ticker' => 'STAR',
@@ -851,7 +809,6 @@ class InitialMarket
             'public_float' => 0.75,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0100,
         ],
         [
             'ticker' => 'WEAV',
@@ -870,7 +827,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0120,
         ],
         [
             'ticker' => 'JDAW',
@@ -888,7 +844,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0140,
         ],
         [
             'ticker' => 'CROP',
@@ -905,7 +860,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.50,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0150,
         ],
         [
             'ticker' => 'BRKW',
@@ -946,7 +900,6 @@ class InitialMarket
             'sam_ratio' => 1.62,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.030,
-            'credit_spread' => 0.0035,
             'depreciation_rate' => 0.03,
             'corporate_treasury' => 135_000_000_000.00,
             // The stakes open at about 400B, near two fifths of capital employed; the subsidiaries are the rest,
@@ -972,7 +925,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.030,
-            'credit_spread' => 0.0120,
         ],
         [
             'ticker' => 'SWFT',
@@ -999,7 +951,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0090,
         ],
         [
             'ticker' => 'VULT',
@@ -1016,7 +967,6 @@ class InitialMarket
             'public_float' => 0.80,
             'floating_debt_ratio' => 0.85,
             'historical_fixed_rate' => 0.070,
-            'credit_spread' => 0.0320,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
             'revenue' => 20_400_000_000.00,
             'retained_share' => 0.875,
@@ -1040,7 +990,6 @@ class InitialMarket
             'public_float' => 0.75,
             'floating_debt_ratio' => 0.35,
             'historical_fixed_rate' => 0.055,
-            'credit_spread' => 0.0250,
         ],
         [
             'ticker' => 'OSPR',
@@ -1059,7 +1008,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.45,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0260,
         ],
         [
             'ticker' => 'NCKR',
@@ -1078,7 +1026,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.35,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0140,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -1098,7 +1045,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0180,
         ],
         [
             'ticker' => 'NJAR',
@@ -1117,7 +1063,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0150,
         ],
         [
             'ticker' => 'CROW',
@@ -1137,7 +1082,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.90,
             'historical_fixed_rate' => 0.075,
-            'credit_spread' => 0.0350,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
             'revenue' => 13_300_000_000.00,
             'retained_share' => 0.75,
@@ -1162,7 +1106,6 @@ class InitialMarket
             'public_float' => 0.45,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.055,
-            'credit_spread' => 0.0250,
         ],
         [
             'ticker' => 'SILC',
@@ -1181,7 +1124,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0150,
         ],
         [
             'ticker' => 'KSTL',
@@ -1199,7 +1141,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.05,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0070,
         ],
         [
             'ticker' => 'POOL',
@@ -1215,7 +1156,6 @@ class InitialMarket
             'addressable_share' => 0.314,
             'floating_debt_ratio' => 0.70,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0190,
             'depreciation_rate' => 0.01,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
             'revenue' => 8_060_000_000.00,
@@ -1240,7 +1180,6 @@ class InitialMarket
             'addressable_share' => 0.50,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0040,
             // Its books are built on this character by its model (ClearingHouseBusinessModel::resolveOpeningBooks()).
             'revenue' => 12_500_000_000.00,
             'retained_share' => 0.40,
@@ -1263,7 +1202,6 @@ class InitialMarket
             'public_float' => 1.00,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0070,
         ],
         [
             'ticker' => 'WELL',
@@ -1283,7 +1221,6 @@ class InitialMarket
             'addressable_share' => 0.24,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0090,
             // Reserves are paid out over decades, so the bonds behind them run longer than a composite's.
             'securities_duration' => 10.0,
             'aoci_filtered' => true,
@@ -1307,7 +1244,6 @@ class InitialMarket
             'public_float' => 0.92,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0120,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -1326,7 +1262,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0200,
         ],
         [
             'ticker' => 'IBIS',
@@ -1342,7 +1277,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0120,
             'depreciation_rate' => 0.10,
         ],
         [
@@ -1360,7 +1294,6 @@ class InitialMarket
             'public_float' => 0.55,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0080,
         ],
         [
             'ticker' => 'LARK',
@@ -1379,7 +1312,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0050,
         ],
         [
             'ticker' => 'CBIL',
@@ -1399,7 +1331,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0080,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -1417,7 +1348,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0110,
         ],
         [
             'ticker' => 'SPRW',
@@ -1436,7 +1366,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0110,
         ],
         [
             'ticker' => 'KITE',
@@ -1456,7 +1385,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0110,
         ],
         [
             'ticker' => 'SHER',
@@ -1473,7 +1401,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0090,
         ],
         [
             'ticker' => 'FULM',
@@ -1490,7 +1417,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0120,
         ],
         [
             'ticker' => 'EIDR',
@@ -1510,7 +1436,6 @@ class InitialMarket
             'public_float' => 0.80,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0120,
         ],
         [
             'ticker' => 'ERNE',
@@ -1529,7 +1454,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0100,
         ],
         [
             'ticker' => 'SNDR',
@@ -1548,7 +1472,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0100,
         ],
         [
             'ticker' => 'NUTH',
@@ -1568,7 +1491,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0110,
         ],
         [
             'ticker' => 'ALCA',
@@ -1588,7 +1510,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0080,
         ],
         [
             'ticker' => 'RAVN',
@@ -1608,7 +1529,6 @@ class InitialMarket
             'public_float' => 0.65,
             'floating_debt_ratio' => 0.20, // the cargo it finances: its opening working capital over its debt
             'historical_fixed_rate' => 0.038,
-            'credit_spread' => 0.0055,
         ],
         [
             'ticker' => 'HARR',
@@ -1629,7 +1549,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0040,
             'depreciation_rate' => 0.04,
         ],
         [
@@ -1649,7 +1568,6 @@ class InitialMarket
             'public_float' => 0.70,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.042,
-            'credit_spread' => 0.0060,
             // Its books are built on this character by its model (AssetManagementBusinessModel::resolveOpeningBooks()).
             'revenue' => 14_000_000_000.00,
             'retained_share' => 0.60,
@@ -1672,7 +1590,6 @@ class InitialMarket
             'public_float' => 0.80,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0070,
         ],
         [
             'ticker' => 'BOBY',
@@ -1692,7 +1609,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.036,
-            'credit_spread' => 0.0050,
         ],
         [
             'ticker' => 'MAGP',
@@ -1711,7 +1627,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0045,
         ],
         [
             'ticker' => 'PTAR',
@@ -1731,7 +1646,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0080,
         ],
         [
             'ticker' => 'WREN',
@@ -1751,7 +1665,6 @@ class InitialMarket
             'public_float' => 0.88,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.040,
-            'credit_spread' => 0.0080,
         ],
         [
             'ticker' => 'CHUF',
@@ -1771,7 +1684,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.042,
-            'credit_spread' => 0.0090,
             'depreciation_rate' => 0.07,
         ],
         [
@@ -1792,7 +1704,6 @@ class InitialMarket
             'public_float' => 0.82,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.048,
-            'credit_spread' => 0.0150,
             'depreciation_rate' => 0.07,
         ],
         [
@@ -1812,7 +1723,6 @@ class InitialMarket
             'public_float' => 0.70,
             'floating_debt_ratio' => 0.10,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0090,
             'depreciation_rate' => 0.05,
         ],
         [
@@ -1834,7 +1744,6 @@ class InitialMarket
             'public_float' => 0.80,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.060,
-            'credit_spread' => 0.0300,
         ],
         [
             'ticker' => 'FNCH',
@@ -1853,7 +1762,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.055,
-            'credit_spread' => 0.0200,
         ],
         [
             'ticker' => 'PELI',
@@ -1875,7 +1783,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.15,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0120,
             // Operating cash plus the claims float: about seven weeks of claims owed, invested until paid.
         ],
         [
@@ -1887,15 +1794,15 @@ class InitialMarket
             // Custodian of the Sovereign Reserve Fund and of most assets on Glasswater Row
             'systemic_importance' => 'systemic',
             'beta_tilt' => 0.25, // its fees are struck on market values
-            // Its moat is its industry's (narrow): ROE 12% at the opening, as State Street's 11% earned at 2019's
-            // low rates and the District's deposit franchise add to it
+            // One step over its industry's narrow moat: its deposit, securities and fee book already out-earns a
+            // narrow target before a loan is priced, as custodian of the District's reserves would
+            'moat' => 'moderate',
             'capex_ratio' => 0.10,
             'fixed_cost_ratio' => 0.60,
             'public_float' => 0.90,
             'addressable_share' => 0.34,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.030,
-            'credit_spread' => 0.0060,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
             'revenue' => 86_000_000_000.00,
             // Deposits are 94% of its funding, as State Street's 72% of assets on a tenth of them in equity
@@ -1918,7 +1825,6 @@ class InitialMarket
             'addressable_share' => 0.267,
             'floating_debt_ratio' => 0.80, // Inventory funded overnight in repo
             'historical_fixed_rate' => 0.035,
-            'credit_spread' => 0.0120,
             // Its books are built on this character by its model (BrokerageBusinessModel::resolveOpeningBooks()).
             'revenue' => 26_100_000_000.00,
             'retained_share' => 0.375,
@@ -1940,7 +1846,6 @@ class InitialMarket
             'addressable_share' => 0.40,
             'floating_debt_ratio' => 0.40,
             'historical_fixed_rate' => 0.030,
-            'credit_spread' => 0.0070,
             // Its books are built on this character by its model (CommercialBankBusinessModel::resolveOpeningBooks()).
             'revenue' => 34_700_000_000.00,
             // Julius Baer's balance sheet at 2019: deposits 71% of assets, equity 6.1%. The rest of a private bank's
@@ -1968,7 +1873,6 @@ class InitialMarket
             'public_float' => 0.45, // its mainland parent holds the rest
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0150,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -1987,7 +1891,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.050,
-            'credit_spread' => 0.0200,
             'depreciation_rate' => 0.045,
             // about 1.8 times EBITDA: a one-sigma gas slump halves it and must leave it under the 4.0 covenant
         ],
@@ -2008,7 +1911,6 @@ class InitialMarket
             'public_float' => 0.95,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0080,
         ],
         [
             'ticker' => 'KTWK',
@@ -2029,7 +1931,6 @@ class InitialMarket
             'public_float' => 0.85,
             'floating_debt_ratio' => 0.20,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0110,
         ],
         [
             'ticker' => 'GDWT',
@@ -2048,7 +1949,6 @@ class InitialMarket
             'public_float' => 0.90,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0090,
             'depreciation_rate' => 0.12,
         ],
         [
@@ -2069,7 +1969,6 @@ class InitialMarket
             'public_float' => 0.70,
             'floating_debt_ratio' => 0.30,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0130,
             'depreciation_rate' => 0.08,
         ],
         [
@@ -2090,7 +1989,6 @@ class InitialMarket
             'public_float' => 0.75,
             'floating_debt_ratio' => 0.25,
             'historical_fixed_rate' => 0.045,
-            'credit_spread' => 0.0080,
             'depreciation_rate' => 0.10,
         ],
     ];

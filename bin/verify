@@ -119,7 +119,16 @@ if [[ $mode == --full || ! -s $times ]]; then
         wait "${pids[$i]}" && continue
         failed=$((failed + 1))
         echo "Realism: ${realism[$i]#"$root"/} failed"
-        cat "$tmp/realism-$i.log"
+        lines=$(wc -l < "$tmp/realism-$i.log")
+        if (( lines > 60 )); then
+            mkdir -p "$(dirname "$times")"
+            saved="var/cache/verify/realism-failed-$(basename "${realism[$i]}" .php).log"
+            cp "$tmp/realism-$i.log" "$saved"
+            head -n 60 "$tmp/realism-$i.log"
+            echo "... ($(( lines - 60 )) more lines saved to $saved)"
+        else
+            cat "$tmp/realism-$i.log"
+        fi
     done
     echo "Realism: $(( ${#realism[@]} - failed )) of ${#realism[@]} files passed"
     (( failed )) && tests=1

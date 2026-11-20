@@ -15,6 +15,7 @@ use App\Service\Corporate\CapExEngine;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\TreasuryEngine;
+use App\Service\Math\CreditRisk;
 use App\Service\Math\MathUtility;
 use App\Service\Model\BusinessModelInterface;
 use App\Service\Model\Sector\CommercialBankBusinessModel;
@@ -1821,5 +1822,106 @@ class TreasuryEngineTest extends TestCase
         $large = (new Stock())->setCorporateTreasury('20000000000')->setGrossPpe('180000000000');
         $this->assertTrue(TreasuryEngine::isNewsworthy((new Stock())->setTotalEquity('20000000000'), 600_000_000.0));
         $this->assertFalse(TreasuryEngine::isNewsworthy($large, 600_000_000.0));
+    }
+
+    /**
+     * Junk deleveraging sweeps fire strictly when the dynamic spread exceeds the current rating's through-the-cycle
+     * baseline by more than 11bp — whether driven by credit-cycle widening or elevated spot volatility — and a mock
+     * DTO with a null baseline falls back to dynamicSpread so it never falsely triggers on Stock::$creditSpread.
+     */
+    public function testJunkDeleveragingSweepFiresWhenDynamicSpreadExceedsBaselineByMoreThanElevenBps(): void
+    {
+        $realMetrics = new CorporateMetrics();
+        $realDebtEngine = new DebtEngine($this->mathUtility, $realMetrics);
+        $engine = new TreasuryEngine($realMetrics, $realDebtEngine, $this->capExEngine, $this->mathUtility);
+        $strategy = new StandardCorporateBusinessModel();
+
+        $runSweep = function (float $macroCreditEma, string $spotVolatility, ?float $overrideNullBaselineSpread = null) use ($realDebtEngine, $engine, $strategy): float {
+            $stock = new Stock();
+            $stock->setTicker('JUNK');
+            $stock->setIndustry('General');
+            $stock->setCreditRating('BBB');
+            $stock->setTotalEquity('1000000000.00');
+            $stock->setRetainedEarnings('500000000.00');
+            $stock->setWholesaleDebt('900000000.00');
+            $stock->setCorporateTreasury('150000000.00');
+            $stock->setTotalRevenue('1000000000.00');
+            $stock->setOperatingMargin('0.20');
+            $stock->setBeta('1.00');
+            $stock->setVolatility('0.20');
+            $stock->setLeveredVolatility(0.20);
+            $stock->setCurrentVolatility($spotVolatility);
+            $stock->setHistoricalFixedRate('0.04');
+            $stock->setFloatingDebtRatio('0.30');
+            $stock->setSharesOutstanding('100000000');
+            $stock->setPrice('10.00');
+            // Far below BBB TTC (163.5bp) so an accidental fallback to Stock::$creditSpread would falsely trigger.
+            $stock->setCreditSpread('0.0015');
+
+            $macro = new MacroStateDTO(
+                policyRateEma: 0.04,
+                yield5yEma: 0.045,
+                macroCreditSpreadEma: $macroCreditEma,
+                macroCreditSpreadTrend: 0.015,
+                corporateTaxRate: 0.21,
+            );
+
+            $ctx = new CapitalAllocationContext(
+                stock: $stock,
+                macroState: $macro,
+                actualAnnualEps: 1.0,
+                quarterlyFcfPerShare: 0.25,
+                currentPrice: 10.0,
+                sharesOutstanding: 100_000_000,
+                actualTotalNetIncome: 0.0,
+            );
+            $ctx->strategy = $strategy;
+            $ctx->businessModel = 'none';
+            $ctx->quarterlyNetIncome = 0.0;
+            $ctx->newTreasury = 150_000_000.0;
+            $ctx->operatingBase = 1_000_000_000.0;
+            $ctx->wholesaleDebt = 900_000_000.0;
+            $ctx->customerDeposits = 0.0;
+            $ctx->totalPaid = 0.0;
+            $ctx->totalCashSpent = 0.0;
+            $ctx->debtActionTaken = false;
+
+            if ($overrideNullBaselineSpread !== null) {
+                $metrics = new DebtMetricsDTO(
+                    interestExpense: 50_000_000.0,
+                    blendedRate: 0.05,
+                    historicalFixedRate: 0.05,
+                    dynamicSpread: $overrideNullBaselineSpread,
+                    currentMarketRate: 0.05,
+                    wholesaleRate: 0.05,
+                    ebit: 200_000_000.0,
+                    revenue: 1_000_000_000.0,
+                    depreciation: 20_000_000.0,
+                    ebitda: 220_000_000.0,
+                );
+                // The real engine's tolerance for this firm, so junk status alone decides whether it sweeps.
+                $tolerance = $realDebtEngine->analyzeDebtHealth($stock, $macro)->debtTolerance;
+                $ctx->health = DebtHealthBuilder::healthy()->withDebtTolerance($tolerance)->withMetrics($metrics)->build();
+            } else {
+                $ctx->health = $realDebtEngine->analyzeDebtHealth($stock, $macro);
+                $this->assertFalse($ctx->health->wantsToPaydownDebt);
+            }
+
+            $engine->finalizeLiquidity($ctx);
+
+            return 900_000_000.0 - (float) $stock->getWholesaleDebt();
+        };
+
+        $bbbMult = CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'];
+
+        $this->assertSame(0.0, $runSweep(0.015, '0.20'), 'At trend and normal vol: no sweep even when stored creditSpread is 15bp.');
+        $this->assertSame(0.0, $runSweep(0.015 + (0.0010 / $bbbMult), '0.20'), '10bp cycle widening (<= 11bp): no sweep.');
+        $this->assertEqualsWithDelta(100_000_000.0, $runSweep(0.015 + (0.0012 / $bbbMult), '0.20'), 1.0, '12bp cycle widening alone (> 11bp): sweeps excess cash.');
+        $this->assertSame(0.0, $runSweep(0.015, '0.25'), '10bp volatility premium (<= 11bp): no sweep.');
+        $this->assertEqualsWithDelta(100_000_000.0, $runSweep(0.015, '0.27'), 1.0, '14bp volatility premium alone (> 11bp): sweeps excess cash.');
+        $this->assertSame(0.0, $runSweep(0.015, '0.20', 0.05), 'Null baselineSpread in a mock DTO reads dynamicSpread, never Stock::$creditSpread.');
+
+        $defaultHealth = DebtHealthBuilder::healthy()->build();
+        $this->assertSame($defaultHealth->rawMetrics->dynamicSpread, $defaultHealth->rawMetrics->baselineSpread);
     }
 }

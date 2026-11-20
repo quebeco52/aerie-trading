@@ -492,7 +492,6 @@ class CommercialBankBusinessModel extends BaseFinancialBusinessModel
             ->setSystemicImportance($seedRow['systemic_importance'] ?? 'none')
             ->setFloatingDebtRatio((string) $seedRow['floating_debt_ratio'])
             ->setHistoricalFixedRate((string) $seedRow['historical_fixed_rate'])
-            ->setCreditSpread((string) $seedRow['credit_spread'])
             ->setBaselineRoe((string) $books['baseline_roe']);
         if (isset($seedRow['operating_margin'])) {
             $stock->setOperatingMargin((string) $seedRow['operating_margin']);

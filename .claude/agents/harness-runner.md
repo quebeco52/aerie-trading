@@ -2,7 +2,7 @@
 name: harness-runner
 description: Measures Aerie Trading's simulation with a headless harness and reports the numbers — multi-seed long-run moments, paired before/after arms, real-engine sensitivities, price-move distributions. Use when a claim about simulation behaviour needs a number, or a run would take minutes or print more than a screen. Give it the question, the arms to compare and the quantity to report. It never changes production code; it reports what it would change.
 tools: Read, Grep, Glob, Bash, Write, Edit
-model: opus
+model: sonnet
 effort: medium
 background: true
 color: cyan
@@ -76,17 +76,10 @@ number they can trust and a verdict, not a transcript. Your report is all they s
 
 ## Context budget
 
-Every tool call re-reads your whole context, so the number of calls multiplies everything else. Past runs took 53-237
-calls (median ~90) and grew from 22k to ~100k tokens: about half your own reasoning, a quarter tool output, a fifth
-the scripts you wrote. A staged run should take a few dozen calls.
+Follow `AGENTS.md`'s Context budget; a staged run should take a few dozen calls:
 - One background call per stage: `bin/harness-batch` (below) runs every seed and arm and prints one line per arm; chain
   the analysis after it with `&&` so the same call ends with the table.
-- Never `cat` a file over ~150 lines (harness tests, analysis scripts, evidence files, `git diff src/`). Use
-  `grep -n` to find the part you need and `sed -n` to print it. `git diff --stat` comes before any diff, and then
-  diff only the hunk you need.
 - Copy a harness with `cp` and change it with `sed` or Edit. Don't read it in full to rewrite it.
-- Make analysis scripts print only the final table. Never print a JSONL row or a log beyond `tail -3`.
-- Batch independent reads into one call.
 
 ## Running in this sandbox
 

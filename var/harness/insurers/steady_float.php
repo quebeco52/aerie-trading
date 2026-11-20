@@ -90,7 +90,7 @@ foreach (InitialMarket::STOCKS as $row) {
     // Reported earnings carry the equity sleeve's dividends; its price gains go to book value (the mark).
     $sleeve = $model->resolveEquitySleeve($stock, $opening);
     $investment = $model->calculateInterestIncome($stock, $opening) - ($sleeve['value'] * ($sleeve['expected_return'] - BOARD_DIVIDEND_YIELD));
-    $interest = (float) $stock->getWholesaleDebt() * ((float) $row['historical_fixed_rate'] + (float) $row['credit_spread']);
+    $interest = (float) $stock->getWholesaleDebt() * DebtEngine::chargedWholesaleRate($stock, $opening, $model->getLossGivenDefault());
     $return = ($underwriting + $investment - $interest) * (1.0 - $tax) / max(1.0, (float) $stock->getTotalEquity());
 
     printf(

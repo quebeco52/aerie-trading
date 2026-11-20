@@ -15,11 +15,13 @@ use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
 use App\Service\Corporate\Holdings\AnchorStakeLedger;
+use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Pricing\LiquidityEngine;
 use App\Service\Market\Pricing\MarketEngine;
 use App\Service\Market\Pricing\OpeningBoardBuilder;
 use App\Service\Market\Pricing\SeedRows;
 use App\Service\Market\Pricing\VarianceBudget;
+use App\Service\Math\Decimal;
 use App\Service\Math\MacroConstants;
 use App\Service\Math\MathUtility;
 use App\Service\Math\Valuation;
@@ -401,5 +403,44 @@ class OpeningBoardBuilderTest extends TestCase
         $bankHighCtx = MarketPricingContext::forStock($bank, $openingMacro, $this->debtEngine->analyzeDebtHealth($bank, $openingMacro), $this->ledger);
 
         $this->assertEqualsWithDelta($bankOpenCtx->longTermVolatility, $bankHighCtx->longTermVolatility, 1e-12);
+    }
+
+    /**
+     * Every firm opens with its stored Stock::$creditSpread equal to its through-the-cycle spread at its converged
+     * opening rating, for pages and admin inspection.
+     */
+    public function testEveryFirmOpensWithStoredCreditSpreadEqualToThroughTheCycleSpreadAtItsOpeningRating(): void
+    {
+        $openingMacro = new MacroStateDTO();
+        $ratedDebtEngine = new DebtEngine($this->math, CorporateMetrics::getInstance(), new CreditRatingAgency());
+        $builder = new OpeningBoardBuilder($this->math, $ratedDebtEngine, $this->marketEngine, $this->ledger);
+
+        $board = [];
+        $spheres = [];
+        foreach (SeedRows::all() as $stockData) {
+            $stock = (new Stock())->setTicker($stockData['ticker']);
+            $sphere = $builder->open($stock, $stockData, $openingMacro);
+            if ($sphere !== null) {
+                $spheres[] = $sphere;
+            }
+            $board[$stockData['ticker']] = $stock;
+        }
+        $builder->openSpheres($spheres, $board, $openingMacro);
+
+        $seenRatings = [];
+        foreach ($board as $ticker => $stock) {
+            $seenRatings[$stock->getCreditRating()] = true;
+            $lgd = Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
+            $expectedTtc = DebtEngine::throughTheCycleCreditSpread($stock, $openingMacro, $lgd);
+
+            $this->assertSame(
+                Decimal::format($expectedTtc, 4),
+                $stock->getCreditSpread(),
+                "{$ticker} ({$stock->getCreditRating()}) opening stored creditSpread must match rounded TTC spread.",
+            );
+            $this->assertEqualsWithDelta($expectedTtc, (float) $stock->getCreditSpread(), 1e-4, $ticker);
+        }
+
+        $this->assertGreaterThanOrEqual(3, count($seenRatings), 'Opening ratings must span multiple classes.');
     }
 }

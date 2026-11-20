@@ -459,28 +459,6 @@ class CreditRiskTest extends TestCase
     }
 
     /**
-     * A seeded spread is split into the class it sits nearest and the multiple of that class it trades at: a firm
-     * seeded exactly on a class carries a multiple of one, a firm between two classes is read against the nearer in log
-     * distance, and a firm seeded inside AAA keeps the whole of its distance from the AAA spread.
-     */
-    public function testASeededSpreadIsReadAsAMultipleOfTheNearestClass(): void
-    {
-        $ig = MacroConstants::BASE_CREDIT_SPREAD;
-        $hy = $ig * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
-        $class = static fn(string $r): float => CreditRisk::calculateRatingClassSpread($r, $ig, $hy);
-
-        foreach (['AAA', 'A', 'BBB', 'BB', 'CCC'] as $rating) {
-            $this->assertEqualsWithDelta(1.0, CreditRisk::calculateIssuerSpreadMultiple($class($rating), $ig, $hy), 1e-12, "seeded on {$rating}");
-        }
-
-        $geometricMid = sqrt($class('A') * $class('BBB'));
-        $this->assertEqualsWithDelta(($geometricMid * 0.99) / $class('A'), CreditRisk::calculateIssuerSpreadMultiple($geometricMid * 0.99, $ig, $hy), 1e-12, 'just inside A is a multiple of A');
-        $this->assertEqualsWithDelta(($geometricMid * 1.01) / $class('BBB'), CreditRisk::calculateIssuerSpreadMultiple($geometricMid * 1.01, $ig, $hy), 1e-12, 'just inside BBB is a multiple of BBB');
-        $this->assertEqualsWithDelta(0.0015 / $class('AAA'), CreditRisk::calculateIssuerSpreadMultiple(0.0015, $ig, $hy), 1e-12, 'a firm seeded through AAA trades through every class it is rated into');
-        $this->assertSame(1.0, CreditRisk::calculateIssuerSpreadMultiple(0.0, $ig, $hy), 'no seeded spread, no premium');
-    }
-
-    /**
      * Only the default part of a class spread scales with recovery (Duffie & Singleton 1999): at the class's own LGD
      * the spread is unchanged, at half of it the default part halves while the non-default 40 bp (Longstaff, Mithal &
      * Neis
@@ -493,11 +471,6 @@ class CreditRiskTest extends TestCase
         $this->assertEqualsWithDelta($ell + (0.0200 - $ell) * 0.5, CreditRisk::calculateRecoveryAdjustedSpread(0.0200, 0.26, 0.52), 1e-15);
         $this->assertEqualsWithDelta(0.0030, CreditRisk::calculateRecoveryAdjustedSpread(0.0030, 0.26, 0.52), 1e-15);
         $this->assertGreaterThan(CreditRisk::calculateRecoveryAdjustedSpread(0.0442, 0.38, 0.52), CreditRisk::calculateRecoveryAdjustedSpread(0.0442, 0.52, 0.52), 'secured debt pays less');
-
-        $ig = MacroConstants::BASE_CREDIT_SPREAD;
-        $hy = $ig * MacroConstants::HY_BASE_SPREAD_MULTIPLIER;
-        $securedB = CreditRisk::calculateRecoveryAdjustedSpread(CreditRisk::calculateRatingClassSpread('B', $ig, $hy), 0.38, 0.52);
-        $this->assertEqualsWithDelta(1.0, CreditRisk::calculateIssuerSpreadMultiple($securedB, $ig, $hy, 0.38, 0.52), 1e-12, 'a secured issuer seeded on its own curve carries no premium');
     }
 
     /** @return iterable<string, array{float}> */

@@ -172,9 +172,9 @@ class Stock
     private string $wholesaleDebt = '0.0000';
 
     /**
-     * @var string The through-the-cycle spread the seed gave the firm. DebtEngine reads it only as the firm's own
-     *             multiple of the rating class it sits nearest (CreditRisk::calculateIssuerSpreadMultiple()); the level
-     *             comes from the firm's current rating.
+     * @var string Record of the firm's opening through-the-cycle spread at its opening rating, written by
+     *             OpeningBoardBuilder for pages and admin only. Not an engine input; borrowing and bond pricing read
+     *             the spread implied by the current rating via DebtEngine.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 5, scale: 4, options: ['default' => '0.0100'])]
     private string $creditSpread = '0.0100';
@@ -182,11 +182,10 @@ class Stock
     /**
      * The spread the firm's credit actually commands right now, over the sovereign curve.
      *
-     * Distinct from $creditSpread above, which is the spread the seed gave the firm and which DebtEngine reads
-     * only as the firm's premium over its class. This is what DebtEngine::resolveCreditSpread() produces each
-     * tick — its rating class's spread at today's credit indices, times that premium, plus the volatility
-     * premium — and it is persisted because the bond desk has to
-     * discount the firm's listed issues at it. Recomputing it there would put a second authority on what a
+     * Distinct from $creditSpread above, which is only the opening through-the-cycle record. This is what
+     * DebtEngine::resolveCreditSpread() produces each tick — its rating class's spread at today's credit indices,
+     * restated at the firm's own loss given default, plus the volatility premium — and it is persisted because the bond
+     * desk has to discount the firm's listed issues at it. Recomputing it there would put a second authority on what a
      * company's credit costs, and the two would disagree the first time either was retuned.
      */
     #[ORM\Column(type: Types::DECIMAL, precision: 10, scale: 6, options: ['default' => '0.010000'], updatable: false)]

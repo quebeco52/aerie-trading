@@ -83,7 +83,6 @@ final class SolvencyLiquidationInvariantTest extends TestCase
         $stock->setCorporateTreasury((string) $row['corporate_treasury']);
         $stock->setFloatingDebtRatio((string) $row['floating_debt_ratio']);
         $stock->setHistoricalFixedRate((string) $row['historical_fixed_rate']);
-        $stock->setCreditSpread((string) $row['credit_spread']);
         $stock->setDepreciationRate((string) $row['depreciation_rate']);
         $stock->setSamRatio((string) $row['sam_ratio']);
 

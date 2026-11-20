@@ -26,6 +26,12 @@ final class SeedRows
     // --- Row Defaults ---
     /** Shares every firm lists with (1bn): price levels differ by size, the share count does not. */
     public const SHARES_OUTSTANDING = 1_000_000_000;
+    /**
+     * Derived opening fields a seed row must never state; computed at opening from rating and LGD.
+     *
+     * @var list<string>
+     */
+    public const DERIVED_KEYS = ['credit_spread'];
 
     /** @var list<array<string, mixed>>|null The rows at the opening macro, in the seed's order. */
     private static ?array $opening = null;
@@ -42,6 +48,15 @@ final class SeedRows
     {
         if (!empty($row[self::RESOLVED])) {
             return $row;
+        }
+
+        $derived = array_intersect(self::DERIVED_KEYS, array_keys($row));
+        if ($derived !== []) {
+            throw new \DomainException(sprintf(
+                '%s states %s, which is derived at opening rather than seeded.',
+                (string) ($row['ticker'] ?? '?'),
+                implode(', ', $derived),
+            ));
         }
 
         IndustryRisks::assertRow($row);

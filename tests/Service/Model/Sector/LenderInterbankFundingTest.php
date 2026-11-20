@@ -173,9 +173,7 @@ final class LenderInterbankFundingTest extends TestCase
     }
 
     /**
-     * A lender funded by deposits and wholesale notes, or by wholesale alone, its fixed notes on a legacy coupon. It is
-     * rated a class below the one its seeded spread sits in, so DebtEngine charges it a spread other than the seeded
-     * one (1.79% against 1.20%), as the seed's re-rating does to BNTH.
+     * A lender funded by deposits and wholesale notes, or by wholesale alone, its fixed notes on a legacy coupon.
      */
     private function lender(string $industry, bool $takesDeposits): Stock
     {

@@ -27,6 +27,8 @@ final class RiskLadderHarnessTest extends BoardRun
     /** @var array<string, int> */
     private array $rvN = [];
     /** @var array<string, int> */
+    private array $sweeps = [];
+    /** @var array<string, int> */
     private array $mispGt25 = [];
     /** @var array<string, int> */
     private array $mispN = [];
@@ -149,8 +151,27 @@ final class RiskLadderHarnessTest extends BoardRun
         $row['ceps'] = $report->getConsensusEps() !== null ? (float) $report->getConsensusEps() : null;
         $row['reps'] = $report->getReportedEps() !== null ? (float) $report->getReportedEps() : null;
         $row['crev'] = $report->getConsensusRevenue() !== null ? (float) $report->getConsensusRevenue() : null;
+        // TreasuryEngine::processDeleveragingSweep()'s junk test: dynamic spread past the through-the-cycle spread
+        // at the current rating + 11bp, read on the trailing health at report time.
+        if ($this->debtEngine !== null && $this->currentMacro !== null) {
+            $mx = $this->debtEngine->analyzeTrailingDebtHealth($report->getStock(), $this->currentMacro)->rawMetrics;
+            $base = $mx->baselineSpread ?? $mx->dynamicSpread;
+            $row['dsp'] = round($mx->dynamicSpread, 6);
+            $row['bsp'] = round($base, 6);
+            $row['junk'] = $mx->dynamicSpread > $base + 0.0011;
+        }
 
         return $row;
+    }
+
+    /** Newsworthy forced-deleveraging sweeps ("Swept $X cash to aggressively deleverage"), per ticker. */
+    protected function onEvent(App\Entity\StockEvent $event): void
+    {
+        $n = preg_match_all('/aggressively deleverage/i', (string) $event->getDescription());
+        if ($n > 0) {
+            $t = $event->getStock()->getTicker();
+            $this->sweeps[$t] = ($this->sweeps[$t] ?? 0) + $n;
+        }
     }
 
     protected function record(array $record): array
@@ -190,6 +211,7 @@ final class RiskLadderHarnessTest extends BoardRun
             'rvol' => $rvol,
             'misp' => $misp,
             'yearly' => $yearlyOut,
+            'sweeps' => $this->sweeps,
         ];
     }
 }

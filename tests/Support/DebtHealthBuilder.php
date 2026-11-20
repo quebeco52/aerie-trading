@@ -85,6 +85,7 @@ final class DebtHealthBuilder
             revenue: 5000.0,
             depreciation: 100.0,
             ebitda: 1100.0,
+            baselineSpread: 0.01,
         );
     }
 

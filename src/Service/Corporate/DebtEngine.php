@@ -106,9 +106,6 @@ class DebtEngine
      */
     public const REVOLVER_DRAW_SPREAD_PENALTY = 0.01;
 
-    /** @var array<string, float> Each issuer's multiple of its rating class, keyed by its seeded spread and its LGD. */
-    private array $issuerMultiples = [];
-
     public function __construct(
         private MathUtility $mathUtility,
         private CorporateMetrics $corporateMetrics,
@@ -254,18 +251,18 @@ class DebtEngine
             $creditSpread = $this->resolveCreditSpread($stock, $macroState);
 
             return new \App\DTO\DebtMetricsDTO(
-                0.0,
-                0.0,
-                (float) $stock->getHistoricalFixedRate(),
-                $creditSpread,
-                $yield5y + $creditSpread,
-                $yield5y + $creditSpread,
-                $ebit,
-                $revenue,
-                $depreciation,
-                $ebitda,
-                $this->resolveCreditSpread($stock, $macroState, null, true),
-                self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState),
+                interestExpense: 0.0,
+                blendedRate: 0.0,
+                historicalFixedRate: (float) $stock->getHistoricalFixedRate(),
+                dynamicSpread: $creditSpread,
+                currentMarketRate: $yield5y + $creditSpread,
+                wholesaleRate: $yield5y + $creditSpread,
+                ebit: $ebit,
+                revenue: $revenue,
+                depreciation: $depreciation,
+                ebitda: $ebitda,
+                baselineSpread: $this->resolveCreditSpread($stock, $macroState, null, true),
+                marketIndexSpread: self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState),
             );
         }
 
@@ -303,18 +300,18 @@ class DebtEngine
         $trueBlendedRate = $debt > 1.0 ? ($interestExpense / $debt) : 0.0;
 
         return new \App\DTO\DebtMetricsDTO(
-            $interestExpense,
-            $trueBlendedRate,
-            $blendedFixedRate,
-            $dynamicSpread,
-            $currentMarketFixedRate,
-            $wholesaleRate,
-            $ebit,
-            $revenue,
-            $depreciation,
-            $ebitda,
-            $this->resolveCreditSpread($stock, $macroState, null, true),
-            self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState),
+            interestExpense: $interestExpense,
+            blendedRate: $trueBlendedRate,
+            historicalFixedRate: $blendedFixedRate,
+            dynamicSpread: $dynamicSpread,
+            currentMarketRate: $currentMarketFixedRate,
+            wholesaleRate: $wholesaleRate,
+            ebit: $ebit,
+            revenue: $revenue,
+            depreciation: $depreciation,
+            ebitda: $ebitda,
+            baselineSpread: $this->resolveCreditSpread($stock, $macroState, null, true),
+            marketIndexSpread: self::resolveMarketIndexSpread($stock->getCreditRating(), $macroState),
         );
     }
 
@@ -329,9 +326,9 @@ class DebtEngine
      *
      * Its rating class's spread today (CreditRisk::calculateRatingClassSpread: Jarrow, Lando & Turnbull 1997 rating
      * pricing, each class proportional to the market's IG or HY index, Ben Dor et al. 2007), its default part restated
-     * at the recovery the firm's own debt carries (calculateRecoveryAdjustedSpread), times the firm's own multiple of
-     * its class, read off the spread it was seeded at (calculateIssuerSpreadMultiple), plus the premium bondholders
-     * charge when the firm's equity volatility runs above its norm (Campbell & Taksler 2003). The common credit cycle
+     * at the recovery the firm's own debt carries (calculateRecoveryAdjustedSpread), plus the premium bondholders
+     * charge when the firm's equity volatility runs above its norm (Campbell & Taksler 2003). The rating already
+     * carries leverage, coverage and distance to default, so no seeded markup sits on top. The common credit cycle
      * arrives through the indices; leverage and default risk through the rating.
      *
      * @param string|null $rating          Rating to price at; the firm's own when null (a pro-forma one for a deal).
@@ -341,11 +338,8 @@ class DebtEngine
     public function resolveCreditSpread(Stock $stock, MacroStateDTO $macroState, ?string $rating = null, bool $throughTheCycle = false): float
     {
         $lossGivenDefault = \App\Data\Company\Sectors::strategyFor($stock->getIndustry())->getLossGivenDefault();
-        // Read off inputs fixed at seeding, so it is worked out once per issuer rather than on every tick.
-        $seededSpread = (float) $stock->getCreditSpread();
-        $issuerMultiple = $this->issuerMultiples["{$seededSpread}:{$lossGivenDefault}"] ??= self::issuerSpreadMultiple($seededSpread, $lossGivenDefault);
 
-        return self::priceIssuerSpread($stock, $macroState, $rating ?? $stock->getCreditRating(), $throughTheCycle, $lossGivenDefault, $issuerMultiple);
+        return self::priceIssuerSpread($stock, $macroState, $rating ?? $stock->getCreditRating(), $throughTheCycle, $lossGivenDefault);
     }
 
     /**
@@ -356,7 +350,7 @@ class DebtEngine
      */
     public static function throughTheCycleCreditSpread(Stock $stock, MacroStateDTO $macroState, float $lossGivenDefault): float
     {
-        return self::priceIssuerSpread($stock, $macroState, $stock->getCreditRating(), true, $lossGivenDefault, self::issuerSpreadMultiple((float) $stock->getCreditSpread(), $lossGivenDefault));
+        return self::priceIssuerSpread($stock, $macroState, $stock->getCreditRating(), true, $lossGivenDefault);
     }
 
     /**
@@ -376,20 +370,8 @@ class DebtEngine
         return ($floatingRatio * ($macroState->floatingReferenceRate() + $creditSpread)) + ((1.0 - $floatingRatio) * $fixedRate);
     }
 
-    /** The issuer's own multiple of its rating class, read off the spread it was seeded at. */
-    private static function issuerSpreadMultiple(float $seededSpread, float $lossGivenDefault): float
-    {
-        return CreditRisk::calculateIssuerSpreadMultiple(
-            $seededSpread,
-            MacroConstants::BASE_CREDIT_SPREAD,
-            MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER,
-            $lossGivenDefault,
-            self::CLASS_CURVE_LOSS_GIVEN_DEFAULT,
-        );
-    }
-
-    /** The body of resolveCreditSpread(), on the issuer's loss given default and class multiple. */
-    private static function priceIssuerSpread(Stock $stock, MacroStateDTO $macroState, string $rating, bool $throughTheCycle, float $lossGivenDefault, float $issuerMultiple): float
+    /** The body of resolveCreditSpread(), on the issuer's rating and loss given default. */
+    private static function priceIssuerSpread(Stock $stock, MacroStateDTO $macroState, string $rating, bool $throughTheCycle, float $lossGivenDefault): float
     {
         $igSpread = $macroState->macroCreditSpreadEma;
         $hySpread = $macroState->highYieldCreditSpreadEma;
@@ -400,7 +382,7 @@ class DebtEngine
         }
 
         $classSpread = CreditRisk::calculateRatingClassSpread($rating, $igSpread, $hySpread);
-        $spread = CreditRisk::calculateRecoveryAdjustedSpread($classSpread, $lossGivenDefault, self::CLASS_CURVE_LOSS_GIVEN_DEFAULT) * $issuerMultiple;
+        $spread = CreditRisk::calculateRecoveryAdjustedSpread($classSpread, $lossGivenDefault, self::CLASS_CURVE_LOSS_GIVEN_DEFAULT);
 
         if (!$throughTheCycle) {
             $structuralVolatility = $stock->getLeveredVolatility() ?? (float) $stock->getVolatility();

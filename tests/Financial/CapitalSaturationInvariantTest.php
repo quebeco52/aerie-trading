@@ -120,7 +120,6 @@ final class CapitalSaturationInvariantTest extends TestCase
         $stock->setCustomerDeposits((string) $row['customer_deposits']);
         $stock->setRetainedEarnings(\App\Service\Math\Decimal::of($row['retained_earnings']));
         $stock->setSamRatio((string) $row['sam_ratio']);
-        $stock->setCreditSpread((string) $row['credit_spread']);
         $stock->setHistoricalFixedRate((string) $row['historical_fixed_rate']);
         $stock->setPrice('100.00');
 

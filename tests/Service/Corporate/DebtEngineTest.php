@@ -13,6 +13,7 @@ use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Corporate\DebtEngine;
+use App\Service\Market\Bond\CorporateDefaultService;
 use App\Service\Market\Bond\CreditRatingAgency;
 use App\Service\Market\Pricing\VarianceBudget;
 use App\Service\Math\CreditRisk;
@@ -1424,17 +1425,17 @@ class DebtEngineTest extends TestCase
     }
 
     /**
-     * The floor carries the firm's OWN credit risk, so two hedges are not priced alike: a clearinghouse on a
-     * 40bp spread funds far more cheaply than a distressed-debt shop on 320bp, even though CAPM would put
-     * both below the risk-free rate. The old flat beta floor gave them an identical cost of equity.
+     * The floor carries the firm's OWN credit risk, so two hedges are not priced alike: a top-grade clearinghouse
+     * (AA) funds far more cheaply than a speculative distressed-debt shop (BB), even though CAPM would put both below
+     * the risk-free rate. The old flat beta floor gave them an identical cost of equity.
      */
     public function testTheEquityFloorCarriesTheFirmsOwnCreditRisk(): void
     {
         $engine = $this->costOfCapitalEngine();
         $macro = $this->neutralMacro();
 
-        $fortress = $engine->analyzeDebtHealth($this->leveredFirm('SAFE', '-0.10', '0.004'), $macro);
-        $distressed = $engine->analyzeDebtHealth($this->leveredFirm('JUNK', '-0.10', '0.032'), $macro);
+        $fortress = $engine->analyzeDebtHealth($this->leveredFirm('SAFE', '-0.10', '0.004')->setCreditRating('AA'), $macro);
+        $distressed = $engine->analyzeDebtHealth($this->leveredFirm('JUNK', '-0.10', '0.032')->setCreditRating('BB'), $macro);
 
         $this->assertGreaterThan(
             $fortress->costOfEquity,
@@ -2064,9 +2065,9 @@ class DebtEngineTest extends TestCase
     }
 
     /**
-     * The firm's spread is its class's multiple of the market index today, times its own seeded multiple of the class,
-     * so a wide market raises the cost of new debt and a tight one lowers it from the first basis point. The trend sets
-     * only the through-the-cycle baseline a widening is judged against, never the spread itself.
+     * The firm's spread is its rating class's spread at the market index today (restated at its LGD), with no seeded
+     * markup on top, so a wide market raises the cost of new debt and a tight one lowers it from the first basis
+     * point. The trend sets only the through-the-cycle baseline a widening is judged against, never the spread itself.
      */
     public function testTheSpreadIsTheClassMultipleOfTheIndexAndTheTrendSetsOnlyTheBaseline(): void
     {
@@ -2078,16 +2079,15 @@ class DebtEngineTest extends TestCase
             new MacroStateDTO(inflationEma: 0.02, policyRateEma: 0.04, yield5yEma: 0.045, macroCreditSpreadEma: $ema, macroCreditSpreadTrend: $trend, corporateTaxRate: 0.21),
         );
 
-        $multiple = static fn(float $seeded): float => CreditRisk::calculateIssuerSpreadMultiple($seeded, MacroConstants::BASE_CREDIT_SPREAD, MacroConstants::BASE_CREDIT_SPREAD * MacroConstants::HY_BASE_SPREAD_MULTIPLIER);
-        $bbb = CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * $multiple(0.0163);
-        $this->assertEqualsWithDelta($bbb * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'A firm seeded at the BBB spread trades at the BBB multiple of the index.');
+        $bbb = CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'];
+        $this->assertEqualsWithDelta($bbb * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'A BBB firm trades at the BBB multiple of the index.');
         $this->assertEqualsWithDelta($bbb * 0.012, $metrics(0.012, 0.015)->dynamicSpread, 1e-12, 'A tight market lowers the cost of new debt.');
         $this->assertEqualsWithDelta($metrics(0.019, 0.015)->dynamicSpread, $metrics(0.019, 0.018)->dynamicSpread, 1e-12, 'The trend does not move the spread.');
         $this->assertEqualsWithDelta($bbb * 0.015, $metrics(0.019, 0.015)->baselineSpread, 1e-12, 'It sets the through-the-cycle baseline.');
 
-        $stock->setCreditSpread('0.0200');
-        $this->assertEqualsWithDelta(0.0200 / (CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * 0.013), $multiple(0.0200), 1e-12, 'A seeded spread nearest the BBB class is read as a multiple of it.');
-        $this->assertEqualsWithDelta(CreditRisk::IG_CLASS_SPREAD_MULTIPLES['BBB'] * $multiple(0.0200) * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'A firm seeded wide of its class carries that multiple.');
+        $stock->setCreditSpread('0.0350');
+        $this->assertEqualsWithDelta($bbb * 0.019, $metrics(0.019, 0.015)->dynamicSpread, 1e-12, 'Changing stored creditSpread does not move the spread.');
+        $this->assertEqualsWithDelta($bbb * 0.015, $metrics(0.019, 0.015)->baselineSpread, 1e-12, 'Changing stored creditSpread does not move the baseline.');
     }
 
     /**
@@ -2259,9 +2259,9 @@ class DebtEngineTest extends TestCase
 
     /**
      * The class curves are quoted at senior unsecured recoveries. A hedge fund borrows from its prime broker against
-     * its portfolio, a secured claim. Seeded alike as a top credit and both rated B, the fund pays less than a sponsor
-     * whose notes are unsecured: the default part of its spread is scaled to the secured recovery. A seeded spread is
-     * read against the issuer's own recovery-adjusted curve, so the same seeding at the same class prices the same.
+     * its portfolio, a secured claim. At the same rating (B), the fund pays less than a sponsor whose notes are
+     * unsecured: the default part of its spread is scaled to the secured recovery, while unsecured notes pay the class
+     * curve directly.
      */
     public function testSecuredPrimeBrokerageFundingPaysLessThanUnsecuredNotesAtTheSameRating(): void
     {
@@ -2275,34 +2275,179 @@ class DebtEngineTest extends TestCase
             return $engine->resolveCreditSpread($stock, $macro);
         };
 
-        $secured = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_SECURED;
-        $unsecured = 1.0 - \App\Service\Market\Bond\CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
+        $secured = 1.0 - CorporateDefaultService::RECOVERY_SENIOR_SECURED;
+        $unsecured = 1.0 - CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
         $this->assertEqualsWithDelta($secured, Sectors::strategyFor('Hedge Fund')->getLossGivenDefault(), 1e-12);
         $this->assertEqualsWithDelta($unsecured, Sectors::strategyFor('Private Equity')->getLossGivenDefault(), 1e-12);
 
         $unsecuredSpread = $spreadFor('Private Equity');
         $hy = $macro->highYieldCreditSpreadEma;
         $classB = CreditRisk::calculateRatingClassSpread('B', $macro->macroCreditSpreadEma, $hy);
-        $this->assertEqualsWithDelta($classB * CreditRisk::calculateIssuerSpreadMultiple(0.0035, 0.013, 0.013 * 3.3), $unsecuredSpread, 1e-12, 'unsecured notes price on the class curve');
-        $this->assertLessThan($unsecuredSpread, $spreadFor('Hedge Fund'), 'secured funding pays less');
+        $this->assertEqualsWithDelta($classB, $unsecuredSpread, 1e-12, 'unsecured notes price on the class curve');
+        $this->assertEqualsWithDelta(
+            CreditRisk::calculateRecoveryAdjustedSpread($classB, $secured, $unsecured),
+            $spreadFor('Hedge Fund'),
+            1e-12,
+            'secured funding restates only the default part at secured LGD',
+        );
     }
 
     /**
-     * The issuer's multiple of its class is worked out once per seeded spread and recovery: a firm reseeded at another
-     * spread, or moved to a sector with another recovery, prices as an engine that never saw it before.
+     * Two firms identical except for the stored opening-record creditSpread pay the exact same dynamic and
+     * through-the-cycle spread at any rating and LGD.
      */
-    public function testTheIssuerMultipleFollowsAReseededSpreadAndRecovery(): void
+    public function testTwoIdenticalFirmsWithDifferentStoredSpreadsPayTheSameSpread(): void
     {
         $engine = $this->costOfCapitalEngine();
-        $macro = $this->neutralMacro();
-        $stock = $this->leveredFirm('MEMO', '1.00', '0.0035');
-        $stock->setCreditRating('BB');
-        $engine->resolveCreditSpread($stock, $macro);
+        $macro = new MacroStateDTO(
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            macroCreditSpreadEma: 0.021,
+            highYieldCreditSpreadEma: 0.068,
+            macroCreditSpreadTrend: 0.015,
+        );
 
-        $stock->setCreditSpread('0.0420');
-        $this->assertSame($this->costOfCapitalEngine()->resolveCreditSpread($stock, $macro), $engine->resolveCreditSpread($stock, $macro), 'a reseeded spread');
-        $stock->setIndustry('Hedge Fund');
-        $this->assertSame($this->costOfCapitalEngine()->resolveCreditSpread($stock, $macro), $engine->resolveCreditSpread($stock, $macro), 'another recovery');
+        foreach (['General', 'Hedge Fund'] as $industry) {
+            $lgd = Sectors::strategyFor($industry)->getLossGivenDefault();
+            foreach (['AAA', 'A', 'BBB', 'BB', 'B'] as $rating) {
+                $tight = $this->leveredFirm('TITE', '1.00', '0.0015');
+                $wide = $this->leveredFirm('WIDE', '1.00', '0.0350');
+                foreach ([$tight, $wide] as $firm) {
+                    $firm->setIndustry($industry);
+                    $firm->setCreditRating($rating);
+                    $firm->setVolatility('0.22');
+                    $firm->setLeveredVolatility(0.24);
+                    $firm->setCurrentVolatility('0.35');
+                }
+
+                $this->assertSame(
+                    $engine->resolveCreditSpread($tight, $macro),
+                    $engine->resolveCreditSpread($wide, $macro),
+                    "{$industry} {$rating} dynamic spread must ignore stored creditSpread",
+                );
+                $this->assertSame(
+                    $engine->resolveCreditSpread($tight, $macro, null, true),
+                    $engine->resolveCreditSpread($wide, $macro, null, true),
+                    "{$industry} {$rating} TTC spread must ignore stored creditSpread",
+                );
+                $this->assertSame(
+                    DebtEngine::throughTheCycleCreditSpread($tight, $macro, $lgd),
+                    DebtEngine::throughTheCycleCreditSpread($wide, $macro, $lgd),
+                    "{$industry} {$rating} static TTC spread must ignore stored creditSpread",
+                );
+            }
+        }
+    }
+
+    /**
+     * A firm's spread at a rating equals its rating class's spread restated at its LGD plus the volatility premium
+     * above max(20%, leveredVolatility), floored at MIN_BASELINE_CREDIT_SPREAD, to 1e-12.
+     */
+    public function testSpreadAtRatingEqualsRecoveryAdjustedClassSpreadPlusVolatilityPremium(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $classLgd = 1.0 - CorporateDefaultService::RECOVERY_SENIOR_UNSECURED;
+        $volThreshold = 0.20;
+        $volSensitivity = 0.02;
+        $minSpread = 0.0015;
+
+        // Exercise both calm (hits floor at AAA/low LGD) and wide markets, with zero and positive volatility premia.
+        $macros = [
+            'calm' => new MacroStateDTO(
+                policyRateEma: 0.03,
+                yield5yEma: 0.035,
+                macroCreditSpreadEma: 0.008,
+                highYieldCreditSpreadEma: 0.026,
+                macroCreditSpreadTrend: 0.015,
+            ),
+            'wide' => new MacroStateDTO(
+                policyRateEma: 0.04,
+                yield5yEma: 0.045,
+                macroCreditSpreadEma: 0.024,
+                highYieldCreditSpreadEma: 0.080,
+                macroCreditSpreadTrend: 0.015,
+            ),
+        ];
+
+        foreach ($macros as $regime => $macro) {
+            foreach (['General', 'Hedge Fund'] as $industry) {
+                $lgd = Sectors::strategyFor($industry)->getLossGivenDefault();
+                foreach (['AAA', 'A', 'BBB', 'BB', 'B'] as $rating) {
+                    foreach ([['0.18', 0.18, '0.18'], ['0.25', 0.25, '0.45']] as [$vol, $levVol, $spotVol]) {
+                        $stock = $this->leveredFirm('SPEC', '1.00', '0.0280');
+                        $stock->setIndustry($industry);
+                        $stock->setCreditRating($rating);
+                        $stock->setVolatility($vol);
+                        $stock->setLeveredVolatility($levVol);
+                        $stock->setCurrentVolatility($spotVol);
+
+                        $classDyn = CreditRisk::calculateRatingClassSpread($rating, $macro->macroCreditSpreadEma, $macro->highYieldCreditSpreadEma);
+                        $recDyn = CreditRisk::calculateRecoveryAdjustedSpread($classDyn, $lgd, $classLgd);
+                        $volPrem = max(0.0, ((float) $spotVol - max($volThreshold, $levVol)) * $volSensitivity);
+                        $expectedDyn = max($minSpread, $recDyn + $volPrem);
+
+                        $this->assertEqualsWithDelta(
+                            $expectedDyn,
+                            $engine->resolveCreditSpread($stock, $macro),
+                            1e-12,
+                            "{$regime} {$industry} {$rating} spot={$spotVol} dynamic spread",
+                        );
+
+                        $cycle = $macro->macroCreditSpreadTrend / $macro->macroCreditSpreadEma;
+                        $classTtc = CreditRisk::calculateRatingClassSpread(
+                            $rating,
+                            $macro->macroCreditSpreadEma * $cycle,
+                            $macro->highYieldCreditSpreadEma * $cycle,
+                        );
+                        $expectedTtc = max($minSpread, CreditRisk::calculateRecoveryAdjustedSpread($classTtc, $lgd, $classLgd));
+
+                        $this->assertEqualsWithDelta(
+                            $expectedTtc,
+                            DebtEngine::throughTheCycleCreditSpread($stock, $macro, $lgd),
+                            1e-12,
+                            "{$regime} {$industry} {$rating} through-the-cycle spread",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * analyzeDebtHealth() fills DebtMetricsDTO::$baselineSpread with throughTheCycleCreditSpread() at the firm's
+     * current rating for both indebted and debt-free balance sheets, regardless of stored creditSpread, cycle or vol
+     * shocks.
+     */
+    public function testBaselineSpreadEqualsThroughTheCycleCreditSpreadAtCurrentRating(): void
+    {
+        $engine = $this->costOfCapitalEngine();
+        $macro = new MacroStateDTO(
+            policyRateEma: 0.04,
+            yield5yEma: 0.045,
+            macroCreditSpreadEma: 0.028,
+            highYieldCreditSpreadEma: 0.092,
+            macroCreditSpreadTrend: 0.015,
+        );
+
+        foreach (['500000000', '0'] as $debt) {
+            foreach (['General' => 'BB', 'Hedge Fund' => 'A'] as $industry => $rating) {
+                $stock = $this->leveredFirm('BASE', '1.00', '0.0020');
+                $stock->setIndustry($industry);
+                $stock->setWholesaleDebt($debt);
+                $stock->setCreditRating($rating);
+                $stock->setVolatility('0.25');
+                $stock->setLeveredVolatility(0.25);
+                $stock->setCurrentVolatility('0.55');
+
+                $lgd = Sectors::strategyFor($industry)->getLossGivenDefault();
+                $expectedBaseline = DebtEngine::throughTheCycleCreditSpread($stock, $macro, $lgd);
+                $health = $engine->analyzeDebtHealth($stock, $macro);
+
+                $this->assertNotNull($health->rawMetrics->baselineSpread);
+                $this->assertEqualsWithDelta($expectedBaseline, $health->rawMetrics->baselineSpread, 1e-12, "{$industry} debt={$debt}");
+                $this->assertGreaterThan($health->rawMetrics->baselineSpread, $health->rawMetrics->dynamicSpread);
+            }
+        }
     }
 
     /**
