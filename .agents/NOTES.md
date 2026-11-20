@@ -163,6 +163,12 @@ wins; tell the user so the line can be fixed. Status and open work do not belong
   `MarketEngine`; corporate flow permanent impact 0; P/B above 10 on high-ROE firms; TERN and FALC drawdowns of
   -80 to -95%; lumpy revenue at TIER, SWAN, PTRL/KING, SKYL and CLAW; SINK's high peak margins (no price-linked
   royalty); IBIS building plant to hold share while revenue rides the pipeline.
+- REITs fade ~14% against GDP over 20 years (rent on net book wears faster than upkeep replaces); accepted 11-20.
+  Plan C (rent on market-price property capital, patch in `var/reit-plan-c-round2.patch`) was parked after two rounds:
+  with no moat a trust sits at NPV zero and a binary build gate flickers on ERP noise; growth needs new buildings
+  worth slightly more than cost, which rent rising on scarce space (DiPasquale-Wheaton) would give. A per-share DDM must
+  not grow a full-payout trust's dividend at the property's nominal growth (that is equity-funded); the consistent rate
+  is (inflation x P + retained AFFO) / NAV.
 
 ## Segments and industry outlook
 
