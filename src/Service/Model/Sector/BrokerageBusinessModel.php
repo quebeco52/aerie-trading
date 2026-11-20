@@ -116,15 +116,6 @@ class BrokerageBusinessModel extends BaseFinancialBusinessModel
         'sam_ratio',
     ];
 
-    // --- Opening Books ---
-    /** What a broker or dealer's seed row states when its books are built from its character (resolveOpeningBooks()). */
-    public const OPENING_CHARACTER_KEYS = ['revenue', 'operating_margin', 'addressable_share'];
-    /** What resolveOpeningBooks() builds, so a character row that also states one of them is refused. */
-    public const OPENING_BOOK_KEYS = [
-        'baseline_roe', 'total_equity', 'customer_deposits', 'wholesale_debt', 'corporate_treasury', 'retained_earnings',
-        'sam_ratio',
-    ];
-
     // --- Clearinghouse Liquidity Rules ---
     /** Target operating cash reserve ratio required to support clearinghouse margin and trade settlements. */
     public const TARGET_CASH_BACKING_RATIO = 0.15;
