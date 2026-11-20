@@ -15,35 +15,45 @@
 			{% block crumbs %}
 				<nav class="text-2xs text-on-surface-variant flex items-center gap-1 mb-3" aria-label="Breadcrumb">
 					<a href="{{ path('app_industries') }}" class="hover:text-on-surface hover:underline">Industries</a>
-					<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
-					<a href="{{ path('app_screener', {sector: industry.sector}) }}" class="hover:text-on-surface hover:underline">{{ industry.sector }}</a>
+					{% if industry.sector %}
+						<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
+						<a href="{{ path('app_screener', {sector: industry.sector}) }}" class="hover:text-on-surface hover:underline">{{ industry.sector }}</a>
+					{% endif %}
 					<span class="material-symbols-outlined text-sm" aria-hidden="true">chevron_right</span>
 					<span class="text-on-surface" aria-current="page">{{ industry.name }}</span>
 				</nav>
 			{% endblock %}
 			{% block lead %}
-				{{ industry.companies|length }} listed {{ industry.companies|length == 1 ? 'company has' : 'companies have' }} this as {{ industry.companies|length == 1 ? 'its' : 'their' }} main business{% if industry.entrants is not empty %}, and {{ industry.entrants|length }} more {{ industry.entrants|length == 1 ? 'sells' : 'sell' }} here from another industry{% endif %}. Figures are summed from their quarterly reports.
+				{% if industry.companies is empty %}
+					No listed company has this as its main business; {{ industry.entrants|length }} listed {{ industry.entrants|length == 1 ? 'company sells' : 'companies sell' }} here through a segment.
+				{% else %}
+					{{ industry.companies|length }} listed {{ industry.companies|length == 1 ? 'company has' : 'companies have' }} this as {{ industry.companies|length == 1 ? 'its' : 'their' }} main business{% if industry.entrants is not empty %}, and {{ industry.entrants|length }} more {{ industry.entrants|length == 1 ? 'sells' : 'sell' }} here from another industry{% endif %}. Figures are summed from their quarterly reports.
+				{% endif %}
 			{% endblock %}
 			{% block aside %}
 				{% import 'partials/_ui.html.twig' as ui %}
-				<dl class="grid grid-cols-3 gap-x-8">
-					{% if industry.pricesCapacity and latest and latest.priceGap is not null %}
-						{{ ui.figure('Price against balance', latest.priceGap|pct(1, true), {tone: latest.priceGap|abs >= constant('App\\Service\\View\\IndustryPageBuilder::PRICE_GAP_NOTED') ? 'text-warning' : 'text-on-surface', note: latest.label, tip: 'What the industry\'s output sold for against what it would fetch with just enough plant for demand. Above means too little plant; below, too much.'}) }}
-					{% endif %}
-					{% if latest and latest.building is not null %}
-						{{ ui.figure('Under construction', latest.building|pct(1), {note: 'of the plant standing'}) }}
-					{% endif %}
-					{% if industry.outlook %}
-						{{ ui.figure('Demand outlook', industry.outlook.level|figure('index', 2), {tone: (industry.outlook.level - 1)|round(2)|signed_class, note: '1.00 when trading opened', tip: 'What industry data lead the market to expect of demand for the whole industry in the long run, against what it expected when trading opened.'}) }}
-					{% endif %}
-				</dl>
+				{% if (industry.pricesCapacity and latest and latest.priceGap is not null) or (latest and latest.building is not null) or industry.outlook %}
+					<dl class="grid grid-cols-3 gap-x-8">
+						{% if industry.pricesCapacity and latest and latest.priceGap is not null %}
+							{{ ui.figure('Price against balance', latest.priceGap|pct(1, true), {tone: latest.priceGap|abs >= constant('App\\Service\\View\\IndustryPageBuilder::PRICE_GAP_NOTED') ? 'text-warning' : 'text-on-surface', note: latest.label, tip: 'What the industry\'s output sold for against what it would fetch with just enough plant for demand. Above means too little plant; below, too much.'}) }}
+						{% endif %}
+						{% if latest and latest.building is not null %}
+							{{ ui.figure('Under construction', latest.building|pct(1), {note: 'of the plant standing'}) }}
+						{% endif %}
+						{% if industry.outlook %}
+							{{ ui.figure('Demand outlook', industry.outlook.level|figure('index', 2), {tone: (industry.outlook.level - 1)|round(2)|signed_class, note: '1.00 when trading opened', tip: 'What industry data lead the market to expect of demand for the whole industry in the long run, against what it expected when trading opened.'}) }}
+						{% endif %}
+					</dl>
+				{% endif %}
 			{% endblock %}
 		{% endembed %}
 
-		{% if industry.sharedMarket %}
+		{% if industry.sharedMarket and (industry.marketSize is not null or industry.listedShare is not null) %}
 			<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
 				{% set marketSizeNote = industry.marketGdpShare is not null ? industry.marketGdpShare|pct(1) ~ ' of District GDP' : 'total annual market' %}
-				{% set peersNote = industry.companies|length ~ (industry.companies|length == 1 ? ' listed company' : ' listed companies') ~ (industry.entrants is not empty ? ' · ' ~ industry.entrants|length ~ (industry.entrants|length == 1 ? ' entrant' : ' entrants') : '') %}
+				{% set peersNote = industry.companies is empty
+					? industry.entrants|length ~ (industry.entrants|length == 1 ? ' segment seller' : ' segment sellers')
+					: industry.companies|length ~ (industry.companies|length == 1 ? ' listed company' : ' listed companies') ~ (industry.entrants is not empty ? ' · ' ~ industry.entrants|length ~ (industry.entrants|length == 1 ? ' entrant' : ' entrants') : '') %}
 				{% set hhiNote = industry.highlyConcentrated ? 'highly concentrated · above ' ~ industry.concentrationLine|hhi : 'below ' ~ industry.concentrationLine|hhi %}
 				{{ ui.tile('Market size', industry.marketSize|format_large('$'), marketSizeNote, {tone: industry.marketSize is null ? 'text-on-surface-faint' : 'text-on-surface'}) }}
 				{{ ui.tile('Listed share', industry.listedShare|pct(1), peersNote) }}
@@ -86,6 +96,9 @@
 				{% if industry.failed > 0 %}
 					<li>{{ industry.failed }} listed {{ industry.failed == 1 ? 'company' : 'companies' }} in it {{ industry.failed == 1 ? 'has' : 'have' }} failed.</li>
 				{% endif %}
+				{% if latest is null and industry.pricesCapacity and not (industry.outlook and industry.outlook.revision is not null) and industry.failed == 0 %}
+					<li>Quarterly figures appear once sellers file their reports.</li>
+				{% endif %}
 			</ul>
 		</section>
 
@@ -93,39 +106,41 @@
 			{% set showShareChange = industry.companies|length > 1 and industry.sharedMarket %}
 			<section class="bg-surface-container-low rounded-lg p-5 border border-outline-variant/20">
 				<h2 class="text-sm font-semibold text-on-surface mb-3">Companies</h2>
-				<div class="overflow-x-auto">
-					<table class="w-full text-xs">
-						<thead>
-							<tr class="table-head">
-								<th scope="col" class="text-left font-semibold pb-2">Company</th>
-								<th scope="col" class="text-right font-semibold pb-2">Market value</th>
-								<th scope="col" class="text-right font-semibold pb-2" title="Share of the industry's total market, listed and unlisted sellers together">Market share</th>
-								{% if showShareChange %}
-									<th scope="col" class="text-right font-semibold pb-2" title="Change in its share of the listed companies' reported sales over three years">3-year change</th>
-								{% endif %}
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-outline-variant/10">
-							{% for company in industry.companies %}
-								<tr>
-									<th scope="row" class="py-1.5 text-left font-normal"><a href="/stock/{{ company.ticker }}" class="hover:text-primary"><span class="font-mono font-semibold text-on-surface">{{ company.ticker }}</span> <span class="text-on-surface-variant">{{ company.name }}</span></a></th>
-									<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ company.marketValue|format_large('$') }}</td>
-									<td class="py-1.5 text-right font-mono tabular-nums {{ company.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ company.share is null ? '—' : company.share|pct(1) }}</td>
+				{% if industry.companies is not empty %}
+					<div class="overflow-x-auto">
+						<table class="w-full text-xs">
+							<thead>
+								<tr class="table-head">
+									<th scope="col" class="text-left font-semibold pb-2">Company</th>
+									<th scope="col" class="text-right font-semibold pb-2">Market value</th>
+									<th scope="col" class="text-right font-semibold pb-2" title="Share of the industry's total market, listed and unlisted sellers together">Market share</th>
 									{% if showShareChange %}
-										<td class="py-1.5 text-right font-mono tabular-nums {{ company.shareChange is null ? 'text-on-surface-faint' : company.shareChange|round(3)|signed_class }}">{{ company.shareChange is null ? '—' : company.shareChange|pp(1, true) }}</td>
+										<th scope="col" class="text-right font-semibold pb-2" title="Change in its share of the listed companies' reported sales over three years">3-year change</th>
 									{% endif %}
 								</tr>
-							{% endfor %}
-						</tbody>
-					</table>
-				</div>
+							</thead>
+							<tbody class="divide-y divide-outline-variant/10">
+								{% for company in industry.companies %}
+									<tr>
+										<th scope="row" class="py-1.5 text-left font-normal"><a href="/stock/{{ company.ticker }}" class="hover:text-primary"><span class="font-mono font-semibold text-on-surface">{{ company.ticker }}</span> <span class="text-on-surface-variant">{{ company.name }}</span></a></th>
+										<td class="py-1.5 text-right font-mono tabular-nums text-on-surface">{{ company.marketValue|format_large('$') }}</td>
+										<td class="py-1.5 text-right font-mono tabular-nums {{ company.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ company.share is null ? '—' : company.share|pct(1) }}</td>
+										{% if showShareChange %}
+											<td class="py-1.5 text-right font-mono tabular-nums {{ company.shareChange is null ? 'text-on-surface-faint' : company.shareChange|round(3)|signed_class }}">{{ company.shareChange is null ? '—' : company.shareChange|pp(1, true) }}</td>
+										{% endif %}
+									</tr>
+								{% endfor %}
+							</tbody>
+						</table>
+					</div>
+				{% endif %}
 				{% if industry.entrants is not empty %}
-					<h3 class="text-xs font-semibold text-on-surface-variant mt-5 mb-2">Also selling here from another industry</h3>
+					<h3 class="text-xs font-semibold text-on-surface-variant {{ industry.companies is empty ? 'mb-2' : 'mt-5 mb-2' }}">{{ industry.companies is empty ? 'Selling here through a segment' : 'Also selling here from another industry' }}</h3>
 					<ul class="space-y-1.5 text-xs">
 						{% for entrant in industry.entrants %}
 							<li class="flex items-center justify-between gap-3">
-								<span><a href="/stock/{{ entrant.ticker }}" class="font-mono font-semibold text-on-surface hover:text-primary">{{ entrant.ticker }}</a> <span class="text-on-surface-variant">{{ entrant.name }}, from <a href="{{ path('app_industry', {slug: entrant.homeSlug}) }}" class="hover:text-primary">{{ entrant.home }}</a></span></span>
-								<span class="font-mono tabular-nums text-on-surface">{{ entrant.share|pct(1) }}</span>
+								<span><a href="/stock/{{ entrant.ticker }}" class="font-mono font-semibold text-on-surface hover:text-primary">{{ entrant.ticker }}</a> <span class="text-on-surface-variant">{{ entrant.name }}, from <a href="{{ path('app_industry', {slug: entrant.homeSlug}) }}" class="hover:text-primary">{{ entrant.home }}</a>{% if entrant.segmentLabel is defined %} · {{ entrant.segmentLabel }}{% endif %}</span></span>
+								<span class="font-mono tabular-nums {{ entrant.share is null ? 'text-on-surface-faint' : 'text-on-surface' }}">{{ entrant.share is null ? '—' : entrant.share|pct(1) }}</span>
 							</li>
 						{% endfor %}
 					</ul>

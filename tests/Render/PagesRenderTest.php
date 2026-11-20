@@ -637,8 +637,23 @@ final class PagesRenderTest extends KernelTestCase
             ['name' => 'Banks - Regional', 'slug' => 'banks-regional', 'sector' => 'Financial Services', 'companies' => 2, 'marketSize' => 3.9e11, 'listedShare' => 0.57, 'herfindahl' => 0.1714, 'highlyConcentrated' => false, 'priceGap' => null, 'idle' => null, 'outlook' => null],
         ];
 
+        $segmentOnly = [
+            'name' => 'Information Technology Services', 'sector' => null, 'pricesCapacity' => true, 'isFinancial' => false, 'sharedMarket' => true,
+            'marketSize' => 2.4e11, 'marketGdpShare' => 0.04, 'listedShare' => 0.20, 'fringeShare' => 0.80,
+            'herfindahl' => 0.0152, 'highlyConcentrated' => false, 'concentrationLine' => 0.18, 'latest' => null,
+            'buildingYearAgo' => null, 'balance' => 'unknown', 'balanceTone' => 'neutral', 'capacityRatio' => null,
+            'mover' => null, 'outlook' => null, 'companies' => [],
+            'entrants' => [
+                ['ticker' => 'AVCT', 'name' => 'Avocet Assurance', 'home' => 'Consulting Services', 'homeSlug' => 'consulting-services', 'segmentLabel' => 'Technology programmes', 'share' => 0.10],
+                ['ticker' => 'GDWT', 'name' => 'Goodwit Advisory', 'home' => 'Consulting Services', 'homeSlug' => 'consulting-services', 'segmentLabel' => 'Technology programmes', 'share' => 0.06],
+                ['ticker' => 'TSTN', 'name' => 'Teststone Group', 'home' => 'Consulting Services', 'homeSlug' => 'consulting-services', 'segmentLabel' => 'Technology programmes', 'share' => 0.04],
+            ],
+            'failed' => 0, 'charts' => ['price' => null, 'plant' => null, 'margin' => null, 'shares' => null], 'stories' => [],
+        ];
+
         return [
             'industry' => ['/industry/auto-manufacturers', 'industry/view.html.twig', ['industry' => $industry]],
+            'industry-segment' => ['/industry/information-technology-services', 'industry/view.html.twig', ['industry' => $segmentOnly]],
             'industries' => ['/industries', 'industry/index.html.twig', ['industries' => $index]],
         ];
     }

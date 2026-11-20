@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Tests\Service\Corporate\Deal;
 
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\ManagementStyle;
 use App\Data\Company\Segments;
 use App\DTO\DebtMetricsDTO;
@@ -925,8 +926,9 @@ class AcquisitionEngineTest extends TestCase
     {
         $this->primeHealthyDeal(operatingBase: 15_000_000_000.0);
         $bank = $this->cashRichBank(wholesaleDebt: 100_000_000_000.0);
+        $bank->setIndustry('Banks - Regional');
         $ledger = new IndustryShareLedger(new InMemoryIndustryShareStore());
-        $ledger->recordIdiosyncraticGain($bank, 400_000_000_000.0, 0.0, 0.40, 290);
+        $ledger->recordIdiosyncraticGain($bank, 0.40 * IndustryMarkets::openingMarket('Banks - Regional'), 0.0, 0.40, 290);
         $engine = new AcquisitionEngine($this->marketEventPublisherMock, $this->debtEngineMock, $this->mathUtilityMock, $this->corporateMetricsMock, $ledger);
 
         $deal = $engine->evaluatePrivateAcquisition($bank, $this->healthyMacro(), 1.0, 300, 252);

@@ -263,6 +263,64 @@ class IndustryPositionBuilder
     }
 
     /**
+     * Whole-market structure for an industry whose listed sellers operate there only through segments (no listed firm
+     * has it as its main industry).
+     *
+     * @param list<array{stock: Stock, segment: string}> $sellers
+     * @return array{
+     *     sharedMarket: bool,
+     *     marketSize: float|null,
+     *     marketGdpShare: float|null,
+     *     shares: array<string, float>,
+     *     listedShare: float|null,
+     *     fringeShare: float|null,
+     *     herfindahl: float|null,
+     *     highlyConcentrated: bool,
+     *     concentrationLine: float,
+     *     listedCount: int
+     * }
+     */
+    public function segmentIndustryMarketStructure(string $industry, array $sellers, MacroStateDTO $macroState): array
+    {
+        $strategy = Sectors::strategyFor($industry);
+        $concentrationLine = MergerReview::reviewScreens($macroState->mergerReviewLeniency)['concentrated'];
+        $tick = (int) ($this->redis->get('simulation_tick_count') ?: 0);
+
+        $mergerMarket = null;
+        foreach ($sellers as $seller) {
+            $candidateMarket = $this->ledger->describeMergerMarket(
+                $seller['stock'],
+                $macroState,
+                IndustryShareLedger::secularExcessGrowth($strategy, $seller['stock']),
+                $tick,
+                $this->ticksPerYear,
+                $seller['segment'],
+            );
+            if ($candidateMarket !== null) {
+                $mergerMarket = $candidateMarket;
+                break;
+            }
+        }
+
+        if ($mergerMarket === null) {
+            return [
+                'sharedMarket' => true,
+                'marketSize' => null,
+                'marketGdpShare' => null,
+                'shares' => [],
+                'listedShare' => null,
+                'fringeShare' => null,
+                'herfindahl' => null,
+                'highlyConcentrated' => false,
+                'concentrationLine' => $concentrationLine,
+                'listedCount' => count($sellers),
+            ];
+        }
+
+        return $this->structureFromLedger($mergerMarket, $macroState, $concentrationLine);
+    }
+
+    /**
      * @param list<Stock> $liveStocks
      * @param array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float, shares: array<string, float>}|null $mergerMarket
      * @return array{
@@ -301,50 +359,113 @@ class IndustryPositionBuilder
         }
 
         if ($mergerMarket !== null) {
-            $shares = [];
-            foreach ($mergerMarket['shares'] as $recordKey => $share) {
-                $ticker = SegmentBooks::ownerOf((string) $recordKey);
-                $shares[$ticker] = ($shares[$ticker] ?? 0.0) + $share;
-            }
-            arsort($shares);
-            $marketSize = $mergerMarket['market_revenue'] > 0.0 ? $mergerMarket['market_revenue'] : null;
-            $listedShare = min(1.0, max(0.0, array_sum($shares)));
-            $fringeShare = $mergerMarket['fringe_share'];
-            $herfindahl = $mergerMarket['herfindahl'];
-            $listedCount = count($shares);
-        } else {
-            $shares = [];
-            foreach ($liveStocks as $member) {
-                $evalCap = $strategy->getEvaluationCapital((float) $member->getTotalEquity(), $member->getInvestedCapital());
-                $share = min(
-                    FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
-                    $this->corporateMetrics->calculateAddressableShare($member, $evalCap, $macroState),
-                );
-                if ($share > 0.0) {
-                    $shares[(string) $member->getTicker()] = $share;
-                }
-            }
-            arsort($shares);
-            $totalListed = array_sum($shares);
-            $listedShare = min(1.0, $totalListed);
-            $fringeShare = max(0.0, 1.0 - $totalListed);
-            $herfindahl = min(1.0, array_sum(array_map(static fn(float $s): float => $s * $s, $shares)));
-            if (IndustryMarkets::hasIndustry($industry)) {
-                $marketSize = IndustryMarkets::openingMarket($industry)
-                    * $macroState->nominalGdpIndex
-                    * CorporateMetrics::secularMarketGrowth($liveStocks[0], $macroState->totalTime);
-            } else {
-                $lead = $liveStocks[0];
-                $leadRev = (float) $lead->getTotalRevenue();
-                $leadShare = $shares[(string) $lead->getTicker()] ?? 0.0;
-                $marketSize = $leadRev > 0.0 && $leadShare > 0.0 ? $leadRev / $leadShare : null;
-            }
-            $listedCount = count($liveStocks);
+            return $this->structureFromLedger($mergerMarket, $macroState, $concentrationLine);
         }
 
-        $nominalGdp = MacroConstants::DISTRICT_GDP_USD * $macroState->nominalGdpIndex;
+        $shares = [];
+        foreach ($liveStocks as $member) {
+            $evalCap = $strategy->getEvaluationCapital((float) $member->getTotalEquity(), $member->getInvestedCapital());
+            $share = min(
+                FinancialConstants::MAX_ADDRESSABLE_MARKET_SHARE,
+                $this->corporateMetrics->calculateAddressableShare($member, $evalCap, $macroState),
+            );
+            if ($share > 0.0) {
+                $shares[(string) $member->getTicker()] = $share;
+            }
+        }
+        arsort($shares);
+        $totalListed = array_sum($shares);
+        $listedShare = min(1.0, $totalListed);
+        $fringeShare = max(0.0, 1.0 - $totalListed);
+        $herfindahl = min(1.0, array_sum(array_map(static fn(float $s): float => $s * $s, $shares)));
+        $trendGdp = IndustryShareLedger::trendNominalGdp($macroState);
+        if (IndustryMarkets::hasIndustry($industry)) {
+            $marketSize = IndustryMarkets::openingMarket($industry)
+                * $trendGdp
+                * CorporateMetrics::secularMarketGrowth($liveStocks[0], $macroState->totalTime);
+        } else {
+            $lead = $liveStocks[0];
+            $leadRev = (float) $lead->getTotalRevenue();
+            $leadShare = $shares[(string) $lead->getTicker()] ?? 0.0;
+            $marketSize = $leadRev > 0.0 && $leadShare > 0.0 ? $leadRev / $leadShare : null;
+        }
+
+        return $this->formatMarketStructure(
+            $marketSize,
+            $shares,
+            $listedShare,
+            $fringeShare,
+            $herfindahl,
+            $trendGdp,
+            $concentrationLine,
+            count($liveStocks),
+        );
+    }
+
+    /**
+     * @param array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float, shares: array<string, float>} $mergerMarket
+     * @return array{
+     *     sharedMarket: bool,
+     *     marketSize: float|null,
+     *     marketGdpShare: float|null,
+     *     shares: array<string, float>,
+     *     listedShare: float|null,
+     *     fringeShare: float|null,
+     *     herfindahl: float|null,
+     *     highlyConcentrated: bool,
+     *     concentrationLine: float,
+     *     listedCount: int
+     * }
+     */
+    private function structureFromLedger(array $mergerMarket, MacroStateDTO $macroState, float $concentrationLine): array
+    {
+        $shares = [];
+        foreach ($mergerMarket['shares'] as $recordKey => $share) {
+            $ticker = SegmentBooks::ownerOf((string) $recordKey);
+            $shares[$ticker] = ($shares[$ticker] ?? 0.0) + $share;
+        }
+        arsort($shares);
+        $marketSize = $mergerMarket['market_revenue'] > 0.0 ? $mergerMarket['market_revenue'] : null;
+
+        return $this->formatMarketStructure(
+            $marketSize,
+            $shares,
+            min(1.0, max(0.0, array_sum($shares))),
+            $mergerMarket['fringe_share'],
+            $mergerMarket['herfindahl'],
+            IndustryShareLedger::trendNominalGdp($macroState),
+            $concentrationLine,
+            count($shares),
+        );
+    }
+
+    /**
+     * @param array<string, float> $shares
+     * @return array{
+     *     sharedMarket: bool,
+     *     marketSize: float|null,
+     *     marketGdpShare: float|null,
+     *     shares: array<string, float>,
+     *     listedShare: float|null,
+     *     fringeShare: float|null,
+     *     herfindahl: float|null,
+     *     highlyConcentrated: bool,
+     *     concentrationLine: float,
+     *     listedCount: int
+     * }
+     */
+    private function formatMarketStructure(
+        ?float $marketSize,
+        array $shares,
+        float $listedShare,
+        float $fringeShare,
+        float $herfindahl,
+        float $trendGdpIndex,
+        float $concentrationLine,
+        int $listedCount,
+    ): array {
+        $nominalGdp = MacroConstants::DISTRICT_GDP_USD * $trendGdpIndex;
         $marketGdpShare = $marketSize !== null && $nominalGdp > 0.0 ? $marketSize / $nominalGdp : null;
-        $highlyConcentrated = $herfindahl > $concentrationLine;
 
         return [
             'sharedMarket' => true,
@@ -354,7 +475,7 @@ class IndustryPositionBuilder
             'listedShare' => $listedShare,
             'fringeShare' => $fringeShare,
             'herfindahl' => $herfindahl,
-            'highlyConcentrated' => $highlyConcentrated,
+            'highlyConcentrated' => $herfindahl > $concentrationLine,
             'concentrationLine' => $concentrationLine,
             'listedCount' => $listedCount,
         ];

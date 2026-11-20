@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Service\View;
 
 use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
 use App\Entity\Stock;
 use App\Entity\StockEvent;
 use App\Repository\CorporateReportRepository;
@@ -12,6 +13,7 @@ use App\Repository\StockEventRepository;
 use App\Repository\StockRepository;
 use App\Service\Corporate\Deal\MergerReview;
 use App\Service\Corporate\Industry\IndustryShareLedger;
+use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Macro\MacroStateProvider;
 use App\Service\News\EventPresenter;
 use App\Service\News\NewsCard;
@@ -102,7 +104,7 @@ final class IndustryPageBuilder
     }
 
     /**
-     * One industry's page, or null when no listed company has ever had it as its main business.
+     * One industry's page, or null when no listed company has ever sold into it as a main business or segment.
      *
      * @return array<string, mixed>|null
      */
@@ -110,7 +112,12 @@ final class IndustryPageBuilder
     {
         $all = $this->stocks->findBy(['industry' => $industry]);
         if ($all === []) {
-            return null;
+            $segmentSellers = $this->findSegmentSellers($industry);
+            if ($segmentSellers === []) {
+                return null;
+            }
+
+            return $this->buildSegmentOnlyIndustry($industry, $segmentSellers);
         }
         $live = array_values(array_filter($all, static fn(Stock $s): bool => !$s->isBankrupt()));
         $quarters = IndustryHistory::quarters($this->reports->findForStocksNewestFirst($all, self::HISTORY_QUARTERS));
@@ -185,6 +192,102 @@ final class IndustryPageBuilder
             'failed' => count($all) - count($live),
             'charts' => self::charts($quarters, $sharedMarket),
             'stories' => $this->stories($all),
+        ];
+    }
+
+    /**
+     * Live companies selling into an industry through a segment (either declared in Segments or entered in play),
+     * skipping any divested segment whose plant was sold off.
+     *
+     * @return list<array{stock: Stock, segment: string}>
+     */
+    private function findSegmentSellers(string $industry): array
+    {
+        $sellers = [];
+        foreach ($this->stocks->findAll() as $stock) {
+            if ($stock->isBankrupt()) {
+                continue;
+            }
+            $momentum = $stock->getEarningsMomentumZ() ?? [];
+            $hasPlant = SegmentBooks::plant($momentum) !== null;
+            $pending = SegmentBooks::pending($momentum);
+            foreach (SegmentBooks::industries($stock) as $segment => $segIndustry) {
+                if ($segment === Segments::MAIN || $segIndustry !== $industry) {
+                    continue;
+                }
+                if ($hasPlant && !SegmentBooks::holdsPlant($stock, $segment) && ($pending[$segment] ?? 0.0) <= 0.0) {
+                    continue;
+                }
+                $sellers[] = ['stock' => $stock, 'segment' => $segment];
+            }
+        }
+
+        return $sellers;
+    }
+
+    /**
+     * Industry page when no listed company has the industry as its main business, only secondary segments
+     * (either declared in Segments or entered in play).
+     *
+     * @param list<array{stock: Stock, segment: string}> $segmentSellers
+     * @return array<string, mixed>
+     */
+    private function buildSegmentOnlyIndustry(string $industry, array $segmentSellers): array
+    {
+        $macroState = $this->macroStateProvider->liveState();
+        $strategy = Sectors::strategyFor($industry);
+        $structure = $this->position->segmentIndustryMarketStructure($industry, $segmentSellers, $macroState);
+        $shares = $structure['shares'];
+
+        $byTicker = [];
+        foreach ($segmentSellers as ['stock' => $stock, 'segment' => $segment]) {
+            $ticker = (string) $stock->getTicker();
+            if (isset($byTicker[$ticker])) {
+                continue;
+            }
+            $byTicker[$ticker] = [
+                'ticker' => $ticker,
+                'name' => $stock->getName(),
+                'home' => (string) $stock->getIndustry(),
+                'homeSlug' => Sectors::industrySlug((string) $stock->getIndustry()),
+                'segmentLabel' => SegmentBooks::label($stock, $segment),
+                'share' => $shares[$ticker] ?? null,
+                'marketValue' => self::marketValue($stock),
+            ];
+        }
+        $entrants = array_values($byTicker);
+        usort($entrants, static fn(array $a, array $b): int => [$b['share'] ?? -1.0, $b['marketValue']] <=> [$a['share'] ?? -1.0, $a['marketValue']]);
+        $entrants = array_map(static function (array $e): array {
+            unset($e['marketValue']);
+
+            return $e;
+        }, $entrants);
+
+        return [
+            'name' => $industry,
+            'sector' => Sectors::INDUSTRY_SECTORS[$industry] ?? null,
+            'pricesCapacity' => !$strategy->isFinancial() && $strategy->getIndustrySubstitutability() > 0.0,
+            'isFinancial' => $strategy->isFinancial(),
+            'sharedMarket' => true,
+            'marketSize' => $structure['marketSize'],
+            'marketGdpShare' => $structure['marketGdpShare'],
+            'listedShare' => $structure['listedShare'],
+            'fringeShare' => $structure['fringeShare'],
+            'herfindahl' => $structure['herfindahl'],
+            'highlyConcentrated' => $structure['highlyConcentrated'],
+            'concentrationLine' => $structure['concentrationLine'],
+            'latest' => null,
+            'buildingYearAgo' => null,
+            'mover' => null,
+            'balance' => 'unknown',
+            'balanceTone' => 'neutral',
+            'capacityRatio' => null,
+            'outlook' => $this->ledger->describeOutlook($industry),
+            'companies' => [],
+            'entrants' => $entrants,
+            'failed' => 0,
+            'charts' => ['price' => null, 'plant' => null, 'margin' => null, 'shares' => null],
+            'stories' => [],
         ];
     }
 

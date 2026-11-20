@@ -155,6 +155,50 @@ final class IndustryPageBuilderTest extends TestCase
         );
     }
 
+    public function testSegmentOnlyIndustryBuildsBeforeAndAfterFilingsAndRejectsUnused(): void
+    {
+        $gdwt = $this->stock('GDWT', 'Goodwit Advisory', 'Consulting Services', 'Industrials', 120e9, 50e9);
+        $tstn = $this->stock('TSTN', 'Teststone Group', 'Consulting Services', 'Industrials', 40e9, 20e9);
+        $avct = $this->stock('AVCT', 'Avocet Assurance', 'Consulting Services', 'Industrials', 180e9, 80e9);
+
+        // Pre-filing: all three Consulting firms with an IT Services segment appear cleanly with unknown shares.
+        $pre = $this->builder([$gdwt, $tstn, $avct], tick: 0)->build('Information Technology Services');
+        $this->assertNotNull($pre);
+        $this->assertNull($pre['sector']);
+        $this->assertSame([], $pre['companies']);
+        $this->assertCount(3, $pre['entrants']);
+        $this->assertNull($pre['marketSize']);
+        $this->assertNull($pre['listedShare']);
+        foreach ($pre['entrants'] as $entrant) {
+            $this->assertNull($entrant['share']);
+            $this->assertSame('Technology programmes', $entrant['segmentLabel']);
+        }
+
+        // Post-filing: shares across the three segment sellers plus the unlisted fringe sum to 1.0.
+        $momentum = SegmentBooks::open([Segments::MAIN => 0.7, 'technology' => 0.3], 1.0, []);
+        $gdwt->setEarningsMomentumZ($momentum);
+        $tstn->setEarningsMomentumZ($momentum);
+        $avct->setEarningsMomentumZ($momentum);
+        $this->ledger->resolveSegmentSupply($avct, 'technology', 1_000.0, 1_000.0, 0.10, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveSegmentSupply($gdwt, 'technology', 600.0, 600.0, 0.06, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveSegmentSupply($tstn, 'technology', 400.0, 400.0, 0.04, 1.0, 0.0, 0.0, 10, 252);
+
+        $live = $this->builder([$gdwt, $tstn, $avct], tick: 20)->build('Information Technology Services');
+        $this->assertNotNull($live);
+        $this->assertEqualsWithDelta(10_000.0, $live['marketSize'], 1e-6);
+        $this->assertEqualsWithDelta(0.20, $live['listedShare'], 1e-9);
+        $this->assertEqualsWithDelta(0.80, $live['fringeShare'], 1e-9);
+        $this->assertEqualsWithDelta((0.10 ** 2) + (0.06 ** 2) + (0.04 ** 2), $live['herfindahl'], 1e-12);
+        $this->assertSame(['AVCT', 'GDWT', 'TSTN'], array_column($live['entrants'], 'ticker'));
+        $this->assertEqualsWithDelta(
+            1.0,
+            array_sum(array_column($live['entrants'], 'share')) + $live['fringeShare'],
+            1e-9,
+        );
+
+        $this->assertNull($this->builder([$gdwt, $tstn, $avct], tick: 0)->build('No Such Trade'));
+    }
+
     /**
      * @param list<Stock>           $allStocks
      * @param list<CorporateReport> $reports
@@ -162,6 +206,7 @@ final class IndustryPageBuilderTest extends TestCase
     private function builder(array $allStocks, array $reports = [], int $tick = 100): IndustryPageBuilder
     {
         $stocksRepo = $this->createStub(StockRepository::class);
+        $stocksRepo->method('findAll')->willReturn($allStocks);
         $stocksRepo->method('findBy')->willReturnCallback(static function (array $criteria) use ($allStocks): array {
             if (!isset($criteria['industry'])) {
                 return $allStocks;

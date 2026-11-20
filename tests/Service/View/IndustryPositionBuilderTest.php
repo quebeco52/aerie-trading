@@ -144,10 +144,11 @@ class IndustryPositionBuilderTest extends TestCase
 
     public function testALenderIsNotPricedOnCapacityButStillHasAShareOfItsIndustry(): void
     {
-        $bank = $this->stock('BNK', 'Banks - Regional', 500.0);
-        $peer = $this->stock('BNQ', 'Banks - Regional', 1_500.0);
-        $this->ledger->recordIdiosyncraticGain($bank, 500.0, 0.0, 0.10, 10);
-        $this->ledger->recordIdiosyncraticGain($peer, 1_500.0, 0.0, 0.30, 10);
+        $marketSize = IndustryMarkets::openingMarket('Banks - Regional');
+        $bank = $this->stock('BNK', 'Banks - Regional', 0.10 * $marketSize);
+        $peer = $this->stock('BNQ', 'Banks - Regional', 0.30 * $marketSize);
+        $this->ledger->recordIdiosyncraticGain($bank, 0.10 * $marketSize, 0.0, 0.10, 10);
+        $this->ledger->recordIdiosyncraticGain($peer, 0.30 * $marketSize, 0.0, 0.25, 10);
 
         $view = $this->builder(null)->build($bank, new MacroStateDTO());
 
@@ -163,7 +164,7 @@ class IndustryPositionBuilderTest extends TestCase
         $this->assertEqualsWithDelta(0.40, $view['industry']['listedShare'], 1e-9);
         $this->assertEqualsWithDelta(0.60, $view['industry']['fringeShare'], 1e-9);
         $this->assertEqualsWithDelta(0.10, $view['industry']['herfindahl'], 1e-9);
-        $this->assertEqualsWithDelta(5_000.0, $view['industry']['marketSize'], 1e-6);
+        $this->assertEqualsWithDelta($marketSize, $view['industry']['marketSize'], 1e-3);
         $this->assertNull($view['industry']['priceMove'], 'no report has been filed yet');
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Service\Corporate\Industry;
 
+use App\Data\Company\IndustryMarkets;
 use App\Data\Company\Sectors;
 use App\Data\Company\Segments;
 use App\DTO\MacroStateDTO;
@@ -964,7 +965,7 @@ class IndustryShareLedger
         }
         [$industry, $ticker] = $address;
         if ((float) ($own['anchor_capacity_share'] ?? 0.0) <= 0.0 || (float) ($own['anchor_demand_share'] ?? 0.0) <= 0.0) {
-            return $this->describeRevenueMarket($industry, $ticker, $own, $tick, $ticksPerYear);
+            return $this->describeRevenueMarket($industry, $ticker, $own, $macroState, $secularExcessGrowth, $tick, $ticksPerYear);
         }
 
         $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, $industry));
@@ -980,34 +981,54 @@ class IndustryShareLedger
     }
 
     /**
-     * A market measured in revenue: the firm's own annual revenue over its addressable share sizes it, and
-     * every rival that has reported within the year holds its revenue's share of it (the same sizing the
-     * rival drain reads, fringeRevenue). Null until the firm has reported a share and a revenue.
+     * A market measured in revenue: board industries size on their shared IndustryMarkets opening scale grown along
+     * trend nominal GDP, secular excess growth and public outlook belief, floored at the sum of active listed
+     * revenues so peers agree on one market regardless of equity-vs-revenue drift and listed shares never exceed 100%.
+     * Industries outside IndustryMarkets fall back to own revenue over own addressable share, floored the same way.
      *
      * @param ShareRecord $own
      * @return array{market_revenue: float, acquirer_share: float, herfindahl: float, fringe_share: float, shares: array<string, float>}|null
      */
-    private function describeRevenueMarket(string $industry, string $ticker, array $own, int $tick, int $ticksPerYear): ?array
-    {
+    private function describeRevenueMarket(
+        string $industry,
+        string $ticker,
+        array $own,
+        MacroStateDTO $macroState,
+        float $secularExcessGrowth,
+        int $tick,
+        int $ticksPerYear,
+    ): ?array {
         $ownShare = min(1.0, (float) ($own['addressable_share'] ?? 0.0));
         $ownRevenue = (float) ($own['revenue'] ?? 0.0);
         if ($ownShare <= 0.0 || $ownRevenue <= 0.0) {
             return null;
         }
 
-        $marketRevenue = $ownRevenue / $ownShare;
-        $shares = [$ticker => $ownShare];
+        $revenues = [$ticker => $ownRevenue];
         foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
             $revenue = (float) ($record['revenue'] ?? 0.0);
             if ($peerTicker === $ticker || $revenue <= 0.0 || $tick - (int) $record['tick'] > $ticksPerYear) {
                 continue;
             }
-            $shares[(string) $peerTicker] = $revenue / $marketRevenue;
+            $revenues[(string) $peerTicker] = $revenue;
         }
+        $listedRevenue = array_sum($revenues);
+
+        if (IndustryMarkets::hasIndustry($industry)) {
+            $growth = self::trendNominalGdp($macroState) * exp(
+                TimeSeries::fadedExcessIntegral($secularExcessGrowth, 0.0, $macroState->totalTime, FinancialConstants::SECULAR_EXCESS_HALF_LIFE_YEARS)
+                + $this->outlook($industry)['belief'],
+            );
+            $marketRevenue = max($listedRevenue, IndustryMarkets::openingMarket($industry) * $growth);
+        } else {
+            $marketRevenue = max($listedRevenue, $ownRevenue / $ownShare);
+        }
+
+        $shares = array_map(static fn(float $r): float => $r / $marketRevenue, $revenues);
 
         return [
             'market_revenue' => $marketRevenue,
-            'acquirer_share' => $ownShare,
+            'acquirer_share' => min(1.0, $shares[$ticker]),
             'herfindahl'     => min(1.0, array_sum(array_map(static fn(float $share): float => $share * $share, $shares))),
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
             'shares'         => $shares,
