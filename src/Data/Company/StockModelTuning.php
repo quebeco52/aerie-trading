@@ -352,12 +352,13 @@ class StockModelTuning
             ModelParam::PricingPowerIndex->value      => 0.75, // Standard-essential patent (SEP) monopoly leverage
         ],
 
-        // --- Weaver Marketplace (WEAV) --- Massive third-party ecosystem (the profit engine) blended with volatile
-        // first-party retail (the scale engine).
+        // --- Weaver Marketplace (WEAV) --- Massive third-party ecosystem blended with first-party retail, seller ads
+        // and cloud computing.
         'WEAV' => [
-            ModelParam::ThirdPartyWeight->value         => 0.45,
-            ModelParam::FirstPartyWeight->value         => 0.30,
-            ModelParam::DigitalAdsWeight->value         => 0.25,
+            ModelParam::ThirdPartyWeight->value          => 0.45,
+            ModelParam::FirstPartyWeight->value          => 0.30,
+            ModelParam::DigitalAdsWeight->value          => 0.10,
+            ModelParam::CloudInfrastructureWeight->value => 0.15,
         ],
 
         // --- Jackdaw Bazaar (JDAW) ---

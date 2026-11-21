@@ -23,12 +23,13 @@ use App\Service\Model\ModelParam;
  * Earnings strategy for Internet Retail & Digital Marketplace Megacorporations.
  *
  * Financial Physics:
- * - Tri-Stream Architecture:
+ * - Multi-Stream Architecture:
  *      1. 1st-Party Retail: Buys and sells physical inventory. Low margin, highly exposed to supply chain inflation and
  *         recessions.
  *      2. 3rd-Party Fulfillment (The Tollbooth): Charges independent vendors to use their logistics. High margin, high
  *         volume.
- *      3. Digital Advertising / Cloud: Monetizes consumer data. Near-100% margin, zero physical overhead.
+ *      3. Digital Advertising: Monetizes shopper traffic. High margin, low variable cost.
+ *      4. Cloud Infrastructure (optional): Usage-billed compute rented on enterprise contracts alongside tech rivals.
  * - Margin Cross-Subsidization: The retail division runs at a near loss to dominate market share, subsidized by Ads and
  *   3P fees.
  * - Tail Risk: Labor unionization strikes in fulfillment centers, or sovereign antitrust breakups.
@@ -76,10 +77,12 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
      */
     public const FIRST_PARTY_LEASE_INTENSITY = 0.30;
     /**
-     * The ad and cloud book's leases over its revenue: leased data-centre halls at a platform's 0.10. The marketplace
-     * leases offices only, at the default.
+     * The ad book's leases over its revenue: data-centre halls at a platform's 0.10. The marketplace leases offices
+     * only, at the default.
      */
     public const DIGITAL_ADS_LEASE_INTENSITY = 0.10;
+    /** Cloud infrastructure's leases over its revenue: colocation and data-centre halls alongside tech platforms. */
+    public const CLOUD_LEASE_INTENSITY = TechBusinessModel::LEASE_LIABILITY_INTENSITY;
     /**
      * Stock-based compensation (ASC 718) as a share of revenue: 4.18% at the lead US marketplace, $24.0B of $574.8B
      * (Amazon 10-K, FY2023); Damodaran files online retail inside Retail (General).
@@ -138,67 +141,93 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             + MacroTransmission::gdpShareDrift(self::RETAIL_SHARE_1997, self::RETAIL_SHARE_2019, FinancialConstants::SECULAR_SHARE_WINDOW_YEARS);
     }
 
-    // --- Tri-Stream Architecture Weights ---
+    // --- Stream Mix Defaults ---
     public const FIRST_PARTY_WEIGHT  = 0.45;
     public const THIRD_PARTY_WEIGHT  = 0.40;
     public const DIGITAL_ADS_WEIGHT  = 0.15;
+    /** Optional cloud computing book: 0 by default so pure marketplace peers stay three-stream. */
+    public const CLOUD_INFRASTRUCTURE_WEIGHT = 0.0;
 
     // --- Working Capital by Stream (shares of the stream's revenue) ---
     /** First-party retail: card takings in ~7 days, ~44 days of sales in stock, suppliers paid in ~73 days of sales. */
     public const FIRST_PARTY_WORKING_CAPITAL = ['receivables' => 0.02, 'inventory' => 0.12, 'payables' => 0.20];
     /** Marketplace: no stock; the sellers' takings held about two weeks, ~44 days of the fees it keeps. */
     public const THIRD_PARTY_WORKING_CAPITAL = ['receivables' => 0.02, 'inventory' => 0.0, 'payables' => 0.12];
-    /** Ads and cloud: advertisers and tenants billed on ~55-day terms, suppliers paid in ~18 days of sales. */
+    /** Advertising: advertisers billed on ~55-day terms, suppliers paid in ~18 days of sales. */
     public const DIGITAL_ADS_WORKING_CAPITAL = ['receivables' => 0.15, 'inventory' => 0.0, 'payables' => 0.05];
+    /** Cloud infrastructure: usage billed in arrears on ~55-day terms, data-centre suppliers paid in ~29 days. */
+    public const CLOUD_WORKING_CAPITAL = TechBusinessModel::CLOUD_WORKING_CAPITAL;
 
     /**
-     * The shop holds stock and owes its suppliers, the marketplace owes its sellers, and the ad book is owed by
-     * advertisers.
+     * The shop holds stock and owes its suppliers, the marketplace owes its sellers, and the ad and cloud books are
+     * owed by enterprise and advertising customers.
      */
     protected function resolveWorkingCapitalShares(Stock $stock): array
     {
         return FirmEconomics::blendWorkingCapitalShares(
             $this->resolveTargetStreamWeights($stock),
-            [self::FIRST_PARTY_WORKING_CAPITAL, self::THIRD_PARTY_WORKING_CAPITAL, self::DIGITAL_ADS_WORKING_CAPITAL],
+            [
+                self::FIRST_PARTY_WORKING_CAPITAL,
+                self::THIRD_PARTY_WORKING_CAPITAL,
+                self::DIGITAL_ADS_WORKING_CAPITAL,
+                self::CLOUD_WORKING_CAPITAL,
+            ],
         );
     }
 
     /**
-     * Leases follow the streams that run on leased space: the first-party warehouses and the data halls, not the
-     * marketplace.
+     * Leases follow the streams that run on leased space: the first-party warehouses, data halls and colocation racks,
+     * not the marketplace.
      */
     public function getLeaseIntensity(Stock $stock): float
     {
         return FirmEconomics::revenueWeightedRatio(
             $this->resolveTargetStreamWeights($stock),
-            [self::FIRST_PARTY_LEASE_INTENSITY, AbstractBusinessModel::LEASE_LIABILITY_INTENSITY, self::DIGITAL_ADS_LEASE_INTENSITY],
+            [
+                self::FIRST_PARTY_LEASE_INTENSITY,
+                AbstractBusinessModel::LEASE_LIABILITY_INTENSITY,
+                self::DIGITAL_ADS_LEASE_INTENSITY,
+                self::CLOUD_LEASE_INTENSITY,
+            ],
         );
     }
 
     /**
-     * The firm's target mix, first party, marketplace and ads in that order.
+     * The firm's target mix: first party, marketplace, ads and optional cloud computing in that order.
      *
      * @return list<float>
      */
     private function resolveTargetStreamWeights(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::FirstPartyWeight->value => self::FIRST_PARTY_WEIGHT,
-            ModelParam::ThirdPartyWeight->value => self::THIRD_PARTY_WEIGHT,
-            ModelParam::DigitalAdsWeight->value => self::DIGITAL_ADS_WEIGHT,
+            ModelParam::FirstPartyWeight->value          => self::FIRST_PARTY_WEIGHT,
+            ModelParam::ThirdPartyWeight->value          => self::THIRD_PARTY_WEIGHT,
+            ModelParam::DigitalAdsWeight->value          => self::DIGITAL_ADS_WEIGHT,
+            ModelParam::CloudInfrastructureWeight->value => self::CLOUD_INFRASTRUCTURE_WEIGHT,
         ]);
 
-        return [$params[ModelParam::FirstPartyWeight], $params[ModelParam::ThirdPartyWeight], $params[ModelParam::DigitalAdsWeight]];
+        return [
+            $params[ModelParam::FirstPartyWeight],
+            $params[ModelParam::ThirdPartyWeight],
+            $params[ModelParam::DigitalAdsWeight],
+            $params[ModelParam::CloudInfrastructureWeight],
+        ];
     }
 
     // --- Stream Variance Scalars ---
     public const FIRST_PARTY_VARIANCE = 0.35; // Highly cyclical (consumers stop buying TVs in a recession)
     public const THIRD_PARTY_VARIANCE = 0.15; // Sticky (vendors must pay the toll to survive)
     public const DIGITAL_ADS_VARIANCE = 0.25; // Scales aggressively with platform traffic
+    /** Usage-billed enterprise cloud demand variance scalar (~0.15, matching sticky commercial contracts). */
+    public const CLOUD_INFRASTRUCTURE_VARIANCE = 0.15;
 
     // --- Margin Architecture ---
     public const THIRD_PARTY_COST_RATIO = 0.40; // Moderate cost (logistics, server compute)
     public const DIGITAL_ADS_COST_RATIO = 0.10; // Pure profit (algorithmic placement)
+    /** Variable cost ratio on cloud infrastructure (data-centre power, colocation and hardware upkeep). */
+    public const CLOUD_INFRASTRUCTURE_COST_RATIO = 0.35;
+    /** Output-gap sensitivity of usage-billed enterprise cloud compute (multiple of operating beta). */
+    public const CLOUD_CYCLE_LOADING = 0.50;
 
     // --- Supply Chain & Labor Physics ---
     /**
@@ -233,17 +262,21 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
     }
 
     /**
-     * The orders the fulfilment network is staffed to ship: the target-mix weighted cycle shift of first-party
-     * units and third-party GMV through the tollbooth. Ads carry no macro term and add only to the weight.
+     * The capacity-weighted macro demand shift: target-mix blend of first-party units, third-party GMV through the
+     * tollbooth, and optional cloud compute usage; ads carry no macro term and add only to the weight.
      */
     public function resolveSectorActivityShift(Stock $stock, MacroStateDTO $macroState): float
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::FirstPartyWeight->value => self::FIRST_PARTY_WEIGHT,
-            ModelParam::ThirdPartyWeight->value => self::THIRD_PARTY_WEIGHT,
-            ModelParam::DigitalAdsWeight->value => self::DIGITAL_ADS_WEIGHT,
+            ModelParam::FirstPartyWeight->value          => self::FIRST_PARTY_WEIGHT,
+            ModelParam::ThirdPartyWeight->value          => self::THIRD_PARTY_WEIGHT,
+            ModelParam::DigitalAdsWeight->value          => self::DIGITAL_ADS_WEIGHT,
+            ModelParam::CloudInfrastructureWeight->value => self::CLOUD_INFRASTRUCTURE_WEIGHT,
         ]);
-        $totalWeight = $params[ModelParam::FirstPartyWeight] + $params[ModelParam::ThirdPartyWeight] + $params[ModelParam::DigitalAdsWeight];
+        $totalWeight = $params[ModelParam::FirstPartyWeight]
+            + $params[ModelParam::ThirdPartyWeight]
+            + $params[ModelParam::DigitalAdsWeight]
+            + $params[ModelParam::CloudInfrastructureWeight];
         if ($totalWeight <= 0.0) {
             return 0.0;
         }
@@ -251,14 +284,15 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $shifts = $this->resolveStreamMacroShifts($stock, $macroState);
 
         return (($params[ModelParam::FirstPartyWeight] * $shifts['first_party_retail'])
-            + ($params[ModelParam::ThirdPartyWeight] * $shifts['third_party_seller'])) / $totalWeight;
+            + ($params[ModelParam::ThirdPartyWeight] * $shifts['third_party_seller'])
+            + ($params[ModelParam::CloudInfrastructureWeight] * $shifts['cloud_infrastructure'])) / $totalWeight;
     }
 
     /**
      * Each stream's macro volume shift: first-party baskets on twice the gap plus the confidence residual over
-     * it (Lemmon & Portniaguina 2006); third-party GMV on half the gap, the tollbooth vendors keep paying.
+     * it (Lemmon & Portniaguina 2006); third-party GMV on half the gap; optional cloud usage on CLOUD_CYCLE_LOADING.
      *
-     * @return array{first_party_retail: float, third_party_seller: float}
+     * @return array{first_party_retail: float, third_party_seller: float, cloud_infrastructure: float}
      */
     private function resolveStreamMacroShifts(Stock $stock, MacroStateDTO $macroState): array
     {
@@ -266,37 +300,46 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
         $outputGap = $macroState->outputGapEma;
 
         return [
-            'first_party_retail' => (($outputGap * 2.0) + ($macroState->sentimentResidual() * self::CONSUMER_SENTIMENT_SCALAR)) * $beta,
-            'third_party_seller' => $outputGap * 0.5 * $beta,
+            'first_party_retail'   => (($outputGap * 2.0) + ($macroState->sentimentResidual() * self::CONSUMER_SENTIMENT_SCALAR)) * $beta,
+            'third_party_seller'   => $outputGap * 0.5 * $beta,
+            'cloud_infrastructure' => $outputGap * self::CLOUD_CYCLE_LOADING * $beta,
         ];
     }
 
     protected function calculateSectorPhysics(Stock $stock, float $expectedRevenue, float $realizedVariableMargin, float $fixedCosts, float $baselineVol, MacroStateDTO $macroState, MathUtility $mathUtility): SectorPhysicsResult
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::FirstPartyWeight->value => self::FIRST_PARTY_WEIGHT,
-            ModelParam::ThirdPartyWeight->value => self::THIRD_PARTY_WEIGHT,
-            ModelParam::DigitalAdsWeight->value => self::DIGITAL_ADS_WEIGHT,
+            ModelParam::FirstPartyWeight->value          => self::FIRST_PARTY_WEIGHT,
+            ModelParam::ThirdPartyWeight->value          => self::THIRD_PARTY_WEIGHT,
+            ModelParam::DigitalAdsWeight->value          => self::DIGITAL_ADS_WEIGHT,
+            ModelParam::CloudInfrastructureWeight->value => self::CLOUD_INFRASTRUCTURE_WEIGHT,
         ]);
 
         $momentum = $stock->getEarningsMomentumZ() ?? [];
         $streams = $this->createStreamContext($momentum, $mathUtility, $macroState, $stock);
 
         // --- Revenue Mix ---
-        $activeWeights = $streams->resolveActiveStreamWeights([
+        $rawCloudWeight = $params[ModelParam::CloudInfrastructureWeight];
+        $targetWeights = [
             'first_party_retail' => $params[ModelParam::FirstPartyWeight],
             'third_party_seller' => $params[ModelParam::ThirdPartyWeight],
             'digital_ads_cloud'  => $params[ModelParam::DigitalAdsWeight],
-        ]);
+        ];
+        if ($rawCloudWeight > 0.0) {
+            $targetWeights['cloud_infrastructure'] = $rawCloudWeight;
+        }
+        $activeWeights = $streams->resolveActiveStreamWeights($targetWeights);
 
-        $fpWeight  = $activeWeights['first_party_retail'];
-        $tpWeight  = $activeWeights['third_party_seller'];
-        $adsWeight = $activeWeights['digital_ads_cloud'];
+        $fpWeight    = $activeWeights['first_party_retail'];
+        $tpWeight    = $activeWeights['third_party_seller'];
+        $adsWeight   = $activeWeights['digital_ads_cloud'];
+        $cloudWeight = $activeWeights['cloud_infrastructure'] ?? 0.0;
 
         // Independent stream Z-scores
-        $fpZ  = $streams->generateDemandZ('first_party_retail');
-        $tpZ  = $streams->generateDemandZ('third_party_seller'); // High persistence tollbooth
-        $adsZ = $streams->generateDemandZ('digital_ads_cloud');
+        $fpZ    = $streams->generateDemandZ('first_party_retail');
+        $tpZ    = $streams->generateDemandZ('third_party_seller'); // High persistence tollbooth
+        $adsZ   = $streams->generateDemandZ('digital_ads_cloud');
+        $cloudZ = $cloudWeight > 0.0 ? $streams->generateDemandZ('cloud_infrastructure') : 0.0;
         $eventZ = $streams->generateExogenousZ('event', 0.10);
 
         // --- Macro Sensitivities ---
@@ -323,11 +366,11 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             $eventType = ShockEvent::VIRAL_GROWTH;
         }
 
-        // --- Clamped Tri-Stream Revenue Calculation ---
+        // --- Multi-Stream Revenue Calculation ---
         $fpRevenue  = max(0.0, $expectedRevenue * $fpWeight * (1.0 + ($fpZ * $baselineVol * self::FIRST_PARTY_VARIANCE) + $fpMacroShift) * $revenueMultiplier);
         $tpRevenue  = max(0.0, $expectedRevenue * $tpWeight * (1.0 + ($tpZ * $baselineVol * self::THIRD_PARTY_VARIANCE) + $tpMacroShift) * $revenueMultiplier);
 
-        // Digital Ads scale exponentially with underlying platform traffic (blending FP and TP Z-scores)
+        // Digital Ads scale with underlying platform traffic (blending FP and TP Z-scores)
         $platformTrafficBonus = ($fpZ * 0.5) + ($tpZ * 0.5);
         $adsRevenue = max(0.0, $expectedRevenue * $adsWeight * (1.0 + ($adsZ * $baselineVol * self::DIGITAL_ADS_VARIANCE) + ($platformTrafficBonus * 0.10)) * $revenueMultiplier);
 
@@ -336,28 +379,38 @@ class InternetRetailBusinessModel extends StandardCorporateBusinessModel
             'third_party_seller' => $tpRevenue,
             'digital_ads_cloud'  => $adsRevenue,
         ];
+        $cloudRevenue = 0.0;
+        if ($cloudWeight > 0.0) {
+            $cloudRevenue = max(0.0, $expectedRevenue * $cloudWeight * (1.0 + ($cloudZ * $baselineVol * self::CLOUD_INFRASTRUCTURE_VARIANCE) + $macroShifts['cloud_infrastructure']) * $revenueMultiplier);
+            $streamRevenues['cloud_infrastructure'] = $cloudRevenue;
+        }
 
         $actualRevenue = array_sum($streamRevenues);
         $streams->recordStreamShares($streamRevenues);
 
         // --- Structural Margin Blending ---
-        // The 1P cost ratio is what the plan leaves after 3P and ads at their planned revenue: struck on realized
-        // 3P/ads costs, a 3P surge would cut the 1P ratio by exactly its own cost and come out costless.
+        // The 1P cost ratio is what the plan leaves after fee/ads/cloud streams at their planned revenue: struck on
+        // realized non-1P costs, a 3P surge would cut the 1P ratio by exactly its own cost and come out costless.
         $targetTotalCosts = $expectedRevenue * $realizedVariableMargin;
-        $plannedTpAdsCosts = $expectedRevenue * (($tpWeight * self::THIRD_PARTY_COST_RATIO) + ($adsWeight * self::DIGITAL_ADS_COST_RATIO));
-        $fpBaselineCosts = max(0.0, $targetTotalCosts - $plannedTpAdsCosts);
+        $plannedNonFpCosts = $expectedRevenue * (
+            ($tpWeight * self::THIRD_PARTY_COST_RATIO)
+            + ($adsWeight * self::DIGITAL_ADS_COST_RATIO)
+            + ($cloudWeight * self::CLOUD_INFRASTRUCTURE_COST_RATIO)
+        );
+        $fpBaselineCosts = max(0.0, $targetTotalCosts - $plannedNonFpCosts);
         $fpVariableMargin = $expectedRevenue * $fpWeight > 0 ? $fpBaselineCosts / ($expectedRevenue * $fpWeight) : $realizedVariableMargin;
         // A marketplace with no first-party line has no line left to absorb the engine's cost ratio, so its own lines
         // carry it: the quarter's margin noise, the cycle and the plant's overtime reach it as they reach any firm.
-        $tpAdsScale = ($expectedRevenue * $fpWeight > 0.0 || $plannedTpAdsCosts <= 0.0) ? 1.0 : $targetTotalCosts / $plannedTpAdsCosts;
-        $tpCosts = $tpRevenue * self::THIRD_PARTY_COST_RATIO * $tpAdsScale;
-        $adsCosts = $adsRevenue * self::DIGITAL_ADS_COST_RATIO * $tpAdsScale;
+        $nonFpScale = ($expectedRevenue * $fpWeight > 0.0 || $plannedNonFpCosts <= 0.0) ? 1.0 : $targetTotalCosts / $plannedNonFpCosts;
+        $tpCosts = $tpRevenue * self::THIRD_PARTY_COST_RATIO * $nonFpScale;
+        $adsCosts = $adsRevenue * self::DIGITAL_ADS_COST_RATIO * $nonFpScale;
+        $cloudCosts = $cloudRevenue * self::CLOUD_INFRASTRUCTURE_COST_RATIO * $nonFpScale;
 
         $fxShift = $macroState->exchangeRateGap();
         $fpCostSavings = $fpRevenue * $fxShift * self::IMPORT_SOURCING_FX_SCALAR;
 
         // Re-blend actual costs based on shocked revenue
-        $actualVariableCosts = $tpCosts + $adsCosts + ($fpRevenue * $fpVariableMargin) - $fpCostSavings;
+        $actualVariableCosts = $tpCosts + $adsCosts + $cloudCosts + ($fpRevenue * $fpVariableMargin) - $fpCostSavings;
 
         // --- Input Cost Basket ---
         // Merchandise (wholesale goods), ocean and last-mile freight and warehouse payroll reach the cost base at

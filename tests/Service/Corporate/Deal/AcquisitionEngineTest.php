@@ -1073,7 +1073,7 @@ class AcquisitionEngineTest extends TestCase
         $plant = SegmentBooks::plant($stock->getEarningsMomentumZ() ?? []) ?? [];
         $this->assertGreaterThan(0.2, $plant['ads_and_cloud'] ?? 0.0, 'the plant bought joins the ads arm');
         $this->assertEqualsWithDelta(1.0, array_sum($plant), 1e-12);
-        $this->assertStringContainsString('for its advertising and cloud business', $deal['event']['description']);
+        $this->assertStringContainsString('for its digital advertising business', $deal['event']['description']);
         // The target earns like the ads arm it joins (at the drawn 80% of its margin), not like the whole company, and
         // runs its plant: what was paid beyond that plant is goodwill, so the arm's turnover holds.
         $after = SegmentBooks::companyEconomics($stock->getEarningsMomentumZ() ?? []);

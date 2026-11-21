@@ -7,12 +7,15 @@ namespace App\Tests\Data\Company;
 use App\Data\Company\IndustryMarkets;
 use App\Data\Company\InitialMarket;
 use App\Data\Company\Sectors;
+use App\Data\Company\Segments;
+use App\Data\Company\StockModelTuning;
 use App\DTO\MacroStateDTO;
 use App\Entity\Stock;
 use App\Service\Corporate\CorporateMetrics;
 use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\MacroConstants;
+use App\Service\Model\ModelParam;
 use App\Service\Model\Sector\AssetManagementBusinessModel;
 use Doctrine\ORM\Mapping\Column;
 use PHPUnit\Framework\Attributes\Group;
@@ -188,6 +191,48 @@ final class IndustryMarketsTest extends TestCase
                     $this->addToAssertionCount(1);
                 }
             }
+        }
+    }
+
+    public function testSegmentMarketsCoverMultiEntrantSegmentOnlyIndustriesAndLeaveFringe(): void
+    {
+        $streamWeights = [
+            'technology_programmes' => ModelParam::TechnologyProgrammeWeight,
+            'martech_consulting' => ModelParam::MartechConsultingWeight,
+            'cloud_infrastructure' => ModelParam::CloudInfrastructureWeight,
+        ];
+
+        $segmentRevenueByIndustry = [];
+        foreach (Segments::tickers() as $ticker) {
+            $row = $this->rawRow($ticker);
+            $firmRevenue = (float) $row['revenue'];
+            $plan = Segments::forTicker($ticker);
+            $this->assertNotNull($plan);
+            foreach ($plan['segments'] as $segment) {
+                $industry = $segment['industry'];
+                if (!isset(IndustryMarkets::SEGMENT_MARKETS[$industry])) {
+                    continue;
+                }
+                $weight = 0.0;
+                foreach ($segment['streams'] as $stream) {
+                    $this->assertArrayHasKey($stream, $streamWeights, "{$ticker}:{$stream} mapped");
+                    $weight += StockModelTuning::get($ticker, $streamWeights[$stream], 0.0);
+                }
+                $this->assertGreaterThan(0.0, $weight, "{$ticker} in {$industry} must have positive weight");
+                $segmentRevenueByIndustry[$industry] = ($segmentRevenueByIndustry[$industry] ?? 0.0) + ($firmRevenue * $weight);
+            }
+        }
+
+        foreach (IndustryMarkets::SEGMENT_MARKETS as $industry => $gdpShare) {
+            $this->assertArrayHasKey($industry, Sectors::INDUSTRY_METRICS);
+            $this->assertArrayNotHasKey($industry, IndustryMarkets::BY_INDUSTRY);
+            $this->assertGreaterThan(0.0, $gdpShare);
+            $this->assertTrue(IndustryMarkets::hasIndustry($industry));
+            $this->assertEqualsWithDelta($gdpShare, IndustryMarkets::gdpShare($industry), 1e-12);
+
+            $listedSegmentRevenue = $segmentRevenueByIndustry[$industry] ?? 0.0;
+            $this->assertGreaterThan(0.0, $listedSegmentRevenue, "SEGMENT_MARKETS entry {$industry} must serve seeded segments");
+            $this->assertLessThan(IndustryMarkets::openingMarket($industry), $listedSegmentRevenue, "{$industry} must leave a positive unlisted fringe");
         }
     }
 

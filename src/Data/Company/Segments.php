@@ -47,13 +47,14 @@ final class Segments
             // Third-party fees earn several times first-party retail's margin without carrying stock or leased
             // warehouses.
             'marketplace' => ['label' => 'Third-party marketplace', 'industry' => 'Online Marketplaces', 'streams' => ['third_party_seller'], 'margin' => 3.0, 'turnover' => 1.5],
-            // A first-party retailer earns thinly; its data centres and ad book earn several times as much on heavier
-            // plant.
-            'ads_and_cloud' => ['label' => 'Advertising and cloud', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud'], 'margin' => 6.0, 'turnover' => 0.5],
+            // Seller ads earn several times retail on lighter turnover; keep key 'ads_and_cloud' for live books.
+            'ads_and_cloud' => ['label' => 'Digital advertising', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud'], 'margin' => 6.0, 'turnover' => 0.5],
+            // Cloud infrastructure earns well above retail on heavy data-centre plant.
+            'cloud' => ['label' => 'Cloud computing', 'industry' => 'Software - Infrastructure', 'streams' => ['cloud_infrastructure'], 'margin' => 5.0, 'turnover' => 0.5],
         ]],
         'JDAW' => ['main' => 'Online retail', 'segments' => [
-            // A marketplace already earns well on its fees, so its cloud adds less over it.
-            'ads_and_cloud' => ['label' => 'Advertising and cloud', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud'], 'margin' => 1.5, 'turnover' => 0.5],
+            // A marketplace already earns well on its fees, so its seller ad book adds less over it.
+            'ads_and_cloud' => ['label' => 'Digital advertising', 'industry' => 'Internet Content & Information', 'streams' => ['digital_ads_cloud'], 'margin' => 1.5, 'turnover' => 0.5],
         ]],
         'BIRD' => ['main' => 'Regulated power', 'segments' => [
             // Merchant plant earns the power-price spread, not an allowed return on a rate base, and turns faster.
@@ -111,6 +112,14 @@ final class Segments
         'GULL' => ['main' => 'Casino resort', 'segments' => [
             // Shoreline rents: a landlord's margin on land that turns over slowly.
             'property' => ['label' => 'Shoreline property', 'industry' => 'REIT - Retail', 'streams' => ['cre'], 'margin' => 2.2, 'turnover' => 0.30],
+        ]],
+        'ROOK' => ['main' => 'Exchanges and listings', 'segments' => [
+            // Real-time feeds and index licences earn nearly the exchange's margin on the same light plant.
+            'market_data' => ['label' => 'Market data', 'industry' => 'Financial Data & Ratings', 'streams' => ['market_data'], 'margin' => 0.9, 'turnover' => 1.0],
+        ]],
+        'LYRE' => ['main' => 'Creative and media', 'segments' => [
+            // Systems and analytics teams bill on light capital at IT-services margins, below creative retainers.
+            'martech' => ['label' => 'Marketing technology', 'industry' => 'Information Technology Services', 'streams' => ['martech_consulting'], 'margin' => 0.8, 'turnover' => 1.0],
         ]],
     ];
 

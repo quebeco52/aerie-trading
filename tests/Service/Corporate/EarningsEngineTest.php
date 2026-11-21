@@ -36,6 +36,7 @@ use App\Service\Corporate\Segment\SegmentEntry;
 use App\Service\Corporate\Segment\SegmentOutlook;
 use App\Service\Event\EarningsReportedEvent;
 use App\Service\Market\Pricing\MarketConsensusEngine;
+use App\Service\Market\Pricing\SeedRows;
 use App\Service\Math\Distributions;
 use App\Service\Math\FinancialConstants;
 use App\Service\Math\FirmEconomics;
@@ -429,14 +430,18 @@ class EarningsEngineTest extends TestCase
         $this->assertEqualsWithDelta($margin, (float) $stock->getOperatingMargin(), 1e-6, 'the company earns what it did');
         $this->assertEqualsWithDelta($turnover, (float) $stock->getAssetTurnover(), 1e-6);
         $this->assertEqualsWithDelta(6.0, $economics['margins']['ads_and_cloud'] / $economics['margins'][Segments::MAIN], 1e-9);
+        $this->assertEqualsWithDelta(5.0, $economics['margins']['cloud'] / $economics['margins'][Segments::MAIN], 1e-9);
 
         $ads = $store->readIndustry('Internet Content & Information')['WEAV/ads_and_cloud'] ?? null;
+        $cloud = $store->readIndustry('Software - Infrastructure')['WEAV/cloud'] ?? null;
         $marketplace = $store->readIndustry('Online Marketplaces')['WEAV/marketplace'] ?? null;
         $retail = $store->readIndustry('Internet Retail')['WEAV'] ?? null;
         $this->assertNotNull($ads);
+        $this->assertNotNull($cloud);
         $this->assertNotNull($marketplace);
         $this->assertNotNull($retail);
         $this->assertNotEqualsWithDelta($retail['gain'], $ads['gain'], 1e-9, 'each segment\'s own lines, not the company\'s surprise');
+        $this->assertNotEqualsWithDelta($retail['gain'], $cloud['gain'], 1e-9);
     }
 
     /**
@@ -4479,5 +4484,64 @@ class EarningsEngineTest extends TestCase
         $substitutability = Sectors::strategyFor('Insurance - Life')->getIndustrySubstitutability();
         $expectedDrain = $lifeWeight * $substitutability * (-($wellAnnual * 0.12) / ($lifeMarket - $wellAnnual));
         $this->assertEqualsWithDelta($expectedDrain, $captured->rivalShareDrain, 1e-6);
+    }
+
+    public function testTierOneCrossMarketSegmentsAndBooksShareDeclaredIndustryPools(): void
+    {
+        $store = new InMemoryIndustryShareStore();
+        $ledger = new IndustryShareLedger($store);
+        $engine = $this->buildEngine($this->createStub(EventDispatcherInterface::class), $ledger);
+        mt_srand(29);
+        $macro = new MacroStateDTO(corporateTaxRate: 0.21, policyRateEma: 0.04, yield5yEma: 0.045, inflationEma: 0.02);
+
+        $makeFirm = function (string $ticker, float $equity): Stock {
+            $row = SeedRows::for($ticker);
+
+            return $this->buildMatureIndustrial($ticker)
+                ->setIndustry($row['industry'])
+                ->setTotalRevenue((string) $row['revenue'])
+                ->setTotalEquity((string) $equity)
+                ->setSamRatio((string) IndustryMarkets::forRow($row));
+        };
+
+        $weav = $makeFirm('WEAV', 65_000_000_000.0);
+        $humm = $makeFirm('HUMM', 90_000_000_000.0);
+        $lyre = $makeFirm('LYRE', 24_000_000_000.0);
+        $rook = $makeFirm('ROOK', 18_000_000_000.0);
+        $shrk = $makeFirm('SHRK', 12_000_000_000.0);
+        $acc = $makeFirm('ACC', 20_000_000_000.0)->setCustomerDeposits('100000000000');
+
+        foreach ([$weav, $humm, $lyre, $rook, $shrk, $acc] as $firm) {
+            $t1 = EarningsEngine::resolveReportingTick($firm->getTicker(), 252);
+            $engine->calculate($firm, $macro, $t1, 252);
+            $engine->calculate($firm, $macro, $t1 + 63, 252);
+        }
+
+        // WEAV opens Software - Infrastructure before HUMM, yet both anchor on the declared $150B market.
+        $cloudMarket = IndustryMarkets::openingMarket('Software - Infrastructure');
+        $weavCloud = $store->readIndustry('Software - Infrastructure')['WEAV/cloud'] ?? null;
+        $hummCloud = $store->readIndustry('Software - Infrastructure')['HUMM/cloud'] ?? null;
+        $this->assertNotNull($weavCloud);
+        $this->assertNotNull($hummCloud);
+        $this->assertEqualsWithDelta($cloudMarket, (float) $weavCloud['anchor_demand_share'], $cloudMarket * 0.05);
+        $this->assertEqualsWithDelta((float) $weavCloud['anchor_demand_share'], (float) $hummCloud['anchor_demand_share'], $cloudMarket * 0.05);
+
+        $fromWeavCloud = $ledger->describeMergerMarket($weav, $macro, 0.0, 120, 252, 'cloud');
+        $this->assertNotNull($fromWeavCloud);
+        $this->assertArrayHasKey('WEAV/cloud', $fromWeavCloud['shares']);
+        $this->assertArrayHasKey('HUMM/cloud', $fromWeavCloud['shares']);
+
+        // LYRE's martech arm opens on the declared $240B Information Technology Services market.
+        $itMarket = IndustryMarkets::openingMarket('Information Technology Services');
+        $lyreMartech = $store->readIndustry('Information Technology Services')['LYRE/martech'] ?? null;
+        $this->assertNotNull($lyreMartech);
+        $this->assertEqualsWithDelta($itMarket, (float) $lyreMartech['anchor_demand_share'], $itMarket * 0.05);
+
+        // ACC books into Custody Banks and Financial Data & Ratings, joining SHRK and ROOK/market_data symmetrically.
+        $this->assertNotNull($store->readIndustry('Custody Banks')['ACC/custody'] ?? null);
+        $dataReview = $ledger->describeMergerMarket($shrk, $macro, 0.0, 120, 252);
+        $this->assertNotNull($dataReview);
+        $this->assertArrayHasKey('ROOK/market_data', $dataReview['shares']);
+        $this->assertArrayHasKey('ACC/data', $dataReview['shares']);
     }
 }

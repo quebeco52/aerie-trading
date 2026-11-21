@@ -390,27 +390,92 @@ class IndustryPositionBuilderTest extends TestCase
         $weav = $this->stock('WEAV', 'Internet Retail', 111_000_000_000.0);
         $jdaw = $this->stock('JDAW', 'Online Marketplaces', 51_700_000_000.0);
         $humm = $this->stock('HUMM', 'Internet Content & Information', 82_800_000_000.0);
-        $weav->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.30, 'marketplace' => 0.45, 'ads_and_cloud' => 0.25], 1.0, []));
+        $weav->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.30, 'marketplace' => 0.45, 'ads_and_cloud' => 0.10, 'cloud' => 0.15], 1.0, []));
+        $humm->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.60, 'cloud' => 0.40], 1.0, []));
 
         $this->ledger->resolveIndustryCapacityRatio($weav, 3_330.0, 0.12, 1.0, 0.0, 0.0, 10, 252);
         $this->ledger->resolveIndustryCapacityRatio($jdaw, 5_170.0, 0.33, 1.0, 0.0, 0.0, 10, 252);
         $this->ledger->resolveSegmentSupply($weav, 'marketplace', 4_995.0, 4_995.0, 0.32, 1.0, 0.0, 0.0, 10, 252);
         $this->ledger->resolveIndustryCapacityRatio($humm, 8_280.0, 0.29, 1.0, 0.0, 0.0, 10, 252);
-        $this->ledger->resolveSegmentSupply($weav, 'ads_and_cloud', 2_775.0, 2_775.0, 0.10, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveSegmentSupply($weav, 'ads_and_cloud', 2_775.0, 2_775.0, 0.04, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveSegmentSupply($humm, 'cloud', 3_312.0, 3_312.0, 0.22, 1.0, 0.0, 0.0, 10, 252);
+        $this->ledger->resolveSegmentSupply($weav, 'cloud', 1_665.0, 1_665.0, 0.11, 1.0, 0.0, 0.0, 10, 252);
 
         $macro = new MacroStateDTO(nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
         $view = $this->builder(null, 20, $this->stockRepository([$weav, $jdaw, $humm]))->build($weav, $macro)['industry'];
 
         $this->assertEqualsWithDelta(0.12, $view['marketShareByIndustry']['Internet Retail'], 1e-9);
         $this->assertEqualsWithDelta(0.32, $view['marketShareByIndustry']['Online Marketplaces'], 1e-9);
-        $this->assertEqualsWithDelta(0.10, $view['marketShareByIndustry']['Internet Content & Information'], 1e-9);
-        $this->assertCount(2, $view['otherMarkets']);
+        $this->assertEqualsWithDelta(0.04, $view['marketShareByIndustry']['Internet Content & Information'], 1e-9);
+        $this->assertEqualsWithDelta(0.11, $view['marketShareByIndustry']['Software - Infrastructure'], 1e-9);
+        $this->assertCount(3, $view['otherMarkets']);
         $byInd = array_column($view['otherMarkets'], null, 'industry');
         $this->assertSame('Third-party marketplace', $byInd['Online Marketplaces']['label']);
         $this->assertEqualsWithDelta(0.33, $byInd['Online Marketplaces']['marketShares']['JDAW'], 1e-9);
         $this->assertEqualsWithDelta(0.32, $byInd['Online Marketplaces']['marketShares']['WEAV'], 1e-9);
         $this->assertEqualsWithDelta(0.35, $byInd['Online Marketplaces']['fringeShare'], 1e-9);
         $this->assertEqualsWithDelta(0.29, $byInd['Internet Content & Information']['marketShares']['HUMM'], 1e-9);
-        $this->assertEqualsWithDelta(0.10, $byInd['Internet Content & Information']['marketShares']['WEAV'], 1e-9);
+        $this->assertEqualsWithDelta(0.04, $byInd['Internet Content & Information']['marketShares']['WEAV'], 1e-9);
+        $this->assertSame('Cloud computing', $byInd['Software - Infrastructure']['label']);
+        $this->assertEqualsWithDelta(0.22, $byInd['Software - Infrastructure']['marketShares']['HUMM'], 1e-9);
+        $this->assertEqualsWithDelta(0.11, $byInd['Software - Infrastructure']['marketShares']['WEAV'], 1e-9);
+        $this->assertEqualsWithDelta(0.67, $byInd['Software - Infrastructure']['fringeShare'], 1e-9);
+    }
+
+    public function testAccFinancialBooksExposeCustodyAndFinancialDataMarketsBesideAnchoredPeers(): void
+    {
+        $acc = $this->stock('ACC', 'Financial Clearinghouses', 12_500_000_000.0, 24_940_000_000.0)
+            ->setSamRatio('0.496');
+        $egrt = $this->stock('EGRT', 'Custody Banks', 86_000_000_000.0, 115_876_344_492.11)
+            ->setSamRatio('0.3395');
+        $shrk = $this->stock('SHRK', 'Financial Data & Ratings', 8_670_000_000.0, 13_710_000_000.0)
+            ->setSamRatio('0.1204');
+        $tick = $this->stock('TICK', 'Financial Data & Ratings', 8_870_000_000.0, 13_630_000_000.0)
+            ->setSamRatio('0.1232');
+        $rook = $this->stock('ROOK', 'Securities & Commodity Exchanges', 7_630_000_000.0, 11_980_000_000.0)
+            ->setSamRatio('0.3179');
+        $repo = $this->stockRepository([$acc, $egrt, $shrk, $tick, $rook]);
+        $macro = new MacroStateDTO(nominalGdpIndex: 1.0, potentialGdpIndex: 1.0, gdpDeflator: 1.0, totalTime: 0.0);
+
+        // Pre-Q1: ACC sees Custody Banks beside EGRT and Financial Data & Ratings beside SHRK/TICK.
+        $accPre = $this->builder(null, 0, $repo)->build($acc, $macro)['industry'];
+        $shrkPre = $this->builder(null, 0, $repo)->build($shrk, $macro)['industry'];
+
+        $dataMarket = IndustryMarkets::openingMarket('Financial Data & Ratings');
+        $custodyMarket = IndustryMarkets::openingMarket('Custody Banks');
+        $accCustodyShare = (12_500_000_000.0 * 0.30) / $custodyMarket;
+        $accDataShare = (12_500_000_000.0 * 0.20) / $dataMarket;
+        $egrtShare = 86_000_000_000.0 / $custodyMarket;
+
+        $this->assertTrue($accPre['hasFinancialBooks']);
+        $this->assertCount(2, $accPre['otherMarkets']);
+        $byIndPre = array_column($accPre['otherMarkets'], null, 'industry');
+        $this->assertSame('Custody and float', $byIndPre['Custody Banks']['label']);
+        $this->assertEqualsWithDelta($egrtShare, $byIndPre['Custody Banks']['marketShares']['EGRT'], 1e-4);
+        $this->assertEqualsWithDelta($accCustodyShare, $byIndPre['Custody Banks']['marketShares']['ACC'], 1e-4);
+        $this->assertEqualsWithDelta($accDataShare, $byIndPre['Financial Data & Ratings']['marketShares']['ACC'], 1e-4);
+        $this->assertEqualsWithDelta($accDataShare, $shrkPre['marketShares']['ACC'], 1e-4);
+
+        // Post-Q2: Financial Data & Ratings includes SHRK, TICK, ROOK/market_data and ACC/data symmetrically.
+        $this->ledger->recordBookGain($acc, FinancialBooks::MAIN, 12_500_000_000.0 * 0.50, 0.0, 0.248, 21);
+        $this->ledger->recordBookGain($acc, 'custody', 12_500_000_000.0 * 0.30, 0.0, $accCustodyShare, 21);
+        $this->ledger->recordBookGain($acc, 'data', 12_500_000_000.0 * 0.20, 0.0, $accDataShare, 21);
+        $this->ledger->recordIdiosyncraticGain($egrt, 86_000_000_000.0, 0.0, $egrtShare, 29);
+
+        $this->ledger->resolveIndustryCapacityRatio($shrk, 8_670_000_000.0, 8_670_000_000.0 / $dataMarket, 1.0, 0.0, 0.0, 23, 252);
+        $this->ledger->resolveIndustryCapacityRatio($tick, 8_870_000_000.0, 8_870_000_000.0 / $dataMarket, 1.0, 0.0, 0.0, 36, 252);
+        $rook->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.70, 'market_data' => 0.30], 1.0, []));
+        $rookDataRev = 7_630_000_000.0 * 0.30;
+        $this->ledger->resolveSegmentSupply($rook, 'market_data', $rookDataRev, $rookDataRev, $rookDataRev / $dataMarket, 1.0, 0.0, 0.0, 38, 252);
+
+        $accPost = $this->builder(null, 40, $repo)->build($acc, $macro)['industry'];
+        $shrkPost = $this->builder(null, 40, $repo)->build($shrk, $macro)['industry'];
+        $dataView = array_column($accPost['otherMarkets'], null, 'industry')['Financial Data & Ratings'];
+
+        $this->assertEqualsWithDelta($shrkPost['marketShares']['ACC'], $dataView['marketShares']['ACC'], 1e-9);
+        $this->assertEqualsWithDelta($rookDataRev / $dataMarket, $shrkPost['marketShares']['ROOK'], 1e-9);
+        $this->assertEqualsWithDelta($shrkPost['marketShares']['SHRK'], $dataView['marketShares']['SHRK'], 1e-9);
+        $this->assertEqualsWithDelta($shrkPost['marketShares']['TICK'], $dataView['marketShares']['TICK'], 1e-9);
+        $this->assertEqualsWithDelta($shrkPost['herfindahl'], $dataView['herfindahl'], 1e-12);
     }
 }

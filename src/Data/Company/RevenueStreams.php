@@ -15,6 +15,7 @@ final class RevenueStreams
      */
     private const LABELS = [
         'net_interest_income' => 'Interest income',
+        'digital_ads_cloud' => 'Digital advertising',
     ];
 
     /** Streams that carry a lender's interest on its book: a bank's, a card lender's, a mortgage lender's. */

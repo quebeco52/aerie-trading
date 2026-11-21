@@ -23,8 +23,8 @@ class InternetRetailStreamCostTest extends TestCase
     {
         $model = new InternetRetailBusinessModel();
         $run = function (float $tpZ) use ($model) {
-            // fp, tp, ads, event
-            $math = new ScriptedDraws(generatePersistentZ: [0.0, $tpZ, 0.0, 0.0]);
+            // fp, tp, ads, cloud, event
+            $math = new ScriptedDraws(generatePersistentZ: [0.0, $tpZ, 0.0, 0.0, 0.0]);
             $stock = (new Stock())->setTicker('WEAV')->setBeta('1.0');
             $macro = new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL);
 
@@ -37,13 +37,48 @@ class InternetRetailStreamCostTest extends TestCase
         $tpDelta = $surge->streamRevenue['third_party_seller'] - $base->streamRevenue['third_party_seller'];
         $this->assertGreaterThan(0.0, $tpDelta);
 
-        // Marketplace traffic also lifts ads; each stream brings its own cost ratio and 1P's cost is unchanged.
+        // Marketplace traffic also lifts ads; cloud and 1P stay untouched, and each moved stream brings its own cost
+        // ratio.
         $adsDelta = $surge->streamRevenue['digital_ads_cloud'] - $base->streamRevenue['digital_ads_cloud'];
         $this->assertEqualsWithDelta($base->streamRevenue['first_party_retail'], $surge->streamRevenue['first_party_retail'], 1e-9);
+        $this->assertEqualsWithDelta($base->streamRevenue['cloud_infrastructure'], $surge->streamRevenue['cloud_infrastructure'], 1e-9);
 
         $costDelta = ($surge->clampedMargin * $surge->actualRevenue) - ($base->clampedMargin * $base->actualRevenue);
         $expected = ($tpDelta * InternetRetailBusinessModel::THIRD_PARTY_COST_RATIO) + ($adsDelta * InternetRetailBusinessModel::DIGITAL_ADS_COST_RATIO);
         $this->assertEqualsWithDelta($expected, $costDelta, 1e-6);
+    }
+
+    /**
+     * Cloud computing runs its own demand shock and data-centre cost ratio without pulling 1P, 3P or ads, while a
+     * pure marketplace like JDAW keeps only the three retail and advertising streams.
+     */
+    public function testCloudInfrastructureSurgeAddsItsOwnCostRatioAndIsAbsentOnMarketplacePeers(): void
+    {
+        $model = new InternetRetailBusinessModel();
+        $runWeav = function (float $cloudZ) use ($model) {
+            // fp, tp, ads, cloud, event
+            $math = new ScriptedDraws(generatePersistentZ: [0.0, 0.0, 0.0, $cloudZ, 0.0]);
+            $stock = (new Stock())->setTicker('WEAV')->setBeta('1.0');
+            $macro = new MacroStateDTO(outputGapEma: 0.0, consumerSentimentIndexEma: MacroConstants::SENTIMENT_TREND_LEVEL);
+
+            return $model->computeActualFinancials($stock, 1000.0, 0.40, 50.0, 0.20, $macro, $math);
+        };
+
+        $base = $runWeav(0.0);
+        $surge = $runWeav(2.0);
+
+        $cloudDelta = $surge->streamRevenue['cloud_infrastructure'] - $base->streamRevenue['cloud_infrastructure'];
+        $this->assertGreaterThan(0.0, $cloudDelta);
+        $this->assertEqualsWithDelta($base->streamRevenue['first_party_retail'], $surge->streamRevenue['first_party_retail'], 1e-9);
+        $this->assertEqualsWithDelta($base->streamRevenue['third_party_seller'], $surge->streamRevenue['third_party_seller'], 1e-9);
+        $this->assertEqualsWithDelta($base->streamRevenue['digital_ads_cloud'], $surge->streamRevenue['digital_ads_cloud'], 1e-9);
+
+        $costDelta = ($surge->clampedMargin * $surge->actualRevenue) - ($base->clampedMargin * $base->actualRevenue);
+        $this->assertEqualsWithDelta($cloudDelta * InternetRetailBusinessModel::CLOUD_INFRASTRUCTURE_COST_RATIO, $costDelta, 1e-6);
+
+        $jdawDraws = new ScriptedDraws(generatePersistentZ: 0.0);
+        $jdaw = $model->computeActualFinancials((new Stock())->setTicker('JDAW'), 1000.0, 0.30, 0.0, 0.15, new MacroStateDTO(), $jdawDraws);
+        $this->assertArrayNotHasKey('cloud_infrastructure', $jdaw->streamRevenue);
     }
 
     /**

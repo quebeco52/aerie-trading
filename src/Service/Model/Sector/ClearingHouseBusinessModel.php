@@ -381,13 +381,21 @@ class ClearingHouseBusinessModel extends BaseFinancialBusinessModel
         return ($macroState->marketVolatilityEma - MacroConstants::MACRO_VOL_BASE_ANCHOR) * self::VIX_REVENUE_SCALAR;
     }
 
+    // --- Stream Weight Defaults ---
+    /** Share of expected revenue from clearing and settlement fees. */
+    public const CLEARING_FEE_WEIGHT = 0.50;
+    /** Share of expected revenue from net float on member margin and custody balances. */
+    public const CUSTODY_FLOAT_WEIGHT = 0.30;
+    /** Share of expected revenue from market data and licensing subscriptions. */
+    public const DATA_SUBSCRIPTION_WEIGHT = 0.20;
+
     /** @return array{clearing_fees: float, custody_float: float, data_licensing: float} */
     private function resolveTargetStreamWeights(Stock $stock): array
     {
         $params = $this->resolveModelParameters($stock, [
-            ModelParam::ClearingFeeWeight->value      => 0.50,
-            ModelParam::CustodyFloatWeight->value     => 0.30,
-            ModelParam::DataSubscriptionWeight->value => 0.20,
+            ModelParam::ClearingFeeWeight->value      => self::CLEARING_FEE_WEIGHT,
+            ModelParam::CustodyFloatWeight->value     => self::CUSTODY_FLOAT_WEIGHT,
+            ModelParam::DataSubscriptionWeight->value => self::DATA_SUBSCRIPTION_WEIGHT,
         ]);
 
         return [

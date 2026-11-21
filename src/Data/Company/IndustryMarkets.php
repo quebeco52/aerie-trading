@@ -103,10 +103,21 @@ final class IndustryMarkets
         'Waste Management' => 0.014,
     ];
 
-    /** Whether the board industry has a declared opening market size in BY_INDUSTRY. */
+    /**
+     * Opening GDP-share market sizes for multi-entrant segment-only industries with no primary listed stock, so peers
+     * reporting on different ticks open on one shared market rather than their own company implied scale.
+     *
+     * @var array<string, float>
+     */
+    public const SEGMENT_MARKETS = [
+        'Information Technology Services' => 0.040,
+        'Software - Infrastructure' => 0.025,
+    ];
+
+    /** Whether the industry has a declared board or segment-only opening market size. */
     public static function hasIndustry(?string $industry): bool
     {
-        return isset(self::BY_INDUSTRY[$industry ?? '']);
+        return isset(self::BY_INDUSTRY[$industry ?? '']) || isset(self::SEGMENT_MARKETS[$industry ?? '']);
     }
 
     /** Opening total annual revenue market as a multiple of District GDP. */
@@ -116,7 +127,7 @@ final class IndustryMarkets
             throw new \DomainException(sprintf('Industry %s has no entry in IndustryMarkets.', $industry ?? 'null'));
         }
 
-        return self::BY_INDUSTRY[(string) $industry];
+        return self::BY_INDUSTRY[(string) $industry] ?? self::SEGMENT_MARKETS[(string) $industry];
     }
 
     /** Opening total annual revenue market in USD. */

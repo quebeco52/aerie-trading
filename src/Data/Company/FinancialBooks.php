@@ -7,6 +7,7 @@ namespace App\Data\Company;
 use App\Entity\Stock;
 use App\Service\Corporate\Segment\SegmentBooks;
 use App\Service\Model\ModelParam;
+use App\Service\Model\Sector\ClearingHouseBusinessModel;
 use App\Service\Model\Sector\RetailInsuranceBusinessModel;
 
 /**
@@ -44,6 +45,25 @@ final class FinancialBooks
                     'streams' => ['life_insurance_premiums'],
                     'opening_param' => ModelParam::LifeAndAnnuityWeight,
                     'opening_weight' => RetailInsuranceBusinessModel::LIFE_INSURANCE_WEIGHT,
+                ],
+            ],
+        ],
+        'ACC' => [
+            'main' => 'Clearing and settlement',
+            'books' => [
+                'custody' => [
+                    'label' => 'Custody and float',
+                    'industry' => 'Custody Banks',
+                    'streams' => ['custody_float'],
+                    'opening_param' => ModelParam::CustodyFloatWeight,
+                    'opening_weight' => ClearingHouseBusinessModel::CUSTODY_FLOAT_WEIGHT,
+                ],
+                'data' => [
+                    'label' => 'Data and licensing',
+                    'industry' => 'Financial Data & Ratings',
+                    'streams' => ['data_licensing'],
+                    'opening_param' => ModelParam::DataSubscriptionWeight,
+                    'opening_weight' => ClearingHouseBusinessModel::DATA_SUBSCRIPTION_WEIGHT,
                 ],
             ],
         ],

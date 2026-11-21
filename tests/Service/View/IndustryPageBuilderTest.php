@@ -241,6 +241,60 @@ final class IndustryPageBuilderTest extends TestCase
         $this->assertEqualsWithDelta(1.0, $expectedWell + $expectedDoveLife + $postLife['fringeShare'], 1e-6);
     }
 
+    public function testFinancialDataMarketCombinesListedCompaniesOperatingSegmentAndFinancialBookEntrants(): void
+    {
+        $dataMarket = IndustryMarkets::openingMarket('Financial Data & Ratings');
+        $shrk = $this->stock('SHRK', 'Shrike Standard Ratings', 'Financial Data & Ratings', 'Financials', 40e9, 12_000_000_000.0)
+            ->setTotalRevenue('8670000000')
+            ->setSamRatio((string) (8_670_000_000.0 / $dataMarket));
+        $tick = $this->stock('TICK', 'Tickline Terminal', 'Financial Data & Ratings', 'Financials', 42e9, 15_000_000_000.0)
+            ->setTotalRevenue('8870000000')
+            ->setSamRatio((string) (8_870_000_000.0 / $dataMarket));
+        $rook = $this->stock('ROOK', 'Rook Exchange', 'Securities & Commodity Exchanges', 'Financials', 30e9, 18_000_000_000.0)
+            ->setTotalRevenue('7630000000');
+        $acc = $this->stock('ACC', 'Aerie Clearing Corp', 'Financial Clearinghouses', 'Financials', 50e9, 20_000_000_000.0)
+            ->setTotalRevenue('12500000000');
+
+        $expectedShrk = 8_670_000_000.0 / $dataMarket;
+        $expectedTick = 8_870_000_000.0 / $dataMarket;
+        $expectedRook = (7_630_000_000.0 * 0.30) / $dataMarket;
+        $expectedAcc = (12_500_000_000.0 * 0.20) / $dataMarket;
+
+        $pre = $this->builder([$shrk, $tick, $rook, $acc], tick: 0)->build('Financial Data & Ratings');
+        $this->assertNotNull($pre);
+        $this->assertSame(['TICK', 'SHRK'], array_column($pre['companies'], 'ticker'));
+        $this->assertSame(['ACC'], array_column($pre['entrants'], 'ticker'));
+        $this->assertSame('Data and licensing', $pre['entrants'][0]['segmentLabel'] ?? null);
+        $this->assertEqualsWithDelta($expectedAcc, $pre['entrants'][0]['share'], 1e-6);
+        $this->assertEqualsWithDelta(
+            1.0,
+            array_sum(array_column($pre['companies'], 'share')) + $pre['entrants'][0]['share'] + $pre['fringeShare'],
+            1e-9,
+        );
+
+        $this->ledger->resolveIndustryCapacityRatio($shrk, 8_670_000_000.0, $expectedShrk, 1.0, 0.0, 0.0, 23, 252);
+        $this->ledger->resolveIndustryCapacityRatio($tick, 8_870_000_000.0, $expectedTick, 1.0, 0.0, 0.0, 36, 252);
+        $rook->setEarningsMomentumZ(SegmentBooks::open([Segments::MAIN => 0.70, 'market_data' => 0.30], 1.0, []));
+        $this->ledger->resolveSegmentSupply($rook, 'market_data', 2_289_000_000.0, 2_289_000_000.0, $expectedRook, 1.0, 0.0, 0.0, 38, 252);
+        $this->ledger->recordBookGain($acc, 'data', 2_500_000_000.0, 0.0, $expectedAcc, 21);
+
+        $live = $this->builder([$shrk, $tick, $rook, $acc], tick: 40)->build('Financial Data & Ratings');
+        $this->assertNotNull($live);
+        $this->assertSame(['TICK', 'SHRK'], array_column($live['companies'], 'ticker'));
+        $entrants = array_column($live['entrants'], null, 'ticker');
+        $this->assertArrayHasKey('ROOK', $entrants);
+        $this->assertArrayHasKey('ACC', $entrants);
+        $this->assertSame('Market data', $entrants['ROOK']['segmentLabel'] ?? null);
+        $this->assertSame('Data and licensing', $entrants['ACC']['segmentLabel'] ?? null);
+        $this->assertEqualsWithDelta($expectedRook, $entrants['ROOK']['share'], 1e-9);
+        $this->assertEqualsWithDelta($expectedAcc, $entrants['ACC']['share'], 1e-9);
+        $this->assertEqualsWithDelta(
+            1.0,
+            $expectedShrk + $expectedTick + $expectedRook + $expectedAcc + $live['fringeShare'],
+            1e-6,
+        );
+    }
+
     /**
      * @param list<Stock>           $allStocks
      * @param list<CorporateReport> $reports

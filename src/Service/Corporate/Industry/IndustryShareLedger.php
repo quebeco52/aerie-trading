@@ -630,11 +630,18 @@ class IndustryShareLedger
         $entrants = [];
         $leader = 0.0;
         foreach ($this->store->readIndustry($industry) as $key => $record) {
-            $demandShare = (float) ($record['anchor_demand_share'] ?? 0.0);
-            if ($demandShare <= 0.0 || (float) ($record['anchor_capacity_share'] ?? 0.0) <= 0.0 || $tick - $record['tick'] > $ticksPerYear) {
+            if ($tick - $record['tick'] > $ticksPerYear) {
                 continue;
             }
-            $share = (float) $record['anchor_capacity_share'] * self::ownPathFactor($record) / $demandShare;
+            $demandShare = (float) ($record['anchor_demand_share'] ?? 0.0);
+            if ($demandShare > 0.0 && (float) ($record['anchor_capacity_share'] ?? 0.0) > 0.0) {
+                $share = (float) $record['anchor_capacity_share'] * self::ownPathFactor($record) / $demandShare;
+            } elseif ($market > 0.0 && (float) ($record['revenue'] ?? 0.0) > 0.0) {
+                $held += min(1.0, (float) $record['revenue'] / $market);
+                continue;
+            } else {
+                continue;
+            }
             $held += $share;
             if (SegmentBooks::ownerOf((string) $key) === $ticker) {
                 continue;
@@ -996,10 +1003,11 @@ class IndustryShareLedger
         }
 
         $growth = self::trendFactor($own, self::trendNominalGdp($macroState), $secularExcessGrowth, $macroState->totalTime, $this->recordBelief($own, $industry));
-        $shares = $this->rosterTrendShares($industry, $ticker, $tick, $ticksPerYear);
+        $marketRevenue = (float) $own['anchor_demand_share'] * $growth;
+        $shares = $this->rosterTrendShares($industry, $ticker, $tick, $ticksPerYear, $marketRevenue);
 
         return [
-            'market_revenue' => (float) $own['anchor_demand_share'] * $growth,
+            'market_revenue' => $marketRevenue,
             'acquirer_share' => min(1.0, $shares[$ticker] ?? 0.0),
             'herfindahl'     => min(1.0, array_sum(array_map(static fn(float $share): float => $share * $share, $shares))),
             'fringe_share'   => max(0.0, 1.0 - array_sum($shares)),
@@ -1078,23 +1086,25 @@ class IndustryShareLedger
     }
 
     /**
-     * Each anchored firm's trend share of the market: its anchor plant over its anchor market, which only a
-     * deal moves, along its own path where it has one. This firm always; a peer while its record is under a year old.
+     * Each firm's trend share of the market: anchored firms contribute their anchor plant over anchor market (along
+     * their own path where they have one), and when a market revenue scale is given, active non-anchored financial
+     * books contribute their booked revenue share. This firm always; a peer while its record is under a year old.
      *
      * @return array<string, float>
      */
-    private function rosterTrendShares(string $industry, string $ticker, int $tick, int $ticksPerYear): array
+    private function rosterTrendShares(string $industry, string $ticker, int $tick, int $ticksPerYear, ?float $marketRevenue = null): array
     {
         $shares = [];
         foreach ($this->store->readIndustry($industry) as $peerTicker => $record) {
-            $demandShare = (float) ($record['anchor_demand_share'] ?? 0.0);
-            if ($demandShare <= 0.0 || (float) ($record['anchor_capacity_share'] ?? 0.0) <= 0.0) {
-                continue;
-            }
             if ($peerTicker !== $ticker && $tick - $record['tick'] > $ticksPerYear) {
                 continue;
             }
-            $shares[(string) $peerTicker] = (float) $record['anchor_capacity_share'] * self::ownPathFactor($record) / $demandShare;
+            $demandShare = (float) ($record['anchor_demand_share'] ?? 0.0);
+            if ($demandShare > 0.0 && (float) ($record['anchor_capacity_share'] ?? 0.0) > 0.0) {
+                $shares[(string) $peerTicker] = (float) $record['anchor_capacity_share'] * self::ownPathFactor($record) / $demandShare;
+            } elseif ($marketRevenue !== null && $marketRevenue > 0.0 && (float) ($record['revenue'] ?? 0.0) > 0.0) {
+                $shares[(string) $peerTicker] = min(1.0, (float) $record['revenue'] / $marketRevenue);
+            }
         }
 
         return $shares;

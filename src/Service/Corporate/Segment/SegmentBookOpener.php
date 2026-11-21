@@ -60,14 +60,18 @@ final class SegmentBookOpener
         $firmShare = $this->corporateMetrics->calculateAddressableShare($stock, $strategy->getEvaluationCapital((float) $stock->getTotalEquity(), $stock->getInvestedCapital()), $macroState);
         $marketShares = [];
         foreach (SegmentBooks::industries($stock) as $segment => $industry) {
-            $market = $segment === Segments::MAIN ? null : $this->industryShareLedger?->resolveIndustryMarketRevenue(
+            if ($segment === Segments::MAIN) {
+                continue;
+            }
+            $secularExcess = IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor($industry), $stock);
+            $market = $this->industryShareLedger?->resolveIndustryMarketRevenue(
                 $industry,
                 $stock->getTicker(),
                 $macroState,
-                IndustryShareLedger::secularExcessGrowth(Sectors::strategyFor($industry), $stock),
+                $secularExcess,
                 $tick,
                 $ticksPerYear,
-            );
+            ) ?? $this->industryShareLedger?->revenueMarketSize($industry, $macroState, $secularExcess);
             if ($market !== null) {
                 $marketShares[$segment] = SegmentBooks::entryMarketShare(($plant[$segment] ?? 0.0) * (float) $stock->getTotalRevenue(), $market, $firmShare);
             }

@@ -80,4 +80,32 @@ final class FinancialBooksTest extends TestCase
         $this->assertSame([['ticker' => 'DOVE', 'book' => 'life']], FinancialBooks::sellersForIndustry('Insurance - Life'));
         $this->assertSame([], FinancialBooks::sellersForIndustry('Insurance - Diversified'));
     }
+
+    public function testAccSplitsClearingCustodyAndDataAcrossThreeListedIndustries(): void
+    {
+        $acc = (new Stock())->setTicker('ACC')->setIndustry('Financial Clearinghouses');
+        $this->assertTrue(FinancialBooks::hasBooks($acc));
+        $this->assertSame([
+            FinancialBooks::MAIN => 'Financial Clearinghouses',
+            'custody' => 'Custody Banks',
+            'data' => 'Financial Data & Ratings',
+        ], FinancialBooks::industries($acc));
+        $this->assertSame('Clearing and settlement', FinancialBooks::label($acc, FinancialBooks::MAIN));
+        $this->assertSame('Custody and float', FinancialBooks::label($acc, 'custody'));
+        $this->assertSame('Data and licensing', FinancialBooks::label($acc, 'data'));
+
+        $opening = FinancialBooks::shares($acc);
+        $this->assertEqualsWithDelta(0.50, $opening[FinancialBooks::MAIN], 1e-12);
+        $this->assertEqualsWithDelta(0.30, $opening['custody'], 1e-12);
+        $this->assertEqualsWithDelta(0.20, $opening['data'], 1e-12);
+        $this->assertEqualsWithDelta(1.0, array_sum($opening), 1e-12);
+
+        $fromStreams = FinancialBooks::shares($acc, ['clearing_fees' => 600.0, 'custody_float' => 250.0, 'data_licensing' => 150.0]);
+        $this->assertEqualsWithDelta(0.60, $fromStreams[FinancialBooks::MAIN], 1e-12);
+        $this->assertEqualsWithDelta(0.25, $fromStreams['custody'], 1e-12);
+        $this->assertEqualsWithDelta(0.15, $fromStreams['data'], 1e-12);
+
+        $this->assertSame([['ticker' => 'ACC', 'book' => 'custody']], FinancialBooks::sellersForIndustry('Custody Banks'));
+        $this->assertSame([['ticker' => 'ACC', 'book' => 'data']], FinancialBooks::sellersForIndustry('Financial Data & Ratings'));
+    }
 }
